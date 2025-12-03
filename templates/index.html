@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BestShot · Terminal Darkroom</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="panel panel--left">
+        <div class="brand">
+          <p class="brand-kicker">bestshot</p>
+          <h1>Darkroom</h1>
+          <p class="brand-copy">Drop, rank, and file your selects in a dockerized studio.</p>
+        </div>
+        <div class="panel-section">
+          <div class="panel-head">
+            <h2>Projects</h2>
+            <button id="refresh-projects" class="text-button" aria-label="Reload projects">
+              ↺ refresh
+            </button>
+          </div>
+          <ul id="projects-list" class="projects"></ul>
+        </div>
+        <form id="new-project-form" class="panel-form">
+          <label for="project-name">Create project</label>
+          <input
+            type="text"
+            id="project-name"
+            name="project-name"
+            placeholder="night-run-01"
+            autocomplete="off"
+            required
+          />
+          <textarea
+            id="project-description-input"
+            name="project-description"
+            placeholder='Optional note (e.g. "Portrait set B")'
+            rows="2"
+          ></textarea>
+          <button type="submit" class="primary">Spin up</button>
+        </form>
+      </aside>
+
+      <section class="panel panel--right">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">project</p>
+            <h2 id="workspace-title">Select a project</h2>
+            <p id="workspace-meta" class="muted"></p>
+          </div>
+          <div class="workspace-actions">
+            <div class="view-toggle" role="group" aria-label="View mode">
+              <button class="toggle active" data-view-mode="rank">Rank</button>
+              <button class="toggle" data-view-mode="gallery">Gallery</button>
+            </div>
+            <div class="upload-actions">
+              <input type="file" id="file-input" multiple hidden />
+              <button id="browse-files" class="ghost" disabled>Browse</button>
+              <button id="save-order" class="primary" disabled>Save order</button>
+            </div>
+          </div>
+        </header>
+
+        <section class="project-note">
+          <form id="project-description-form">
+            <label for="project-description">Description</label>
+            <textarea
+              id="project-description"
+              placeholder="Leave a short note for this set"
+              rows="3"
+              disabled
+            ></textarea>
+            <div class="note-actions">
+              <small id="project-description-status" class="muted">Idle</small>
+              <button id="save-description" class="ghost" disabled>Save note</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="drop-zone" class="drop-zone disabled" aria-live="polite">
+          <p>Drag files here or use the browser button. Images land inside the mounted project folder.</p>
+          <small>JPEG · PNG · TIFF · WebP · HEIC</small>
+        </section>
+
+        <section class="canvas">
+          <div id="images-grid" class="images-grid"></div>
+        </section>
+      </section>
+    </div>
+
+    <template id="image-card-template">
+      <div class="image-card" draggable="true">
+        <div class="image-card__head">
+          <span class="rank-pill"></span>
+          <p class="filename"></p>
+        </div>
+        <img alt="" loading="lazy" />
+      </div>
+    </template>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

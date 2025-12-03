@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 from flask import (
     Flask,
@@ -40,6 +40,7 @@ ALLOWED_EXTENSIONS = {
     ".heic",
 }
 RANKING_FILENAME = ".ranking.json"
+META_FILENAME = ".project.json"
 
 
 def create_app() -> Flask:
@@ -67,11 +68,13 @@ def create_app() -> Flask:
             if not folder.is_dir():
                 continue
             images = _list_image_files(folder)
+            metadata = _load_metadata(folder)
             projects.append(
                 {
                     "name": folder.name,
                     "imageCount": len(images),
                     "updated": datetime.fromtimestamp(folder.stat().st_mtime).isoformat(),
+                    "description": metadata.get("description", ""),
                 }
             )
         return projects
@@ -97,6 +100,23 @@ def create_app() -> Flask:
     def _save_rankings(folder: Path, order: List[str]) -> None:
         ranking_file = folder / RANKING_FILENAME
         ranking_file.write_text(json.dumps(order, indent=2))
+
+    def _load_metadata(folder: Path) -> Dict[str, str]:
+        metadata_file = folder / META_FILENAME
+        if metadata_file.exists():
+            try:
+                data = json.loads(metadata_file.read_text())
+                if isinstance(data, dict):
+                    return {
+                        "description": str(data.get("description", "") or ""),
+                    }
+            except json.JSONDecodeError:
+                pass
+        return {"description": ""}
+
+    def _save_metadata(folder: Path, metadata: Dict[str, str]) -> None:
+        metadata_file = folder / META_FILENAME
+        metadata_file.write_text(json.dumps(metadata, indent=2))
 
     def _serialize_images(folder: Path) -> List[dict]:
         files = _list_image_files(folder)
@@ -137,18 +157,37 @@ def create_app() -> Flask:
     def create_project():
         payload = request.get_json(silent=True) or {}
         name = payload.get("name", "")
+        description = str(payload.get("description", "") or "").strip()
         folder = _project_path(name)
         if folder.exists():
             abort(400, description="Project already exists")
         folder.mkdir(parents=True, exist_ok=True)
-        return jsonify({"name": folder.name}), 201
+        _save_metadata(folder, {"description": description})
+        return jsonify({"name": folder.name, "description": description}), 201
 
     @app.get("/api/projects/<project_name>/images")
     def get_project_images(project_name: str):
         folder = _project_path(project_name)
         if not folder.exists():
             abort(404, description="Project not found")
-        return jsonify({"project": folder.name, "images": _serialize_images(folder)})
+        metadata = _load_metadata(folder)
+        return jsonify(
+            {
+                "project": folder.name,
+                "description": metadata.get("description", ""),
+                "images": _serialize_images(folder),
+            }
+        )
+
+    @app.put("/api/projects/<project_name>")
+    def update_project(project_name: str):
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        payload = request.get_json(silent=True) or {}
+        description = str(payload.get("description", "") or "").strip()
+        _save_metadata(folder, {"description": description})
+        return jsonify({"name": folder.name, "description": description})
 
     @app.post("/api/projects/<project_name>/upload")
     def upload_images(project_name: str):

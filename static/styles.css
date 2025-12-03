@@ -432,3 +432,39 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
 }
+
+/* Touch-friendly improvements */
+@media (pointer: coarse) {
+  .primary,
+  .ghost,
+  .toggle {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.6rem 1.2rem;
+  }
+
+  .text-button {
+    min-height: 44px;
+    padding: 0.5rem;
+  }
+
+  .projects li {
+    padding: 1rem;
+  }
+
+  .image-card {
+    touch-action: none;
+  }
+}
+
+/* Touch drag clone styling */
+.touch-drag-clone {
+  border-radius: 14px;
+  transition: transform 0.1s ease;
+}
+
+/* Prevent text selection during drag on touch */
+.image-card.dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}

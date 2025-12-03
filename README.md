@@ -1,76 +1,150 @@
 # BestShot
 
-An image comparison tool that ranks photos based on user selection. Designed for macOS, BestShot helps you flag, compare, and sort images (and videos) in various formats, selecting the best shots from a set.
+A web-based image ranking tool that helps you compare and sort photos by preference. Built with Flask and vanilla JavaScript, BestShot runs in any modern web browser and works seamlessly across devices.
 
 ## Features
 
-- Side-by-side image and video comparison
-- User-driven ranking & selection workflow
-- Support for extensive photo and video formats, including RAW
-- Face recognition and smart filtering
-- Metadata extraction (EXIF)
-- Integrates with system and third-party tools (ImageMagick, RawTherapee, FFmpeg, etc.)
+- **Drag-and-drop ranking** — Reorder images by dragging them (works on both desktop and mobile/tablet)
+- **Cross-device sync** — Start ranking on your laptop, continue on your phone by sharing the URL
+- **Project management** — Organize images into separate projects with descriptions
+- **Gallery and Rank views** — Switch between ranking mode and gallery browsing
+- **URL state persistence** — Bookmark or share a URL to return to the same project and view
+- **Responsive design** — Optimized for screens from mobile phones to large monitors
+- **Touch-friendly** — Full touch support for ranking on phones and tablets
 
-## System Requirements
+## Browser Compatibility
 
-- **Platform:** macOS (Darwin)
-- **Python:** 3.11+
-- **Database:** SQLite
-- **Package manager:** MacPorts
+BestShot works on all modern browsers:
 
-## Supported File Formats
+- **Desktop**: Chrome, Firefox, Safari, Edge (latest versions)
+- **Mobile**: iOS Safari, Android Chrome, Samsung Internet
 
-- **Images:** JPEG, PNG, TIFF, BMP, WebP, HEIC
-- **RAW:** CR2/CR3, NEF, ARW, DNG, RAF, ORF, RW2
-- **Video:** MP4, MOV, AVI, MKV, WebM, M4V
+The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any framework dependencies.
 
-## Python Dependencies
+## Supported Image Formats
 
-- Pillow (PIL) — Image processing
-- OpenCV — Computer vision/image operations
-- NumPy — Matrix and array operations
-- InsightFace — Face recognition
-- scikit-learn — Machine learning and ranking
-- ONNX Runtime — ML model runtime
+- JPEG / JPG
+- PNG
+- GIF
+- BMP
+- TIFF
+- WebP
+- HEIC
 
-You may install these via pip:
-```bash
-pip install pillow opencv-python numpy insightface scikit-learn onnxruntime
-```
+## Quick Start
 
-## External Tools
+### Prerequisites
 
-- ExifTool — EXIF metadata extraction
-- ImageMagick — Image format conversion
-- RawTherapee — RAW image processing
-- FFmpeg/FFprobe — Video processing
-- sips (macOS built-in) — Image conversion/metadata
+- Python 3.8+
+- Flask
 
-You can install these (where not built-in) using MacPorts:
-```bash
-sudo port install exiftool ImageMagick rawtherapee ffmpeg
-```
+### Installation
 
-## Setup
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd bestshot
+   ```
 
-1. Install Python 3.11 and MacPorts on your macOS system.
 2. Install Python dependencies:
    ```bash
-   pip install pillow opencv-python numpy insightface scikit-learn onnxruntime
+   pip install flask
    ```
-3. Install external tools via MacPorts:
+
+3. Run the application:
    ```bash
-   sudo port install exiftool ImageMagick rawtherapee ffmpeg
+   python app/main.py
    ```
-4. Clone the repository and start developing!
 
-## Getting Started
+4. Open your browser to `http://localhost:8000`
 
-1. Place your images and videos in the project folder.
-2. Run the main tool (coming soon) to start flagging and ranking images.
+### Using Docker
 
-> **Note:** This project is in active development. Contributions and suggestions are welcome!
+You can also run BestShot in a Docker container:
+
+```bash
+docker build -t bestshot .
+docker run -p 8000:8000 -v /path/to/your/images:/project bestshot
+```
+
+## Usage
+
+### Creating a Project
+
+1. Enter a project name in the "Create project" field
+2. Optionally add a description
+3. Click "Spin up"
+
+### Adding Images
+
+- **Drag & drop** files into the drop zone
+- **Click "Browse"** to select files from your device
+
+### Ranking Images
+
+1. Make sure you're in **Rank** mode (toggle in the header)
+2. **On desktop**: Drag cards to reorder them
+3. **On mobile/tablet**: Touch and drag cards to reorder
+4. Click **"Save order"** to persist your ranking
+
+### Switching Devices
+
+BestShot stores your current project and view mode in the URL. To continue on another device:
+
+1. Copy the URL from your browser's address bar (e.g., `http://yourserver:8000/?project=my-photos&view=rank`)
+2. Open that URL on your other device
+3. Your project will be automatically selected
+
+You can also bookmark specific projects for quick access.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8000` | Server port |
+| `PROJECT_ROOT` | `/project` | Directory where project folders are stored |
+
+### Example
+
+```bash
+PORT=3000 PROJECT_ROOT=/home/user/photos python app/main.py
+```
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/projects` | List all projects |
+| POST | `/api/projects` | Create a new project |
+| GET | `/api/projects/<name>/images` | Get images for a project |
+| PUT | `/api/projects/<name>` | Update project description |
+| POST | `/api/projects/<name>/upload` | Upload images |
+| POST | `/api/projects/<name>/rank` | Save image ranking |
+| GET | `/api/projects/<name>/files/<filename>` | Serve an image file |
+
+## Project Structure
+
+```
+bestshot/
+├── app/
+│   ├── __init__.py
+│   └── main.py          # Flask application
+├── static/
+│   ├── app.js           # Frontend JavaScript
+│   └── styles.css       # Styles
+├── templates/
+│   └── index.html       # Main HTML template
+└── README.md
+```
+
+## Data Storage
+
+- Rankings are stored in `.ranking.json` files within each project folder
+- Project metadata is stored in `.project.json` files
+- Images are served directly from the project folders
 
 ## License
 
-Specify your license (MIT, GPL, etc.) here.
+MIT License - see LICENSE file for details.

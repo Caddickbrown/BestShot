@@ -26,7 +26,46 @@ const state = {
   viewMode: "rank",
 };
 
-async function fetchProjects() {
+// Touch drag-and-drop state
+let touchDragState = null;
+
+// ============ URL State Persistence ============
+// Enables resuming on another device by sharing/bookmarking the URL
+
+function getStateFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    project: params.get("project"),
+    view: params.get("view"),
+  };
+}
+
+function updateURL() {
+  const params = new URLSearchParams();
+  if (state.currentProject) {
+    params.set("project", state.currentProject);
+  }
+  if (state.viewMode && state.viewMode !== "rank") {
+    params.set("view", state.viewMode);
+  }
+  const newURL = params.toString()
+    ? `${window.location.pathname}?${params.toString()}`
+    : window.location.pathname;
+  window.history.replaceState({}, "", newURL);
+}
+
+function restoreStateFromURL() {
+  const urlState = getStateFromURL();
+  if (urlState.view === "gallery" || urlState.view === "rank") {
+    state.viewMode = urlState.view;
+    viewModeButtons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.viewMode === state.viewMode);
+    });
+  }
+  return urlState.project;
+}
+
+async function fetchProjects(initialProjectFromURL = null) {
   const res = await fetch("/api/projects");
   if (!res.ok) {
     console.error("Failed to load projects");
@@ -40,12 +79,22 @@ async function fetchProjects() {
     state.currentProject = null;
     state.images = [];
     disableWorkspace();
+    updateURL();
     return;
   }
 
-  const exists = state.projects.some((project) => project.name === state.currentProject);
-  if (!state.currentProject || !exists) {
-    await selectProject(state.projects[0].name);
+  // Priority: URL param > current selection > first project
+  let targetProject = null;
+  if (initialProjectFromURL && state.projects.some((p) => p.name === initialProjectFromURL)) {
+    targetProject = initialProjectFromURL;
+  } else if (state.currentProject && state.projects.some((p) => p.name === state.currentProject)) {
+    targetProject = state.currentProject;
+  } else {
+    targetProject = state.projects[0].name;
+  }
+
+  if (targetProject !== state.currentProject) {
+    await selectProject(targetProject);
   }
 }
 
@@ -83,6 +132,7 @@ function renderProjects() {
 async function selectProject(name) {
   state.currentProject = name;
   renderProjects();
+  updateURL();
   await loadProjectState();
 }
 
@@ -135,6 +185,7 @@ function renderImages() {
 
     card.draggable = state.viewMode === "rank";
     if (state.viewMode === "rank") {
+      // Mouse drag-and-drop events
       card.addEventListener("dragstart", (event) => {
         event.dataTransfer.effectAllowed = "move";
         card.classList.add("dragging");
@@ -161,6 +212,11 @@ function renderImages() {
         const to = Number(card.dataset.index);
         reorderImages(from, to);
       });
+
+      // Touch drag-and-drop events (for mobile/tablet)
+      card.addEventListener("touchstart", handleTouchStart, { passive: false });
+      card.addEventListener("touchmove", handleTouchMove, { passive: false });
+      card.addEventListener("touchend", handleTouchEnd, { passive: false });
     }
 
     imagesGrid.appendChild(card);
@@ -177,6 +233,124 @@ function reorderImages(from, to) {
   const [moved] = state.images.splice(from, 1);
   state.images.splice(to, 0, moved);
   renderImages();
+}
+
+// ============ Touch Drag-and-Drop Support ============
+// Enables ranking on mobile devices (phones/tablets)
+
+function handleTouchStart(event) {
+  if (state.viewMode !== "rank") return;
+
+  const card = event.currentTarget;
+  const touch = event.touches[0];
+
+  // Allow some time to determine if this is a scroll or drag
+  touchDragState = {
+    card: card,
+    startX: touch.clientX,
+    startY: touch.clientY,
+    currentX: touch.clientX,
+    currentY: touch.clientY,
+    index: Number(card.dataset.index),
+    isDragging: false,
+    clone: null,
+    scrollThreshold: 10,
+  };
+}
+
+function handleTouchMove(event) {
+  if (!touchDragState) return;
+
+  const touch = event.touches[0];
+  const deltaX = Math.abs(touch.clientX - touchDragState.startX);
+  const deltaY = Math.abs(touch.clientY - touchDragState.startY);
+
+  // Start dragging after moving beyond threshold
+  if (!touchDragState.isDragging) {
+    if (deltaX > touchDragState.scrollThreshold || deltaY > touchDragState.scrollThreshold) {
+      touchDragState.isDragging = true;
+      touchDragState.card.classList.add("dragging");
+
+      // Create a visual clone that follows the finger
+      const rect = touchDragState.card.getBoundingClientRect();
+      const clone = touchDragState.card.cloneNode(true);
+      clone.classList.add("touch-drag-clone");
+      clone.style.cssText = `
+        position: fixed;
+        width: ${rect.width}px;
+        left: ${rect.left}px;
+        top: ${rect.top}px;
+        pointer-events: none;
+        z-index: 1000;
+        opacity: 0.9;
+        transform: scale(1.05);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+      `;
+      document.body.appendChild(clone);
+      touchDragState.clone = clone;
+      touchDragState.offsetX = touch.clientX - rect.left;
+      touchDragState.offsetY = touch.clientY - rect.top;
+    }
+  }
+
+  if (touchDragState.isDragging) {
+    event.preventDefault(); // Prevent scrolling while dragging
+
+    touchDragState.currentX = touch.clientX;
+    touchDragState.currentY = touch.clientY;
+
+    // Move the clone
+    if (touchDragState.clone) {
+      touchDragState.clone.style.left = `${touch.clientX - touchDragState.offsetX}px`;
+      touchDragState.clone.style.top = `${touch.clientY - touchDragState.offsetY}px`;
+    }
+
+    // Highlight the card under the touch point
+    const allCards = imagesGrid.querySelectorAll(".image-card");
+    allCards.forEach((c) => c.classList.remove("over"));
+
+    const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (elementBelow) {
+      const cardBelow = elementBelow.closest(".image-card");
+      if (cardBelow && cardBelow !== touchDragState.card) {
+        cardBelow.classList.add("over");
+      }
+    }
+  }
+}
+
+function handleTouchEnd(event) {
+  if (!touchDragState) return;
+
+  const { card, isDragging, clone, index } = touchDragState;
+
+  // Clean up the clone
+  if (clone) {
+    clone.remove();
+  }
+
+  card.classList.remove("dragging");
+
+  if (isDragging) {
+    // Find the card we dropped on
+    const allCards = imagesGrid.querySelectorAll(".image-card");
+    allCards.forEach((c) => c.classList.remove("over"));
+
+    const elementBelow = document.elementFromPoint(
+      touchDragState.currentX,
+      touchDragState.currentY
+    );
+
+    if (elementBelow) {
+      const cardBelow = elementBelow.closest(".image-card");
+      if (cardBelow && cardBelow !== card) {
+        const toIndex = Number(cardBelow.dataset.index);
+        reorderImages(index, toIndex);
+      }
+    }
+  }
+
+  touchDragState = null;
 }
 
 function disableWorkspace() {
@@ -297,6 +471,7 @@ function setViewMode(mode) {
   viewModeButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.viewMode === state.viewMode);
   });
+  updateURL();
   renderImages();
 }
 
@@ -350,6 +525,19 @@ dropZone.addEventListener("drop", (event) => {
   uploadFiles(files);
 });
 
-fetchProjects();
+// Initialize app with URL state restoration
+const initialProject = restoreStateFromURL();
 disableWorkspace();
 updateActionStates();
+fetchProjects(initialProject);
+
+// Handle browser back/forward navigation
+window.addEventListener("popstate", () => {
+  const urlState = getStateFromURL();
+  if (urlState.project && urlState.project !== state.currentProject) {
+    selectProject(urlState.project);
+  }
+  if (urlState.view && urlState.view !== state.viewMode) {
+    setViewMode(urlState.view);
+  }
+});

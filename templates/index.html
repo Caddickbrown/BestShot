@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BestShot - Project Ranking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header>
+        <div>
+          <h1>BestShot</h1>
+          <p>Drop photos into a project, drag to rank, save when happy.</p>
+        </div>
+        <button id="refresh-projects" class="ghost">Refresh projects</button>
+      </header>
+
+      <main>
+        <aside>
+          <h2>Projects</h2>
+          <ul id="projects-list"></ul>
+          <form id="new-project-form">
+            <label for="project-name">Create project</label>
+            <div class="create-project">
+              <input
+                type="text"
+                id="project-name"
+                name="project-name"
+                placeholder="wedding-2025"
+                required
+              />
+              <button type="submit">Add</button>
+            </div>
+          </form>
+        </aside>
+
+        <section class="workspace">
+          <div class="workspace-header">
+            <div>
+              <h2 id="workspace-title">Select a project</h2>
+              <p id="workspace-meta"></p>
+            </div>
+            <div class="workspace-actions">
+              <input type="file" id="file-input" multiple hidden />
+              <button id="browse-files" class="ghost" disabled>Browse files</button>
+              <button id="save-order" disabled>Save ranking</button>
+            </div>
+          </div>
+
+          <div id="drop-zone" class="drop-zone disabled">
+            <p>Drag & drop photos here or browse to upload.</p>
+            <small>Only image formats (JPG, PNG, TIFF, WebP, HEIC) are accepted.</small>
+          </div>
+
+          <div id="images-grid" class="images-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="image-card-template">
+      <div class="image-card" draggable="true">
+        <span class="rank-pill"></span>
+        <img alt="" loading="lazy" />
+        <p class="filename"></p>
+      </div>
+    </template>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

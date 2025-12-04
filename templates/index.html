@@ -59,8 +59,13 @@
               <button class="toggle active" data-view-mode="rank">Rank</button>
               <button class="toggle" data-view-mode="gallery">Gallery</button>
             </div>
+            <div class="media-filter" role="group" aria-label="Media filter">
+              <button class="toggle active" data-media-filter="all">Both</button>
+              <button class="toggle" data-media-filter="photos">Photos</button>
+              <button class="toggle" data-media-filter="videos">Videos</button>
+            </div>
             <div class="upload-actions">
-              <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic" />
+              <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
               <button id="browse-files" class="ghost" disabled>Browse</button>
               <button id="save-order" class="primary" disabled>Save order</button>
             </div>
@@ -84,8 +89,8 @@
         </section>
 
         <section id="drop-zone" class="drop-zone disabled" aria-live="polite">
-          <p>Drag files here or use the browser button. Images land inside the mounted project folder.</p>
-          <small>JPEG · PNG · TIFF · WebP · HEIC</small>
+          <p>Drag files here or use the browser button. Media lands inside the mounted project folder.</p>
+          <small>Photos: JPEG · PNG · TIFF · WebP · HEIC &nbsp;|&nbsp; Videos: MP4 · MOV · AVI · MKV · WebM</small>
         </section>
 
         <section class="canvas">
@@ -103,6 +108,33 @@
         <img alt="" loading="lazy" />
       </div>
     </template>
+
+    <template id="video-card-template">
+      <div class="image-card video-card" draggable="true">
+        <div class="image-card__head">
+          <span class="rank-pill"></span>
+          <p class="filename"></p>
+        </div>
+        <div class="video-thumbnail">
+          <video muted preload="metadata"></video>
+          <button class="play-button" aria-label="Play video">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Video Player Modal -->
+    <div id="video-modal" class="video-modal" hidden>
+      <div class="video-modal__backdrop"></div>
+      <div class="video-modal__content">
+        <button class="video-modal__close" aria-label="Close video">&times;</button>
+        <video id="modal-video" controls autoplay></video>
+        <p id="modal-video-name" class="video-modal__name"></p>
+      </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </body>

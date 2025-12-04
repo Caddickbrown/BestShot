@@ -28,7 +28,7 @@ except PermissionError:
     fallback.mkdir(parents=True, exist_ok=True)
     DEFAULT_PROJECT_ROOT = fallback
 
-ALLOWED_EXTENSIONS = {
+IMAGE_EXTENSIONS = {
     ".jpg",
     ".jpeg",
     ".png",
@@ -39,6 +39,20 @@ ALLOWED_EXTENSIONS = {
     ".webp",
     ".heic",
 }
+
+VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".webm",
+    ".m4v",
+    ".wmv",
+    ".flv",
+    ".3gp",
+}
+
+ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 RANKING_FILENAME = ".ranking.json"
 META_FILENAME = ".project.json"
 
@@ -67,22 +81,34 @@ def create_app() -> Flask:
         for folder in sorted(project_root.iterdir()):
             if not folder.is_dir():
                 continue
-            images = _list_image_files(folder)
+            all_media = _list_media_files(folder, "all")
+            images = [f for f in all_media if f.suffix.lower() in IMAGE_EXTENSIONS]
+            videos = [f for f in all_media if f.suffix.lower() in VIDEO_EXTENSIONS]
             metadata = _load_metadata(folder)
             projects.append(
                 {
                     "name": folder.name,
                     "imageCount": len(images),
+                    "videoCount": len(videos),
+                    "mediaCount": len(all_media),
                     "updated": datetime.fromtimestamp(folder.stat().st_mtime).isoformat(),
                     "description": metadata.get("description", ""),
                 }
             )
         return projects
 
-    def _list_image_files(folder: Path) -> List[Path]:
+    def _list_media_files(folder: Path, media_type: str = "all") -> List[Path]:
+        """List media files filtered by type: 'all', 'photos', or 'videos'."""
+        if media_type == "photos":
+            extensions = IMAGE_EXTENSIONS
+        elif media_type == "videos":
+            extensions = VIDEO_EXTENSIONS
+        else:
+            extensions = ALLOWED_EXTENSIONS
+
         files = []
         for file in folder.iterdir():
-            if file.is_file() and file.suffix.lower() in ALLOWED_EXTENSIONS:
+            if file.is_file() and file.suffix.lower() in extensions:
                 files.append(file)
         return sorted(files)
 
@@ -118,19 +144,24 @@ def create_app() -> Flask:
         metadata_file = folder / META_FILENAME
         metadata_file.write_text(json.dumps(metadata, indent=2))
 
-    def _serialize_images(folder: Path) -> List[dict]:
-        files = _list_image_files(folder)
+    def _serialize_media(folder: Path, media_type: str = "all") -> List[dict]:
+        """Serialize media files with type information."""
+        files = _list_media_files(folder, media_type)
         current_files = {file.name: file for file in files}
         rankings = [name for name in _load_rankings(folder) if name in current_files]
         remaining = [name for name in current_files if name not in rankings]
         ordered = rankings + sorted(remaining)
         serialized = []
         for idx, name in enumerate(ordered, start=1):
+            file_path = current_files[name]
+            suffix = file_path.suffix.lower()
+            is_video = suffix in VIDEO_EXTENSIONS
             serialized.append(
                 {
                     "name": name,
                     "rank": idx,
                     "url": f"/api/projects/{folder.name}/files/{name}",
+                    "type": "video" if is_video else "image",
                 }
             )
         return serialized
@@ -170,12 +201,18 @@ def create_app() -> Flask:
         folder = _project_path(project_name)
         if not folder.exists():
             abort(404, description="Project not found")
+        # Support filtering by media type: 'all', 'photos', or 'videos'
+        media_type = request.args.get("media", "all")
+        if media_type not in ("all", "photos", "videos"):
+            media_type = "all"
         metadata = _load_metadata(folder)
+        media_items = _serialize_media(folder, media_type)
         return jsonify(
             {
                 "project": folder.name,
                 "description": metadata.get("description", ""),
-                "images": _serialize_images(folder),
+                "images": media_items,
+                "mediaType": media_type,
             }
         )
 
@@ -219,7 +256,7 @@ def create_app() -> Flask:
         order = payload.get("order")
         if not isinstance(order, list):
             abort(400, description="Order must be a list")
-        current_files = {file.name for file in _list_image_files(folder)}
+        current_files = {file.name for file in _list_media_files(folder, "all")}
         cleaned_order = [name for name in order if name in current_files]
         _save_rankings(folder, cleaned_order)
         return jsonify({"order": cleaned_order})

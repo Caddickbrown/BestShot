@@ -12,11 +12,20 @@ const fileInput = document.getElementById("file-input");
 const saveOrderBtn = document.getElementById("save-order");
 const imagesGrid = document.getElementById("images-grid");
 const imageTemplate = document.getElementById("image-card-template");
+const videoTemplate = document.getElementById("video-card-template");
 const projectDescriptionForm = document.getElementById("project-description-form");
 const projectDescriptionField = document.getElementById("project-description");
 const projectDescriptionStatus = document.getElementById("project-description-status");
 const saveDescriptionBtn = document.getElementById("save-description");
 const viewModeButtons = document.querySelectorAll("[data-view-mode]");
+const mediaFilterButtons = document.querySelectorAll("[data-media-filter]");
+
+// Video modal elements
+const videoModal = document.getElementById("video-modal");
+const modalVideo = document.getElementById("modal-video");
+const modalVideoName = document.getElementById("modal-video-name");
+const modalBackdrop = videoModal.querySelector(".video-modal__backdrop");
+const modalCloseBtn = videoModal.querySelector(".video-modal__close");
 
 const state = {
   projects: [],
@@ -24,6 +33,7 @@ const state = {
   images: [],
   description: "",
   viewMode: "rank",
+  mediaFilter: "all", // 'all', 'photos', or 'videos'
 };
 
 // Touch drag-and-drop state
@@ -37,6 +47,7 @@ function getStateFromURL() {
   return {
     project: params.get("project"),
     view: params.get("view"),
+    media: params.get("media"),
   };
 }
 
@@ -47,6 +58,9 @@ function updateURL() {
   }
   if (state.viewMode && state.viewMode !== "rank") {
     params.set("view", state.viewMode);
+  }
+  if (state.mediaFilter && state.mediaFilter !== "all") {
+    params.set("media", state.mediaFilter);
   }
   const newURL = params.toString()
     ? `${window.location.pathname}?${params.toString()}`
@@ -60,6 +74,12 @@ function restoreStateFromURL() {
     state.viewMode = urlState.view;
     viewModeButtons.forEach((button) => {
       button.classList.toggle("active", button.dataset.viewMode === state.viewMode);
+    });
+  }
+  if (urlState.media === "photos" || urlState.media === "videos" || urlState.media === "all") {
+    state.mediaFilter = urlState.media;
+    mediaFilterButtons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.mediaFilter === state.mediaFilter);
     });
   }
   return urlState.project;
@@ -114,7 +134,14 @@ function renderProjects() {
     const title = document.createElement("h3");
     title.textContent = project.name;
     const details = document.createElement("small");
-    details.textContent = `${project.imageCount} file${project.imageCount === 1 ? "" : "s"}`;
+    const parts = [];
+    if (project.imageCount > 0) {
+      parts.push(`${project.imageCount} photo${project.imageCount === 1 ? "" : "s"}`);
+    }
+    if (project.videoCount > 0) {
+      parts.push(`${project.videoCount} video${project.videoCount === 1 ? "" : "s"}`);
+    }
+    details.textContent = parts.length ? parts.join(", ") : "Empty";
     const desc = document.createElement("p");
     desc.textContent = project.description || "No description yet.";
 
@@ -141,7 +168,8 @@ async function loadProjectState() {
     disableWorkspace();
     return;
   }
-  const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/images`);
+  const url = `/api/projects/${encodeURIComponent(state.currentProject)}/images?media=${state.mediaFilter}`;
+  const res = await fetch(url);
   if (!res.ok) {
     alert("Unable to load project");
     return;
@@ -150,7 +178,15 @@ async function loadProjectState() {
   state.images = data.images;
   state.description = data.description || "";
   workspaceTitle.textContent = data.project;
-  workspaceMeta.textContent = `${state.images.length} image${state.images.length === 1 ? "" : "s"}`;
+  
+  // Update meta text based on media types
+  const imageCount = state.images.filter((m) => m.type === "image").length;
+  const videoCount = state.images.filter((m) => m.type === "video").length;
+  const parts = [];
+  if (imageCount > 0) parts.push(`${imageCount} photo${imageCount === 1 ? "" : "s"}`);
+  if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
+  workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
+  
   projectDescriptionField.value = state.description;
   projectDescriptionStatus.textContent = state.description ? "Saved" : "No note";
   enableWorkspace();
@@ -163,25 +199,53 @@ function renderImages() {
 
   if (!state.images.length) {
     const empty = document.createElement("p");
-    empty.textContent = state.currentProject
-      ? "No images yet. Drop them into the project folder."
-      : "Select a project to begin.";
+    let emptyText = "Select a project to begin.";
+    if (state.currentProject) {
+      if (state.mediaFilter === "photos") {
+        emptyText = "No photos yet. Drop them into the project folder.";
+      } else if (state.mediaFilter === "videos") {
+        emptyText = "No videos yet. Drop them into the project folder.";
+      } else {
+        emptyText = "No media yet. Drop files into the project folder.";
+      }
+    }
+    empty.textContent = emptyText;
     empty.classList.add("muted");
     imagesGrid.appendChild(empty);
     updateActionStates();
     return;
   }
 
-  state.images.forEach((image, index) => {
-    const card = imageTemplate.content.firstElementChild.cloneNode(true);
+  state.images.forEach((media, index) => {
+    const isVideo = media.type === "video";
+    const template = isVideo ? videoTemplate : imageTemplate;
+    const card = template.content.firstElementChild.cloneNode(true);
     card.dataset.index = index;
+    card.dataset.mediaType = media.type;
     card.classList.toggle("is-gallery", state.viewMode === "gallery");
+    
     const rank = card.querySelector(".rank-pill");
     rank.textContent = `#${index + 1}`;
-    const img = card.querySelector("img");
-    img.src = `${image.url}?v=${Date.now()}`;
-    img.alt = image.name;
-    card.querySelector(".filename").textContent = image.name;
+    card.querySelector(".filename").textContent = media.name;
+
+    if (isVideo) {
+      const video = card.querySelector("video");
+      video.src = `${media.url}?v=${Date.now()}`;
+      // Load first frame as thumbnail
+      video.addEventListener("loadeddata", () => {
+        video.currentTime = 0.1;
+      });
+      
+      const playButton = card.querySelector(".play-button");
+      playButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openVideoModal(media);
+      });
+    } else {
+      const img = card.querySelector("img");
+      img.src = `${media.url}?v=${Date.now()}`;
+      img.alt = media.name;
+    }
 
     card.draggable = state.viewMode === "rank";
     if (state.viewMode === "rank") {
@@ -475,6 +539,42 @@ function setViewMode(mode) {
   renderImages();
 }
 
+async function setMediaFilter(filter) {
+  if (state.mediaFilter === filter) return;
+  state.mediaFilter = filter;
+  mediaFilterButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.mediaFilter === state.mediaFilter);
+  });
+  updateURL();
+  await loadProjectState();
+}
+
+// ============ Video Modal Functions ============
+
+function openVideoModal(media) {
+  modalVideo.src = media.url;
+  modalVideoName.textContent = media.name;
+  videoModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  modalVideo.play();
+}
+
+function closeVideoModal() {
+  modalVideo.pause();
+  modalVideo.src = "";
+  videoModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+// Video modal event listeners
+modalCloseBtn.addEventListener("click", closeVideoModal);
+modalBackdrop.addEventListener("click", closeVideoModal);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !videoModal.hidden) {
+    closeVideoModal();
+  }
+});
+
 newProjectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = projectNameInput.value.trim();
@@ -491,6 +591,15 @@ viewModeButtons.forEach((button) => {
     const mode = button.dataset.viewMode;
     if (mode) {
       setViewMode(mode);
+    }
+  });
+});
+
+mediaFilterButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const filter = button.dataset.mediaFilter;
+    if (filter) {
+      setMediaFilter(filter);
     }
   });
 });
@@ -539,5 +648,8 @@ window.addEventListener("popstate", () => {
   }
   if (urlState.view && urlState.view !== state.viewMode) {
     setViewMode(urlState.view);
+  }
+  if (urlState.media && urlState.media !== state.mediaFilter) {
+    setMediaFilter(urlState.media);
   }
 });

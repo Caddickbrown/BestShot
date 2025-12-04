@@ -823,21 +823,37 @@ async function createProject(name, description) {
 async function uploadFiles(files) {
   if (!state.currentProject || !files.length) return;
 
-  const formData = new FormData();
-  [...files].forEach((file) => formData.append("files", file));
+  // Ensure files is an array (convert FileList if needed)
+  const filesArray = Array.isArray(files) ? files : Array.from(files);
+  if (!filesArray.length) return;
 
-  const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/upload`, {
-    method: "POST",
-    body: formData,
+  const formData = new FormData();
+  filesArray.forEach((file) => {
+    // Validate file is actually a File object
+    if (file instanceof File) {
+      formData.append("files", file);
+    }
   });
 
-  if (!res.ok) {
-    alert("Upload failed. Make sure the files are supported images.");
-    return;
-  }
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/upload`, {
+      method: "POST",
+      body: formData,
+      // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+    });
 
-  await loadProjectState();
-  await fetchProjects();
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "Unknown error");
+      alert(`Upload failed: ${errorText || "Make sure the files are supported images/videos."}`);
+      return;
+    }
+
+    await loadProjectState();
+    await fetchProjects();
+  } catch (error) {
+    console.error("Upload error:", error);
+    alert(`Upload failed: ${error.message || "Network error. Please try again."}`);
+  }
 }
 
 async function saveOrder() {
@@ -978,23 +994,39 @@ async function selectProjectForUpload(projectName) {
   const files = state.pendingFiles;
   closeProjectSelectModal();
   
+  // Ensure files is an array
+  const filesArray = Array.isArray(files) ? files : Array.from(files);
+  if (!filesArray.length) return;
+  
   // Upload files to the selected project
   const formData = new FormData();
-  [...files].forEach((file) => formData.append("files", file));
-  
-  const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/upload`, {
-    method: "POST",
-    body: formData,
+  filesArray.forEach((file) => {
+    // Validate file is actually a File object
+    if (file instanceof File) {
+      formData.append("files", file);
+    }
   });
   
-  if (!res.ok) {
-    alert("Upload failed. Make sure the files are supported images/videos.");
-    return;
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/upload`, {
+      method: "POST",
+      body: formData,
+      // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+    });
+    
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "Unknown error");
+      alert(`Upload failed: ${errorText || "Make sure the files are supported images/videos."}`);
+      return;
+    }
+    
+    // Reload All Projects view and project list
+    await loadAllProjectsState();
+    await fetchProjects();
+  } catch (error) {
+    console.error("Upload error:", error);
+    alert(`Upload failed: ${error.message || "Network error. Please try again."}`);
   }
-  
-  // Reload All Projects view and project list
-  await loadAllProjectsState();
-  await fetchProjects();
 }
 
 async function createProjectAndUpload() {

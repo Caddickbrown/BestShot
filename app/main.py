@@ -183,17 +183,20 @@ def create_app() -> Flask:
         rankings = [name for name in _load_rankings(folder) if name in current_files]
         remaining = [name for name in current_files if name not in rankings]
         ordered = rankings + sorted(remaining)
+        media_meta = _load_media_meta(folder)
         serialized = []
         for idx, name in enumerate(ordered, start=1):
             file_path = current_files[name]
             suffix = file_path.suffix.lower()
             is_video = suffix in VIDEO_EXTENSIONS
+            file_meta = media_meta.get(name, {})
             serialized.append(
                 {
                     "name": name,
                     "rank": idx,
                     "url": f"/api/projects/{folder.name}/files/{name}",
                     "type": "video" if is_video else "image",
+                    "tags": file_meta.get("tags", []),
                 }
             )
         return serialized
@@ -304,6 +307,38 @@ def create_app() -> Flask:
         if not file_path.exists():
             abort(404, description="File not found")
         return send_from_directory(folder, filename)
+
+    @app.put("/api/projects/<project_name>/media/<path:filename>/tags")
+    def update_media_tags(project_name: str, filename: str):
+        """Update tags for a specific media file."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        file_path = (folder / filename).resolve()
+        if not file_path.exists():
+            abort(404, description="File not found")
+        payload = request.get_json(silent=True) or {}
+        tags = payload.get("tags", [])
+        if not isinstance(tags, list):
+            abort(400, description="Tags must be a list")
+        # Normalize tags: strip whitespace, lowercase, remove duplicates
+        clean_tags = list(dict.fromkeys(
+            tag.strip().lower() for tag in tags if isinstance(tag, str) and tag.strip()
+        ))
+        _set_media_tags(folder, filename, clean_tags)
+        return jsonify({"name": filename, "tags": clean_tags})
+
+    @app.get("/api/projects/<project_name>/tags")
+    def get_project_tags(project_name: str):
+        """Get all unique tags used in a project."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        media_meta = _load_media_meta(folder)
+        all_tags = set()
+        for file_meta in media_meta.values():
+            all_tags.update(file_meta.get("tags", []))
+        return jsonify({"tags": sorted(all_tags)})
 
     return app
 

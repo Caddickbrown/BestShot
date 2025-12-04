@@ -432,10 +432,15 @@ function renderImages() {
       });
 
       card.addEventListener("dragover", (event) => {
-        event.preventDefault();
-        const dragged = document.querySelector(".image-card.dragging");
-        if (dragged && dragged !== card) {
-          card.classList.add("over");
+        // Only accept drop for card reordering, not for file drops
+        // This lets file drops bubble to the gallery drop zone
+        const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
+        if (isCardDrag) {
+          event.preventDefault();
+          const dragged = document.querySelector(".image-card.dragging");
+          if (dragged && dragged !== card) {
+            card.classList.add("over");
+          }
         }
       });
 
@@ -447,7 +452,8 @@ function renderImages() {
         // Only handle card reordering, let file drops bubble to gallery
         const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
         if (!isCardDrag) {
-          // File drop - don't interfere, let gallery handler process it
+          // File drop - let gallery handler process it, but don't stop propagation
+          // Don't call preventDefault here to allow the event to bubble naturally
           return;
         }
         
@@ -1558,7 +1564,8 @@ allProjectsOption.addEventListener("click", selectAllProjects);
 // Gallery drop zone for file uploads
 galleryDropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
-  if (galleryDropZone.classList.contains("disabled")) return;
+  // Don't show overlay if gallery is disabled or no project is selected (All Projects view)
+  if (galleryDropZone.classList.contains("disabled") || !state.currentProject) return;
   // Only show overlay for file drops, not internal card reordering
   const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
   if (!isCardDrag && event.dataTransfer.types.includes("Files")) {

@@ -96,10 +96,12 @@ Mount your images directory to `/project` inside the container.
 2. Optionally add a description
 3. Click "Spin up"
 
-### Adding Images
+### Adding Media
 
-- **Drag & drop** files into the drop zone
+- **Drag & drop** files into the gallery area
 - **Click "Browse"** to select files from your device
+
+New uploads are marked as "New" (unranked) until you rank them.
 
 ### Ranking Media
 

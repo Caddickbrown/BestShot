@@ -17,6 +17,8 @@ const projectDescriptionField = document.getElementById("project-description");
 const projectDescriptionStatus = document.getElementById("project-description-status");
 const saveDescriptionBtn = document.getElementById("save-description");
 const viewModeButtons = document.querySelectorAll("[data-view-mode]");
+const searchInput = document.getElementById("search-input");
+const clearSearchBtn = document.getElementById("clear-search");
 
 const state = {
   projects: [],
@@ -24,6 +26,7 @@ const state = {
   images: [],
   description: "",
   viewMode: "rank",
+  searchQuery: "",
 };
 
 // Touch drag-and-drop state
@@ -37,6 +40,7 @@ function getStateFromURL() {
   return {
     project: params.get("project"),
     view: params.get("view"),
+    search: params.get("q"),
   };
 }
 
@@ -47,6 +51,9 @@ function updateURL() {
   }
   if (state.viewMode && state.viewMode !== "rank") {
     params.set("view", state.viewMode);
+  }
+  if (state.searchQuery) {
+    params.set("q", state.searchQuery);
   }
   const newURL = params.toString()
     ? `${window.location.pathname}?${params.toString()}`
@@ -61,6 +68,11 @@ function restoreStateFromURL() {
     viewModeButtons.forEach((button) => {
       button.classList.toggle("active", button.dataset.viewMode === state.viewMode);
     });
+  }
+  if (urlState.search) {
+    state.searchQuery = urlState.search;
+    searchInput.value = urlState.search;
+    clearSearchBtn.hidden = false;
   }
   return urlState.project;
 }
@@ -150,11 +162,36 @@ async function loadProjectState() {
   state.images = data.images;
   state.description = data.description || "";
   workspaceTitle.textContent = data.project;
-  workspaceMeta.textContent = `${state.images.length} image${state.images.length === 1 ? "" : "s"}`;
+  if (!state.searchQuery) {
+    workspaceMeta.textContent = `${state.images.length} image${state.images.length === 1 ? "" : "s"}`;
+  }
   projectDescriptionField.value = state.description;
   projectDescriptionStatus.textContent = state.description ? "Saved" : "No note";
   enableWorkspace();
   renderImages();
+}
+
+function matchesSearch(image, query) {
+  if (!query) return { matches: true, matchedTags: [] };
+  const lowerQuery = query.toLowerCase().trim();
+  const terms = lowerQuery.split(/\s+/).filter(Boolean);
+  
+  const matchedTags = [];
+  let allTermsMatch = true;
+  
+  for (const term of terms) {
+    const filenameMatches = image.name.toLowerCase().includes(term);
+    const tagMatches = (image.tags || []).filter(tag => tag.toLowerCase().includes(term));
+    
+    if (filenameMatches || tagMatches.length > 0) {
+      matchedTags.push(...tagMatches);
+    } else {
+      allTermsMatch = false;
+      break;
+    }
+  }
+  
+  return { matches: allTermsMatch, matchedTags: [...new Set(matchedTags)] };
 }
 
 function renderImages() {
@@ -172,16 +209,64 @@ function renderImages() {
     return;
   }
 
+  let visibleCount = 0;
   state.images.forEach((image, index) => {
+    const { matches, matchedTags } = matchesSearch(image, state.searchQuery);
+    
     const card = imageTemplate.content.firstElementChild.cloneNode(true);
     card.dataset.index = index;
+    card.dataset.filename = image.name;
     card.classList.toggle("is-gallery", state.viewMode === "gallery");
+    card.classList.toggle("hidden-by-search", !matches);
+    card.classList.toggle("search-match", matches && state.searchQuery);
+    
+    if (matches) visibleCount++;
+    
     const rank = card.querySelector(".rank-pill");
     rank.textContent = `#${index + 1}`;
     const img = card.querySelector("img");
     img.src = `${image.url}?v=${Date.now()}`;
     img.alt = image.name;
     card.querySelector(".filename").textContent = image.name;
+
+    // Render tags
+    const tagsList = card.querySelector(".tags-list");
+    (image.tags || []).forEach(tag => {
+      const tagEl = document.createElement("span");
+      tagEl.className = "tag";
+      if (matchedTags.includes(tag)) {
+        tagEl.classList.add("matched");
+      }
+      
+      const tagText = document.createElement("span");
+      tagText.textContent = tag;
+      tagEl.appendChild(tagText);
+      
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "tag-remove";
+      removeBtn.textContent = "×";
+      removeBtn.setAttribute("aria-label", `Remove tag ${tag}`);
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeTag(image.name, tag);
+      });
+      tagEl.appendChild(removeBtn);
+      
+      tagsList.appendChild(tagEl);
+    });
+
+    // Tag input
+    const tagInput = card.querySelector(".tag-input");
+    tagInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const newTag = tagInput.value.trim();
+        if (newTag) {
+          addTag(image.name, newTag);
+          tagInput.value = "";
+        }
+      }
+    });
 
     card.draggable = state.viewMode === "rank";
     if (state.viewMode === "rank") {
@@ -222,6 +307,11 @@ function renderImages() {
     imagesGrid.appendChild(card);
   });
 
+  // Show search results count if searching
+  if (state.searchQuery) {
+    workspaceMeta.textContent = `${visibleCount} of ${state.images.length} image${state.images.length === 1 ? "" : "s"} match "${state.searchQuery}"`;
+  }
+
   updateActionStates();
 }
 
@@ -232,6 +322,84 @@ function reorderImages(from, to) {
   }
   const [moved] = state.images.splice(from, 1);
   state.images.splice(to, 0, moved);
+  renderImages();
+}
+
+// ============ Tag Management ============
+
+async function addTag(filename, tag) {
+  if (!state.currentProject) return;
+  
+  const image = state.images.find(img => img.name === filename);
+  if (!image) return;
+  
+  const currentTags = image.tags || [];
+  const normalizedTag = tag.trim().toLowerCase();
+  if (currentTags.includes(normalizedTag)) return;
+  
+  const newTags = [...currentTags, normalizedTag];
+  
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(state.currentProject)}/images/${encodeURIComponent(filename)}/tags`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: newTags }),
+    }
+  );
+  
+  if (!res.ok) {
+    console.error("Failed to add tag");
+    return;
+  }
+  
+  const data = await res.json();
+  image.tags = data.tags;
+  renderImages();
+}
+
+async function removeTag(filename, tagToRemove) {
+  if (!state.currentProject) return;
+  
+  const image = state.images.find(img => img.name === filename);
+  if (!image) return;
+  
+  const newTags = (image.tags || []).filter(t => t !== tagToRemove);
+  
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(state.currentProject)}/images/${encodeURIComponent(filename)}/tags`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: newTags }),
+    }
+  );
+  
+  if (!res.ok) {
+    console.error("Failed to remove tag");
+    return;
+  }
+  
+  const data = await res.json();
+  image.tags = data.tags;
+  renderImages();
+}
+
+// ============ Search ============
+
+function handleSearch() {
+  const query = searchInput.value.trim();
+  state.searchQuery = query;
+  clearSearchBtn.hidden = !query;
+  updateURL();
+  renderImages();
+}
+
+function clearSearch() {
+  searchInput.value = "";
+  state.searchQuery = "";
+  clearSearchBtn.hidden = true;
+  updateURL();
   renderImages();
 }
 
@@ -362,8 +530,12 @@ function disableWorkspace() {
   projectDescriptionField.disabled = true;
   saveDescriptionBtn.disabled = true;
   projectDescriptionStatus.textContent = "Idle";
+  searchInput.value = "";
+  searchInput.disabled = true;
+  clearSearchBtn.hidden = true;
   state.images = [];
   state.description = "";
+  state.searchQuery = "";
   updateActionStates();
 }
 
@@ -381,6 +553,7 @@ function updateActionStates() {
   saveOrderBtn.disabled = !hasProject || state.viewMode !== "rank" || state.images.length === 0;
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
+  searchInput.disabled = !hasProject;
 }
 
 async function createProject(name, description) {
@@ -525,6 +698,16 @@ dropZone.addEventListener("drop", (event) => {
   uploadFiles(files);
 });
 
+// Search event listeners
+searchInput.addEventListener("input", handleSearch);
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    clearSearch();
+    searchInput.blur();
+  }
+});
+clearSearchBtn.addEventListener("click", clearSearch);
+
 // Initialize app with URL state restoration
 const initialProject = restoreStateFromURL();
 disableWorkspace();
@@ -539,5 +722,12 @@ window.addEventListener("popstate", () => {
   }
   if (urlState.view && urlState.view !== state.viewMode) {
     setViewMode(urlState.view);
+  }
+  const newSearch = urlState.search || "";
+  if (newSearch !== state.searchQuery) {
+    state.searchQuery = newSearch;
+    searchInput.value = newSearch;
+    clearSearchBtn.hidden = !newSearch;
+    renderImages();
   }
 });

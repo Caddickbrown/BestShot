@@ -55,6 +55,16 @@
             <p id="workspace-meta" class="muted"></p>
           </div>
           <div class="workspace-actions">
+            <div class="search-container">
+              <input
+                type="search"
+                id="search-input"
+                placeholder="Search by filename or tag..."
+                autocomplete="off"
+                disabled
+              />
+              <button id="clear-search" class="search-clear" hidden aria-label="Clear search">×</button>
+            </div>
             <div class="view-toggle" role="group" aria-label="View mode">
               <button class="toggle active" data-view-mode="rank">Rank</button>
               <button class="toggle" data-view-mode="gallery">Gallery</button>
@@ -101,6 +111,12 @@
           <p class="filename"></p>
         </div>
         <img alt="" loading="lazy" />
+        <div class="image-card__tags">
+          <div class="tags-list"></div>
+          <div class="tag-input-wrapper">
+            <input type="text" class="tag-input" placeholder="Add tag..." />
+          </div>
+        </div>
       </div>
     </template>
 

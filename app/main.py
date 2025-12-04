@@ -41,6 +41,7 @@ ALLOWED_EXTENSIONS = {
 }
 RANKING_FILENAME = ".ranking.json"
 META_FILENAME = ".project.json"
+TAGS_FILENAME = ".tags.json"
 
 
 def create_app() -> Flask:
@@ -118,12 +119,28 @@ def create_app() -> Flask:
         metadata_file = folder / META_FILENAME
         metadata_file.write_text(json.dumps(metadata, indent=2))
 
+    def _load_tags(folder: Path) -> Dict[str, List[str]]:
+        tags_file = folder / TAGS_FILENAME
+        if tags_file.exists():
+            try:
+                data = json.loads(tags_file.read_text())
+                if isinstance(data, dict):
+                    return {str(k): [str(t) for t in v] if isinstance(v, list) else [] for k, v in data.items()}
+            except json.JSONDecodeError:
+                pass
+        return {}
+
+    def _save_tags(folder: Path, tags: Dict[str, List[str]]) -> None:
+        tags_file = folder / TAGS_FILENAME
+        tags_file.write_text(json.dumps(tags, indent=2))
+
     def _serialize_images(folder: Path) -> List[dict]:
         files = _list_image_files(folder)
         current_files = {file.name: file for file in files}
         rankings = [name for name in _load_rankings(folder) if name in current_files]
         remaining = [name for name in current_files if name not in rankings]
         ordered = rankings + sorted(remaining)
+        tags_data = _load_tags(folder)
         serialized = []
         for idx, name in enumerate(ordered, start=1):
             serialized.append(
@@ -131,6 +148,7 @@ def create_app() -> Flask:
                     "name": name,
                     "rank": idx,
                     "url": f"/api/projects/{folder.name}/files/{name}",
+                    "tags": tags_data.get(name, []),
                 }
             )
         return serialized
@@ -235,6 +253,44 @@ def create_app() -> Flask:
         if not file_path.exists():
             abort(404, description="File not found")
         return send_from_directory(folder, filename)
+
+    @app.put("/api/projects/<project_name>/images/<path:filename>/tags")
+    def update_image_tags(project_name: str, filename: str):
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        file_path = (folder / filename).resolve()
+        if folder not in file_path.parents and file_path != folder:
+            abort(400, description="Invalid file path")
+        if not file_path.exists():
+            abort(404, description="File not found")
+        payload = request.get_json(silent=True) or {}
+        tags = payload.get("tags", [])
+        if not isinstance(tags, list):
+            abort(400, description="Tags must be a list")
+        # Sanitize tags: lowercase, strip whitespace, remove empty
+        clean_tags = list(dict.fromkeys(
+            t.strip().lower() for t in tags if isinstance(t, str) and t.strip()
+        ))
+        all_tags = _load_tags(folder)
+        if clean_tags:
+            all_tags[filename] = clean_tags
+        else:
+            all_tags.pop(filename, None)
+        _save_tags(folder, all_tags)
+        return jsonify({"filename": filename, "tags": clean_tags})
+
+    @app.get("/api/projects/<project_name>/tags")
+    def get_project_tags(project_name: str):
+        """Get all unique tags used in a project."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        all_tags = _load_tags(folder)
+        unique_tags = set()
+        for tags in all_tags.values():
+            unique_tags.update(tags)
+        return jsonify({"tags": sorted(unique_tags)})
 
     return app
 

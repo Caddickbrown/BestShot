@@ -442,8 +442,16 @@ function renderImages() {
       card.addEventListener("dragleave", () => card.classList.remove("over"));
 
       card.addEventListener("drop", (event) => {
-        event.preventDefault();
         card.classList.remove("over");
+        
+        // Only handle card reordering, let file drops bubble to gallery
+        const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
+        if (!isCardDrag) {
+          // File drop - don't interfere, let gallery handler process it
+          return;
+        }
+        
+        event.preventDefault();
         const dragged = document.querySelector(".image-card.dragging");
         if (!dragged) return;
         const from = Number(dragged.dataset.dragIndex);

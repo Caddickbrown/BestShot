@@ -340,6 +340,16 @@ def create_app() -> Flask:
             all_tags.update(file_meta.get("tags", []))
         return jsonify({"tags": sorted(all_tags)})
 
+    @app.delete("/api/projects/<project_name>")
+    def delete_project(project_name: str):
+        """Delete a project and all its contents."""
+        import shutil
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        shutil.rmtree(folder)
+        return jsonify({"deleted": project_name}), 200
+
     return app
 
 

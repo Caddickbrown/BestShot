@@ -353,6 +353,60 @@ def create_app() -> Flask:
         shutil.rmtree(folder)
         return jsonify({"deleted": project_name}), 200
 
+    @app.delete("/api/projects/<project_name>/files/<path:filename>")
+    def delete_media_file(project_name: str, filename: str):
+        """Delete a specific media file from a project."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        file_path = (folder / filename).resolve()
+        if folder not in file_path.parents and file_path.parent != folder:
+            abort(400, description="Invalid file path")
+        if not file_path.exists():
+            abort(404, description="File not found")
+        
+        # Delete the file
+        file_path.unlink()
+        
+        # Remove from rankings if present
+        rankings = _load_rankings(folder)
+        if filename in rankings:
+            rankings.remove(filename)
+            _save_rankings(folder, rankings)
+        
+        # Remove from media metadata if present
+        media_meta = _load_media_meta(folder)
+        if filename in media_meta:
+            del media_meta[filename]
+            _save_media_meta(folder, media_meta)
+        
+        return jsonify({"deleted": filename}), 200
+
+    @app.get("/api/all-media")
+    def get_all_media():
+        """Get all media from all projects combined."""
+        media_type = request.args.get("media", "all")
+        if media_type not in ("all", "photos", "videos"):
+            media_type = "all"
+        
+        all_media = []
+        for folder in sorted(project_root.iterdir()):
+            if not folder.is_dir():
+                continue
+            items = _serialize_media(folder, media_type)
+            for item in items:
+                item["project"] = folder.name
+                # Update URL to include project name
+                item["url"] = f"/api/projects/{folder.name}/files/{item['name']}"
+            all_media.extend(items)
+        
+        return jsonify({
+            "project": "All Projects",
+            "description": "Media from all projects",
+            "images": all_media,
+            "mediaType": media_type,
+        })
+
     return app
 
 

@@ -46,6 +46,14 @@ const confirmDeleteBtn = document.getElementById("confirm-delete");
 const cancelDeleteBtn = document.getElementById("cancel-delete");
 const deleteBackdrop = deleteModal.querySelector(".delete-modal__backdrop");
 
+// Project select modal elements (for file drops in All Projects view)
+const projectSelectModal = document.getElementById("project-select-modal");
+const projectSelectList = document.getElementById("project-select-list");
+const projectSelectNewName = document.getElementById("project-select-new-name");
+const projectSelectCreateBtn = document.getElementById("project-select-create");
+const projectSelectCancelBtn = document.getElementById("project-select-cancel");
+const projectSelectBackdrop = projectSelectModal.querySelector(".project-select-modal__backdrop");
+
 // Media viewer modal elements
 const mediaViewerModal = document.getElementById("media-viewer-modal");
 const viewerImage = document.getElementById("viewer-image");
@@ -86,6 +94,7 @@ const state = {
   viewerIndex: -1, // Current index in fullscreen viewer
   comparison: null, // Comparison mode state
   comparisonScope: "all", // 'all' or 'unranked'
+  pendingFiles: null, // Files waiting to be uploaded (for project selection modal)
 };
 
 // Touch drag-and-drop state
@@ -370,6 +379,18 @@ function renderImages() {
       rank.classList.add("unranked");
     }
     card.querySelector(".filename").textContent = media.name;
+
+    // Show project badge in All Projects view
+    if (state.isAllProjects && media.project) {
+      const projectBadge = document.createElement("span");
+      projectBadge.className = "project-badge";
+      projectBadge.textContent = media.project;
+      projectBadge.title = `Project: ${media.project}`;
+      card.querySelector(".image-card__head").insertBefore(
+        projectBadge,
+        card.querySelector(".filename")
+      );
+    }
 
     if (isVideo) {
       const video = card.querySelector("video");
@@ -921,6 +942,101 @@ confirmDeleteBtn.addEventListener("click", deleteProject);
 cancelDeleteBtn.addEventListener("click", closeDeleteModal);
 deleteBackdrop.addEventListener("click", closeDeleteModal);
 
+// ============ Project Selection Modal Functions ============
+
+function openProjectSelectModal(files) {
+  state.pendingFiles = files;
+  
+  // Populate project list
+  projectSelectList.innerHTML = "";
+  state.projects.forEach((project) => {
+    const btn = document.createElement("button");
+    btn.className = "project-select-modal__item";
+    btn.innerHTML = `
+      <span class="project-select-modal__item-name">${escapeHtml(project.name)}</span>
+      <span class="project-select-modal__item-count">${project.mediaCount} files</span>
+    `;
+    btn.addEventListener("click", () => selectProjectForUpload(project.name));
+    projectSelectList.appendChild(btn);
+  });
+  
+  projectSelectNewName.value = "";
+  projectSelectModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeProjectSelectModal() {
+  projectSelectModal.hidden = true;
+  document.body.style.overflow = "";
+  state.pendingFiles = null;
+}
+
+async function selectProjectForUpload(projectName) {
+  if (!state.pendingFiles) return;
+  
+  const files = state.pendingFiles;
+  closeProjectSelectModal();
+  
+  // Upload files to the selected project
+  const formData = new FormData();
+  [...files].forEach((file) => formData.append("files", file));
+  
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  
+  if (!res.ok) {
+    alert("Upload failed. Make sure the files are supported images/videos.");
+    return;
+  }
+  
+  // Reload All Projects view and project list
+  await loadAllProjectsState();
+  await fetchProjects();
+}
+
+async function createProjectAndUpload() {
+  const name = projectSelectNewName.value.trim();
+  if (!name) {
+    alert("Please enter a project name");
+    return;
+  }
+  
+  if (!state.pendingFiles) return;
+  
+  // Create the project first
+  const createRes = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description: "" }),
+  });
+  
+  if (!createRes.ok) {
+    const error = await createRes.text();
+    alert(error || "Failed to create project");
+    return;
+  }
+  
+  const created = await createRes.json();
+  
+  // Now upload files to the new project
+  await selectProjectForUpload(created.name);
+}
+
+projectSelectCreateBtn.addEventListener("click", createProjectAndUpload);
+projectSelectCancelBtn.addEventListener("click", closeProjectSelectModal);
+projectSelectBackdrop.addEventListener("click", closeProjectSelectModal);
+
+projectSelectNewName.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    createProjectAndUpload();
+  } else if (e.key === "Escape") {
+    closeProjectSelectModal();
+  }
+});
+
 // ============ Media Viewer Functions (Fullscreen Gallery) ============
 
 function openMediaViewer(index) {
@@ -1466,6 +1582,8 @@ document.addEventListener("keydown", (event) => {
       closeVideoModal();
     } else if (!deleteModal.hidden) {
       closeDeleteModal();
+    } else if (!projectSelectModal.hidden) {
+      closeProjectSelectModal();
     } else if (!mediaViewerModal.hidden) {
       closeMediaViewer();
     } else if (!comparisonSelection.hidden) {
@@ -1561,14 +1679,26 @@ fileInput.addEventListener("change", () => {
 // All Projects option handler
 allProjectsOption.addEventListener("click", selectAllProjects);
 
+// Drop overlay text elements
+const dropOverlayText = document.getElementById("drop-overlay-text");
+const dropOverlaySubtext = document.getElementById("drop-overlay-subtext");
+
 // Gallery drop zone for file uploads
 galleryDropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
-  // Don't show overlay if gallery is disabled or no project is selected (All Projects view)
-  if (galleryDropZone.classList.contains("disabled") || !state.currentProject) return;
+  // Don't show overlay if gallery is disabled
+  if (galleryDropZone.classList.contains("disabled")) return;
   // Only show overlay for file drops, not internal card reordering
   const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
   if (!isCardDrag && event.dataTransfer.types.includes("Files")) {
+    // Update overlay text based on current view
+    if (state.isAllProjects) {
+      dropOverlayText.textContent = "Drop files to add";
+      dropOverlaySubtext.textContent = "You'll choose which project to add them to";
+    } else {
+      dropOverlayText.textContent = "Drop files to add to gallery";
+      dropOverlaySubtext.textContent = 'New items will be marked as "Unranked"';
+    }
     dropOverlay.hidden = false;
   }
 });
@@ -1583,7 +1713,6 @@ galleryDropZone.addEventListener("dragleave", (event) => {
 galleryDropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropOverlay.hidden = true;
-  if (!state.currentProject) return;
   
   // Ignore card drops - they are handled by card event listeners
   const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
@@ -1591,7 +1720,12 @@ galleryDropZone.addEventListener("drop", (event) => {
   
   // Only handle file drops
   if (event.dataTransfer.files.length > 0) {
-    uploadFiles(event.dataTransfer.files);
+    if (state.isAllProjects) {
+      // Show project selection modal
+      openProjectSelectModal(event.dataTransfer.files);
+    } else if (state.currentProject) {
+      uploadFiles(event.dataTransfer.files);
+    }
   }
 });
 

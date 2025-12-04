@@ -95,8 +95,8 @@
 
         <section class="canvas" id="gallery-drop-zone">
           <div id="drop-overlay" class="drop-overlay" hidden>
-            <p>Drop files to add to gallery</p>
-            <small>New items will be marked as "Unranked"</small>
+            <p id="drop-overlay-text">Drop files to add to gallery</p>
+            <small id="drop-overlay-subtext">New items will be marked as "Unranked"</small>
           </div>
           <div id="images-grid" class="images-grid"></div>
         </section>
@@ -255,6 +255,24 @@
         <div class="delete-modal__actions">
           <button id="confirm-delete" class="primary danger">Delete</button>
           <button id="cancel-delete" class="ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Project Selection Modal (for file drops in All Projects view) -->
+    <div id="project-select-modal" class="project-select-modal" hidden>
+      <div class="project-select-modal__backdrop"></div>
+      <div class="project-select-modal__content">
+        <h3>Choose a Project</h3>
+        <p>Select which project to add these files to, or create a new project.</p>
+        <div id="project-select-list" class="project-select-modal__list"></div>
+        <div class="project-select-modal__divider">or create new</div>
+        <div class="project-select-modal__new">
+          <input type="text" id="project-select-new-name" placeholder="New project name..." />
+          <button id="project-select-create" class="primary">Create</button>
+        </div>
+        <div class="project-select-modal__actions">
+          <button id="project-select-cancel" class="ghost">Cancel</button>
         </div>
       </div>
     </div>

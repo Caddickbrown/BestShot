@@ -625,7 +625,7 @@ body {
 .video-card::before {
   content: "VIDEO";
   position: absolute;
-  top: 0.75rem;
+  top: 3rem;
   right: 0.75rem;
   font-size: 0.65rem;
   font-weight: 700;
@@ -639,6 +639,28 @@ body {
 
 .video-card {
   position: relative;
+}
+
+/* Project badge for All Projects view */
+.project-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-badge::before {
+  content: "📁";
+  margin-right: 0.3rem;
+  font-size: 0.65rem;
 }
 
 /* ============ Video Modal Styles ============ */
@@ -1413,4 +1435,126 @@ body {
   .media-viewer-modal__media {
     max-width: 95%;
   }
+}
+
+/* ============ Project Selection Modal (for file drops) ============ */
+
+.project-select-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-select-modal[hidden] {
+  display: none;
+}
+
+.project-select-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.project-select-modal__content {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2rem;
+  max-width: 450px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.project-select-modal__content h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.project-select-modal__content > p {
+  margin: 0 0 1.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.project-select-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.project-select-modal__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.6);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  font-family: inherit;
+  color: var(--text);
+  width: 100%;
+  text-align: left;
+}
+
+.project-select-modal__item:hover {
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.project-select-modal__item-name {
+  font-weight: 600;
+}
+
+.project-select-modal__item-count {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.project-select-modal__divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.project-select-modal__divider::before,
+.project-select-modal__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.project-select-modal__new {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.project-select-modal__new input {
+  flex: 1;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(2, 6, 23, 0.5);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.project-select-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
 }

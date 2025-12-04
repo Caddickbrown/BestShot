@@ -75,7 +75,7 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
    python app/main.py
    ```
 
-4. Open your browser to `http://localhost:8000`
+4. Open your browser to `http://localhost:18473`
 
 ### Using Docker (Optional)
 
@@ -83,7 +83,7 @@ If you create a Dockerfile, you can run BestShot in a container:
 
 ```bash
 docker build -t bestshot .
-docker run -p 8000:8000 -v /path/to/your/images:/project bestshot
+docker run -p 18473:18473 -v /path/to/your/images:/project bestshot
 ```
 
 Mount your images directory to `/project` inside the container.
@@ -180,7 +180,7 @@ Note: Drag-and-drop ranking is disabled while searching to preserve the original
 
 BestShot stores your current project and media filter in the URL. To continue on another device:
 
-1. Copy the URL from your browser's address bar (e.g., `http://yourserver:8000/?project=my-photos&media=photos`)
+1. Copy the URL from your browser's address bar (e.g., `http://yourserver:18473/?project=my-photos&media=photos`)
 2. Open that URL on your other device
 3. Your project and filter settings will be automatically restored
 
@@ -192,7 +192,7 @@ You can also bookmark specific projects for quick access.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8000` | Server port |
+| `PORT` | `18473` | Server port |
 | `PROJECT_ROOT` | `/project` | Directory where project folders are stored |
 
 ### Example

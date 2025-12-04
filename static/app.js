@@ -473,8 +473,9 @@ function renderImages() {
         // Only handle card reordering, let file drops bubble to gallery
         const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
         if (!isCardDrag) {
-          // File drop - let gallery handler process it, but don't stop propagation
-          // Don't call preventDefault here to allow the event to bubble naturally
+          // File drop - prevent default browser behavior (which tries to navigate to the file)
+          // then let the event bubble to the gallery handler for processing
+          event.preventDefault();
           return;
         }
         

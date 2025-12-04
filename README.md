@@ -11,6 +11,8 @@ A web-based media ranking tool that helps you compare and sort photos and videos
 - **Cross-device sync** — Start ranking on your laptop, continue on your phone by sharing the URL
 - **Project management** — Organize media into separate projects with descriptions
 - **Gallery and Rank views** — Switch between ranking mode and gallery browsing
+- **Tagging system** — Add tags to individual photos and videos in gallery mode
+- **Search** — Search media by filename or tags
 - **URL state persistence** — Bookmark or share a URL to return to the same project, view, and filter
 - **Responsive design** — Optimized for screens from mobile phones to large monitors
 - **Touch-friendly** — Full touch support for ranking on phones and tablets
@@ -117,6 +119,24 @@ The filter is preserved in the URL, so you can bookmark or share specific views.
 - The video plays in a fullscreen modal with standard controls
 - Press **Escape** or click outside to close the player
 
+### Tagging Media
+
+1. Switch to **Gallery** mode (toggle in the header)
+2. Click **"+ tag"** on any photo or video card
+3. Type a tag name and press **Enter**
+4. Click the **×** on a tag to remove it
+
+Tags are normalized to lowercase and stored per-media item.
+
+### Searching
+
+Use the search box in the header to filter media:
+- Search by **filename** (partial match)
+- Search by **tag** (partial match)
+- Press **Escape** or click the **×** to clear the search
+
+Note: Drag-and-drop ranking is disabled while searching to preserve the original order.
+
 ### Switching Devices
 
 BestShot stores your current project and view mode in the URL. To continue on another device:
@@ -153,6 +173,8 @@ PORT=3000 PROJECT_ROOT=/home/user/photos python app/main.py
 | POST | `/api/projects/<name>/upload` | Upload photos and videos |
 | POST | `/api/projects/<name>/rank` | Save media ranking |
 | GET | `/api/projects/<name>/files/<filename>` | Serve a media file |
+| PUT | `/api/projects/<name>/media/<filename>/tags` | Update tags for a media file |
+| GET | `/api/projects/<name>/tags` | Get all unique tags used in a project |
 
 ## Project Structure
 
@@ -173,7 +195,8 @@ bestshot/
 
 - Rankings are stored in `.ranking.json` files within each project folder
 - Project metadata is stored in `.project.json` files
-- Images are served directly from the project folders
+- Media tags are stored in `.media-meta.json` files within each project folder
+- Images and videos are served directly from the project folders
 
 ## License
 

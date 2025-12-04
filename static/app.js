@@ -19,6 +19,8 @@ const projectDescriptionStatus = document.getElementById("project-description-st
 const saveDescriptionBtn = document.getElementById("save-description");
 const viewModeButtons = document.querySelectorAll("[data-view-mode]");
 const mediaFilterButtons = document.querySelectorAll("[data-media-filter]");
+const searchInput = document.getElementById("search-input");
+const clearSearchBtn = document.getElementById("clear-search");
 
 // Video modal elements
 const videoModal = document.getElementById("video-modal");
@@ -34,6 +36,7 @@ const state = {
   description: "",
   viewMode: "rank",
   mediaFilter: "all", // 'all', 'photos', or 'videos'
+  searchQuery: "",
 };
 
 // Touch drag-and-drop state
@@ -193,9 +196,29 @@ async function loadProjectState() {
   renderImages();
 }
 
+function getFilteredImages() {
+  if (!state.searchQuery.trim()) {
+    return state.images;
+  }
+  const query = state.searchQuery.toLowerCase().trim();
+  return state.images.filter((media) => {
+    // Match filename
+    if (media.name.toLowerCase().includes(query)) {
+      return true;
+    }
+    // Match tags
+    if (media.tags && media.tags.some((tag) => tag.toLowerCase().includes(query))) {
+      return true;
+    }
+    return false;
+  });
+}
+
 function renderImages() {
   imagesGrid.innerHTML = "";
   imagesGrid.classList.toggle("gallery", state.viewMode === "gallery");
+
+  const filteredImages = getFilteredImages();
 
   if (!state.images.length) {
     const empty = document.createElement("p");
@@ -216,16 +239,27 @@ function renderImages() {
     return;
   }
 
-  state.images.forEach((media, index) => {
+  if (!filteredImages.length && state.searchQuery) {
+    const empty = document.createElement("p");
+    empty.textContent = `No results for "${state.searchQuery}"`;
+    empty.classList.add("muted");
+    imagesGrid.appendChild(empty);
+    updateActionStates();
+    return;
+  }
+
+  filteredImages.forEach((media, index) => {
     const isVideo = media.type === "video";
     const template = isVideo ? videoTemplate : imageTemplate;
     const card = template.content.firstElementChild.cloneNode(true);
-    card.dataset.index = index;
+    const originalIndex = state.images.indexOf(media);
+    card.dataset.index = originalIndex;
+    card.dataset.name = media.name;
     card.dataset.mediaType = media.type;
     card.classList.toggle("is-gallery", state.viewMode === "gallery");
     
     const rank = card.querySelector(".rank-pill");
-    rank.textContent = `#${index + 1}`;
+    rank.textContent = `#${originalIndex + 1}`;
     card.querySelector(".filename").textContent = media.name;
 
     if (isVideo) {
@@ -247,13 +281,16 @@ function renderImages() {
       img.alt = media.name;
     }
 
-    card.draggable = state.viewMode === "rank";
-    if (state.viewMode === "rank") {
+    // Render tags
+    renderCardTags(card, media);
+
+    card.draggable = state.viewMode === "rank" && !state.searchQuery;
+    if (state.viewMode === "rank" && !state.searchQuery) {
       // Mouse drag-and-drop events
       card.addEventListener("dragstart", (event) => {
         event.dataTransfer.effectAllowed = "move";
         card.classList.add("dragging");
-        card.dataset.dragIndex = index;
+        card.dataset.dragIndex = originalIndex;
       });
 
       card.addEventListener("dragend", () => {
@@ -287,6 +324,125 @@ function renderImages() {
   });
 
   updateActionStates();
+}
+
+function renderCardTags(card, media) {
+  const tagsContainer = card.querySelector(".tags-list");
+  const addTagBtn = card.querySelector(".add-tag-btn");
+  const tagInputWrapper = card.querySelector(".tag-input-wrapper");
+  const tagInput = card.querySelector(".tag-input");
+
+  // Only show tags UI in gallery mode
+  const tagsSection = card.querySelector(".image-card__tags");
+  if (state.viewMode !== "gallery") {
+    tagsSection.hidden = true;
+    return;
+  }
+  tagsSection.hidden = false;
+
+  // Render existing tags
+  tagsContainer.innerHTML = "";
+  if (media.tags && media.tags.length) {
+    media.tags.forEach((tag) => {
+      const tagEl = document.createElement("span");
+      tagEl.className = "tag";
+      tagEl.innerHTML = `${escapeHtml(tag)}<button class="tag-remove" aria-label="Remove tag">&times;</button>`;
+      tagEl.querySelector(".tag-remove").addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeTag(media.name, tag);
+      });
+      tagsContainer.appendChild(tagEl);
+    });
+  }
+
+  // Add tag button
+  addTagBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    tagInputWrapper.hidden = false;
+    addTagBtn.hidden = true;
+    tagInput.focus();
+  });
+
+  // Tag input handling
+  tagInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const newTag = tagInput.value.trim();
+      if (newTag) {
+        addTag(media.name, newTag);
+      }
+      tagInput.value = "";
+      tagInputWrapper.hidden = true;
+      addTagBtn.hidden = false;
+    } else if (e.key === "Escape") {
+      tagInput.value = "";
+      tagInputWrapper.hidden = true;
+      addTagBtn.hidden = false;
+    }
+  });
+
+  tagInput.addEventListener("blur", () => {
+    setTimeout(() => {
+      tagInput.value = "";
+      tagInputWrapper.hidden = true;
+      addTagBtn.hidden = false;
+    }, 150);
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function addTag(filename, tag) {
+  if (!state.currentProject) return;
+  const media = state.images.find((m) => m.name === filename);
+  if (!media) return;
+
+  const currentTags = media.tags || [];
+  const normalizedTag = tag.trim().toLowerCase();
+  if (currentTags.includes(normalizedTag)) return;
+
+  const newTags = [...currentTags, normalizedTag];
+  await updateMediaTags(filename, newTags);
+}
+
+async function removeTag(filename, tag) {
+  if (!state.currentProject) return;
+  const media = state.images.find((m) => m.name === filename);
+  if (!media) return;
+
+  const currentTags = media.tags || [];
+  const newTags = currentTags.filter((t) => t !== tag);
+  await updateMediaTags(filename, newTags);
+}
+
+async function updateMediaTags(filename, tags) {
+  if (!state.currentProject) return;
+
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(state.currentProject)}/media/${encodeURIComponent(filename)}/tags`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags }),
+    }
+  );
+
+  if (!res.ok) {
+    alert("Failed to update tags");
+    return;
+  }
+
+  const data = await res.json();
+  // Update local state
+  const media = state.images.find((m) => m.name === filename);
+  if (media) {
+    media.tags = data.tags;
+  }
+  renderImages();
 }
 
 function reorderImages(from, to) {
@@ -602,6 +758,29 @@ mediaFilterButtons.forEach((button) => {
       setMediaFilter(filter);
     }
   });
+});
+
+// Search functionality
+searchInput.addEventListener("input", () => {
+  state.searchQuery = searchInput.value;
+  clearSearchBtn.hidden = !state.searchQuery;
+  renderImages();
+});
+
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    searchInput.value = "";
+    state.searchQuery = "";
+    clearSearchBtn.hidden = true;
+    renderImages();
+  }
+});
+
+clearSearchBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  state.searchQuery = "";
+  clearSearchBtn.hidden = true;
+  renderImages();
 });
 
 browseFilesBtn.addEventListener("click", () => fileInput.click());

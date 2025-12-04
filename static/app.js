@@ -10,6 +10,7 @@ const dropZoneDefault = dropZone.innerHTML;
 const browseFilesBtn = document.getElementById("browse-files");
 const fileInput = document.getElementById("file-input");
 const saveOrderBtn = document.getElementById("save-order");
+const deleteProjectBtn = document.getElementById("delete-project");
 const imagesGrid = document.getElementById("images-grid");
 const imageTemplate = document.getElementById("image-card-template");
 const videoTemplate = document.getElementById("video-card-template");
@@ -29,6 +30,42 @@ const modalVideoName = document.getElementById("modal-video-name");
 const modalBackdrop = videoModal.querySelector(".video-modal__backdrop");
 const modalCloseBtn = videoModal.querySelector(".video-modal__close");
 
+// Delete modal elements
+const deleteModal = document.getElementById("delete-modal");
+const deleteProjectName = document.getElementById("delete-project-name");
+const confirmDeleteBtn = document.getElementById("confirm-delete");
+const cancelDeleteBtn = document.getElementById("cancel-delete");
+const deleteBackdrop = deleteModal.querySelector(".delete-modal__backdrop");
+
+// Media viewer modal elements
+const mediaViewerModal = document.getElementById("media-viewer-modal");
+const viewerImage = document.getElementById("viewer-image");
+const viewerVideo = document.getElementById("viewer-video");
+const viewerFilename = document.getElementById("viewer-filename");
+const viewerTagsList = document.getElementById("viewer-tags-list");
+const viewerTagInput = document.getElementById("viewer-tag-input");
+const viewerTagInputWrapper = document.getElementById("viewer-tag-input-wrapper");
+const viewerAddTagBtn = document.getElementById("viewer-add-tag-btn");
+const viewerCloseBtn = mediaViewerModal.querySelector(".media-viewer-modal__close");
+const viewerBackdrop = mediaViewerModal.querySelector(".media-viewer-modal__backdrop");
+const viewerPrevBtn = mediaViewerModal.querySelector(".media-viewer-modal__prev");
+const viewerNextBtn = mediaViewerModal.querySelector(".media-viewer-modal__next");
+
+// Comparison mode elements
+const comparisonMode = document.getElementById("comparison-mode");
+const comparisonProgress = document.getElementById("comparison-progress");
+const exitComparisonBtn = document.getElementById("exit-comparison");
+const compareLeft = document.getElementById("compare-left");
+const compareRight = document.getElementById("compare-right");
+const comparisonSkipBtn = document.getElementById("comparison-skip");
+
+// Comparison results elements
+const comparisonResults = document.getElementById("comparison-results");
+const resultsList = document.getElementById("results-list");
+const applyRankingBtn = document.getElementById("apply-ranking");
+const discardRankingBtn = document.getElementById("discard-ranking");
+const resultsBackdrop = comparisonResults.querySelector(".comparison-results__backdrop");
+
 const state = {
   projects: [],
   currentProject: null,
@@ -37,6 +74,8 @@ const state = {
   viewMode: "rank",
   mediaFilter: "all", // 'all', 'photos', or 'videos'
   searchQuery: "",
+  viewerIndex: -1, // Current index in fullscreen viewer
+  comparison: null, // Comparison mode state
 };
 
 // Touch drag-and-drop state
@@ -273,12 +312,26 @@ function renderImages() {
       const playButton = card.querySelector(".play-button");
       playButton.addEventListener("click", (event) => {
         event.stopPropagation();
-        openVideoModal(media);
+        if (state.viewMode === "gallery") {
+          openMediaViewer(index);
+        } else {
+          openVideoModal(media);
+        }
       });
     } else {
       const img = card.querySelector("img");
       img.src = `${media.url}?v=${Date.now()}`;
       img.alt = media.name;
+    }
+
+    // Click handler for gallery mode fullscreen view
+    if (state.viewMode === "gallery") {
+      card.style.cursor = "pointer";
+      card.addEventListener("click", (event) => {
+        // Don't open viewer if clicking on tag controls
+        if (event.target.closest(".image-card__tags")) return;
+        openMediaViewer(index);
+      });
     }
 
     // Render tags
@@ -601,6 +654,7 @@ function updateActionStates() {
   saveOrderBtn.disabled = !hasProject || state.viewMode !== "rank" || state.images.length === 0;
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
+  deleteProjectBtn.disabled = !hasProject;
 }
 
 async function createProject(name, description) {
@@ -725,9 +779,399 @@ function closeVideoModal() {
 // Video modal event listeners
 modalCloseBtn.addEventListener("click", closeVideoModal);
 modalBackdrop.addEventListener("click", closeVideoModal);
+
+// ============ Delete Project Functions ============
+
+function openDeleteModal() {
+  if (!state.currentProject) return;
+  deleteProjectName.textContent = state.currentProject;
+  deleteModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeDeleteModal() {
+  deleteModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+async function deleteProject() {
+  if (!state.currentProject) return;
+  const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    alert("Failed to delete project");
+    return;
+  }
+  closeDeleteModal();
+  state.currentProject = null;
+  await fetchProjects();
+}
+
+deleteProjectBtn.addEventListener("click", openDeleteModal);
+confirmDeleteBtn.addEventListener("click", deleteProject);
+cancelDeleteBtn.addEventListener("click", closeDeleteModal);
+deleteBackdrop.addEventListener("click", closeDeleteModal);
+
+// ============ Media Viewer Functions (Fullscreen Gallery) ============
+
+function openMediaViewer(index) {
+  const filteredImages = getFilteredImages();
+  if (index < 0 || index >= filteredImages.length) return;
+  
+  state.viewerIndex = index;
+  const media = filteredImages[index];
+  
+  viewerFilename.textContent = media.name;
+  
+  if (media.type === "video") {
+    viewerImage.hidden = true;
+    viewerVideo.hidden = false;
+    viewerVideo.src = media.url;
+  } else {
+    viewerVideo.hidden = true;
+    viewerImage.hidden = false;
+    viewerImage.src = media.url;
+    viewerImage.alt = media.name;
+  }
+  
+  renderViewerTags(media);
+  
+  mediaViewerModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeMediaViewer() {
+  viewerVideo.pause();
+  viewerVideo.src = "";
+  viewerImage.src = "";
+  mediaViewerModal.hidden = true;
+  document.body.style.overflow = "";
+  state.viewerIndex = -1;
+}
+
+function navigateViewer(direction) {
+  const filteredImages = getFilteredImages();
+  let newIndex = state.viewerIndex + direction;
+  
+  if (newIndex < 0) newIndex = filteredImages.length - 1;
+  if (newIndex >= filteredImages.length) newIndex = 0;
+  
+  openMediaViewer(newIndex);
+}
+
+function renderViewerTags(media) {
+  viewerTagsList.innerHTML = "";
+  if (media.tags && media.tags.length) {
+    media.tags.forEach((tag) => {
+      const tagEl = document.createElement("span");
+      tagEl.className = "tag";
+      tagEl.innerHTML = `${escapeHtml(tag)}<button class="tag-remove" aria-label="Remove tag">&times;</button>`;
+      tagEl.querySelector(".tag-remove").addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeViewerTag(media.name, tag);
+      });
+      viewerTagsList.appendChild(tagEl);
+    });
+  }
+}
+
+async function addViewerTag(filename, tag) {
+  if (!state.currentProject) return;
+  const media = state.images.find((m) => m.name === filename);
+  if (!media) return;
+  
+  const currentTags = media.tags || [];
+  const normalizedTag = tag.trim().toLowerCase();
+  if (currentTags.includes(normalizedTag)) return;
+  
+  const newTags = [...currentTags, normalizedTag];
+  await updateMediaTags(filename, newTags);
+  
+  // Re-render viewer tags
+  const updatedMedia = state.images.find((m) => m.name === filename);
+  if (updatedMedia) renderViewerTags(updatedMedia);
+}
+
+async function removeViewerTag(filename, tag) {
+  if (!state.currentProject) return;
+  const media = state.images.find((m) => m.name === filename);
+  if (!media) return;
+  
+  const currentTags = media.tags || [];
+  const newTags = currentTags.filter((t) => t !== tag);
+  await updateMediaTags(filename, newTags);
+  
+  // Re-render viewer tags
+  const updatedMedia = state.images.find((m) => m.name === filename);
+  if (updatedMedia) renderViewerTags(updatedMedia);
+}
+
+viewerCloseBtn.addEventListener("click", closeMediaViewer);
+viewerBackdrop.addEventListener("click", closeMediaViewer);
+viewerPrevBtn.addEventListener("click", () => navigateViewer(-1));
+viewerNextBtn.addEventListener("click", () => navigateViewer(1));
+
+viewerAddTagBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  viewerTagInputWrapper.hidden = false;
+  viewerAddTagBtn.hidden = true;
+  viewerTagInput.focus();
+});
+
+viewerTagInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const filteredImages = getFilteredImages();
+    const media = filteredImages[state.viewerIndex];
+    if (media && viewerTagInput.value.trim()) {
+      addViewerTag(media.name, viewerTagInput.value.trim());
+    }
+    viewerTagInput.value = "";
+    viewerTagInputWrapper.hidden = true;
+    viewerAddTagBtn.hidden = false;
+  } else if (e.key === "Escape") {
+    viewerTagInput.value = "";
+    viewerTagInputWrapper.hidden = true;
+    viewerAddTagBtn.hidden = false;
+  }
+});
+
+viewerTagInput.addEventListener("blur", () => {
+  setTimeout(() => {
+    viewerTagInput.value = "";
+    viewerTagInputWrapper.hidden = true;
+    viewerAddTagBtn.hidden = false;
+  }, 150);
+});
+
+// ============ Comparison Mode Functions ============
+
+function generatePairs(items) {
+  // Generate all unique pairs for comparison
+  const pairs = [];
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      pairs.push([items[i], items[j]]);
+    }
+  }
+  // Shuffle pairs for variety
+  for (let i = pairs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  }
+  return pairs;
+}
+
+function startComparisonMode() {
+  if (state.images.length < 2) {
+    alert("Need at least 2 images to start comparison mode");
+    return;
+  }
+  
+  // Initialize comparison state
+  const scores = {};
+  state.images.forEach((img) => {
+    scores[img.name] = 0;
+  });
+  
+  const pairs = generatePairs([...state.images]);
+  
+  state.comparison = {
+    pairs,
+    currentIndex: 0,
+    scores,
+    totalPairs: pairs.length,
+  };
+  
+  comparisonMode.hidden = false;
+  document.body.style.overflow = "hidden";
+  
+  showCurrentPair();
+}
+
+function exitComparisonMode() {
+  state.comparison = null;
+  comparisonMode.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function showCurrentPair() {
+  if (!state.comparison) return;
+  
+  const { pairs, currentIndex, totalPairs } = state.comparison;
+  
+  if (currentIndex >= pairs.length) {
+    showComparisonResults();
+    return;
+  }
+  
+  const [left, right] = pairs[currentIndex];
+  
+  comparisonProgress.textContent = `Comparison ${currentIndex + 1} of ${totalPairs}`;
+  
+  // Set left card
+  const leftImg = compareLeft.querySelector("img");
+  const leftVideo = compareLeft.querySelector("video");
+  const leftName = compareLeft.querySelector(".comparison-card__name");
+  
+  if (left.type === "video") {
+    leftImg.hidden = true;
+    leftVideo.hidden = false;
+    leftVideo.src = left.url;
+    leftVideo.load();
+  } else {
+    leftVideo.hidden = true;
+    leftImg.hidden = false;
+    leftImg.src = left.url;
+    leftImg.alt = left.name;
+  }
+  leftName.textContent = left.name;
+  
+  // Set right card
+  const rightImg = compareRight.querySelector("img");
+  const rightVideo = compareRight.querySelector("video");
+  const rightName = compareRight.querySelector(".comparison-card__name");
+  
+  if (right.type === "video") {
+    rightImg.hidden = true;
+    rightVideo.hidden = false;
+    rightVideo.src = right.url;
+    rightVideo.load();
+  } else {
+    rightVideo.hidden = true;
+    rightImg.hidden = false;
+    rightImg.src = right.url;
+    rightImg.alt = right.name;
+  }
+  rightName.textContent = right.name;
+}
+
+function selectWinner(side) {
+  if (!state.comparison) return;
+  
+  const { pairs, currentIndex, scores } = state.comparison;
+  const [left, right] = pairs[currentIndex];
+  
+  if (side === "left") {
+    scores[left.name]++;
+  } else if (side === "right") {
+    scores[right.name]++;
+  }
+  // If side is "skip", no score is added
+  
+  state.comparison.currentIndex++;
+  showCurrentPair();
+}
+
+function showComparisonResults() {
+  if (!state.comparison) return;
+  
+  const { scores } = state.comparison;
+  
+  // Sort by score descending
+  const ranked = Object.entries(scores)
+    .map(([name, score]) => ({ name, score }))
+    .sort((a, b) => b.score - a.score);
+  
+  resultsList.innerHTML = "";
+  
+  ranked.forEach((item, index) => {
+    const media = state.images.find((m) => m.name === item.name);
+    const div = document.createElement("div");
+    div.className = "comparison-results__item";
+    
+    const thumb = media.type === "video" 
+      ? `<video class="comparison-results__thumb" src="${media.url}" muted></video>`
+      : `<img class="comparison-results__thumb" src="${media.url}" alt="" />`;
+    
+    div.innerHTML = `
+      <span class="comparison-results__rank">#${index + 1}</span>
+      ${thumb}
+      <span class="comparison-results__name">${escapeHtml(item.name)}</span>
+      <span class="comparison-results__score">${item.score} wins</span>
+    `;
+    
+    resultsList.appendChild(div);
+  });
+  
+  // Store ranked order for applying
+  state.comparison.rankedOrder = ranked.map((r) => r.name);
+  
+  comparisonMode.hidden = true;
+  comparisonResults.hidden = false;
+}
+
+async function applyRanking() {
+  if (!state.comparison || !state.comparison.rankedOrder) return;
+  
+  const order = state.comparison.rankedOrder;
+  
+  // Reorder images array
+  const reordered = order.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
+  state.images = reordered;
+  
+  // Save to server
+  await saveOrder();
+  
+  closeComparisonResults();
+  renderImages();
+}
+
+function closeComparisonResults() {
+  comparisonResults.hidden = true;
+  document.body.style.overflow = "";
+  state.comparison = null;
+}
+
+function discardRanking() {
+  closeComparisonResults();
+}
+
+compareLeft.addEventListener("click", () => selectWinner("left"));
+compareRight.addEventListener("click", () => selectWinner("right"));
+comparisonSkipBtn.addEventListener("click", () => selectWinner("skip"));
+exitComparisonBtn.addEventListener("click", exitComparisonMode);
+applyRankingBtn.addEventListener("click", applyRanking);
+discardRankingBtn.addEventListener("click", discardRanking);
+resultsBackdrop.addEventListener("click", discardRanking);
+
+// Global keyboard handler
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !videoModal.hidden) {
-    closeVideoModal();
+  // Escape key handling for all modals
+  if (event.key === "Escape") {
+    if (!videoModal.hidden) {
+      closeVideoModal();
+    } else if (!deleteModal.hidden) {
+      closeDeleteModal();
+    } else if (!mediaViewerModal.hidden) {
+      closeMediaViewer();
+    } else if (!comparisonMode.hidden) {
+      exitComparisonMode();
+    } else if (!comparisonResults.hidden) {
+      discardRanking();
+    }
+  }
+  
+  // Arrow key navigation in media viewer
+  if (!mediaViewerModal.hidden) {
+    if (event.key === "ArrowLeft") {
+      navigateViewer(-1);
+    } else if (event.key === "ArrowRight") {
+      navigateViewer(1);
+    }
+  }
+  
+  // Keyboard shortcuts for comparison mode
+  if (!comparisonMode.hidden) {
+    if (event.key === "ArrowLeft" || event.key === "1") {
+      selectWinner("left");
+    } else if (event.key === "ArrowRight" || event.key === "2") {
+      selectWinner("right");
+    } else if (event.key === " " || event.key === "s") {
+      event.preventDefault();
+      selectWinner("skip");
+    }
   }
 });
 
@@ -746,7 +1190,11 @@ viewModeButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const mode = button.dataset.viewMode;
     if (mode) {
-      setViewMode(mode);
+      if (mode === "compare") {
+        startComparisonMode();
+      } else {
+        setViewMode(mode);
+      }
     }
   });
 });

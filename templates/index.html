@@ -62,6 +62,7 @@
             <div class="view-toggle" role="group" aria-label="View mode">
               <button class="toggle active" data-view-mode="rank">Rank</button>
               <button class="toggle" data-view-mode="gallery">Gallery</button>
+              <button class="toggle" data-view-mode="compare">Compare</button>
             </div>
             <div class="media-filter" role="group" aria-label="Media filter">
               <button class="toggle active" data-media-filter="all">Both</button>
@@ -72,6 +73,7 @@
               <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
               <button id="browse-files" class="ghost" disabled>Browse</button>
               <button id="save-order" class="primary" disabled>Save order</button>
+              <button id="delete-project" class="ghost danger" disabled>Delete</button>
             </div>
           </div>
         </header>
@@ -151,6 +153,83 @@
         <button class="video-modal__close" aria-label="Close video">&times;</button>
         <video id="modal-video" controls autoplay></video>
         <p id="modal-video-name" class="video-modal__name"></p>
+      </div>
+    </div>
+
+    <!-- Fullscreen Media Viewer Modal (for Gallery mode) -->
+    <div id="media-viewer-modal" class="media-viewer-modal" hidden>
+      <div class="media-viewer-modal__backdrop"></div>
+      <div class="media-viewer-modal__content">
+        <button class="media-viewer-modal__close" aria-label="Close viewer">&times;</button>
+        <button class="media-viewer-modal__nav media-viewer-modal__prev" aria-label="Previous">&#8249;</button>
+        <button class="media-viewer-modal__nav media-viewer-modal__next" aria-label="Next">&#8250;</button>
+        <div class="media-viewer-modal__media">
+          <img id="viewer-image" alt="" />
+          <video id="viewer-video" controls></video>
+        </div>
+        <div class="media-viewer-modal__info">
+          <p id="viewer-filename" class="media-viewer-modal__name"></p>
+          <div class="media-viewer-modal__tags">
+            <div id="viewer-tags-list" class="tags-list"></div>
+            <div id="viewer-tag-input-wrapper" class="tag-input-wrapper" hidden>
+              <input type="text" id="viewer-tag-input" class="tag-input" placeholder="Add tag..." />
+            </div>
+            <button id="viewer-add-tag-btn" class="add-tag-btn" aria-label="Add tag">+ tag</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Mode UI -->
+    <div id="comparison-mode" class="comparison-mode" hidden>
+      <div class="comparison-mode__header">
+        <h2>Ranking Mode</h2>
+        <p id="comparison-progress" class="comparison-mode__progress">Comparison 1 of 10</p>
+        <button id="exit-comparison" class="ghost">Exit</button>
+      </div>
+      <p class="comparison-mode__instruction">Click on the image you prefer</p>
+      <div class="comparison-mode__arena">
+        <div class="comparison-card" id="compare-left">
+          <img alt="" />
+          <video muted></video>
+          <p class="comparison-card__name"></p>
+        </div>
+        <div class="comparison-vs">VS</div>
+        <div class="comparison-card" id="compare-right">
+          <img alt="" />
+          <video muted></video>
+          <p class="comparison-card__name"></p>
+        </div>
+      </div>
+      <div class="comparison-mode__actions">
+        <button id="comparison-skip" class="ghost">Skip (tie)</button>
+      </div>
+    </div>
+
+    <!-- Comparison Results Modal -->
+    <div id="comparison-results" class="comparison-results" hidden>
+      <div class="comparison-results__backdrop"></div>
+      <div class="comparison-results__content">
+        <h2>Ranking Complete!</h2>
+        <p class="comparison-results__subtitle">Your images ranked by preference</p>
+        <div id="results-list" class="comparison-results__list"></div>
+        <div class="comparison-results__actions">
+          <button id="apply-ranking" class="primary">Apply Ranking</button>
+          <button id="discard-ranking" class="ghost">Discard</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="delete-modal" hidden>
+      <div class="delete-modal__backdrop"></div>
+      <div class="delete-modal__content">
+        <h3>Delete Project?</h3>
+        <p>Are you sure you want to delete <strong id="delete-project-name"></strong>? This will remove all media files and cannot be undone.</p>
+        <div class="delete-modal__actions">
+          <button id="confirm-delete" class="primary danger">Delete</button>
+          <button id="cancel-delete" class="ghost">Cancel</button>
+        </div>
       </div>
     </div>
 

@@ -1720,12 +1720,15 @@ galleryDropZone.addEventListener("drop", (event) => {
   if (isCardDrag) return;
   
   // Only handle file drops
+  // IMPORTANT: Convert FileList to array immediately to prevent ERR_ACCESS_DENIED
+  // The FileList from dataTransfer can become invalid after the event handler completes
   if (event.dataTransfer.files.length > 0) {
+    const files = Array.from(event.dataTransfer.files);
     if (state.isAllProjects) {
       // Show project selection modal
-      openProjectSelectModal(event.dataTransfer.files);
+      openProjectSelectModal(files);
     } else if (state.currentProject) {
-      uploadFiles(event.dataTransfer.files);
+      uploadFiles(files);
     }
   }
 });

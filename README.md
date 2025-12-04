@@ -1,14 +1,17 @@
 # BestShot
 
-A web-based image ranking tool that helps you compare and sort photos by preference. Built with Flask and vanilla JavaScript, BestShot runs in any modern web browser and works seamlessly across devices.
+A web-based media ranking tool that helps you compare and sort photos and videos by preference. Built with Flask and vanilla JavaScript, BestShot runs in any modern web browser and works seamlessly across devices.
 
 ## Features
 
-- **Drag-and-drop ranking** — Reorder images by dragging them (works on both desktop and mobile/tablet)
+- **Photo and video support** — Rank both photos and videos in the same project
+- **Media type filtering** — View all media, photos only, or videos only
+- **Video playback** — Click to play videos in a fullscreen modal player
+- **Drag-and-drop ranking** — Reorder media by dragging them (works on both desktop and mobile/tablet)
 - **Cross-device sync** — Start ranking on your laptop, continue on your phone by sharing the URL
-- **Project management** — Organize images into separate projects with descriptions
+- **Project management** — Organize media into separate projects with descriptions
 - **Gallery and Rank views** — Switch between ranking mode and gallery browsing
-- **URL state persistence** — Bookmark or share a URL to return to the same project and view
+- **URL state persistence** — Bookmark or share a URL to return to the same project, view, and filter
 - **Responsive design** — Optimized for screens from mobile phones to large monitors
 - **Touch-friendly** — Full touch support for ranking on phones and tablets
 
@@ -21,8 +24,9 @@ BestShot works on all modern browsers:
 
 The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any framework dependencies.
 
-## Supported Image Formats
+## Supported Media Formats
 
+### Images
 - JPEG / JPG
 - PNG
 - GIF
@@ -30,6 +34,17 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 - TIFF
 - WebP
 - HEIC
+
+### Videos
+- MP4
+- MOV (QuickTime)
+- AVI
+- MKV
+- WebM
+- M4V
+- WMV
+- FLV
+- 3GP
 
 ## Quick Start
 
@@ -80,12 +95,27 @@ docker run -p 8000:8000 -v /path/to/your/images:/project bestshot
 - **Drag & drop** files into the drop zone
 - **Click "Browse"** to select files from your device
 
-### Ranking Images
+### Ranking Media
 
 1. Make sure you're in **Rank** mode (toggle in the header)
 2. **On desktop**: Drag cards to reorder them
 3. **On mobile/tablet**: Touch and drag cards to reorder
 4. Click **"Save order"** to persist your ranking
+
+### Filtering Media
+
+Use the media filter buttons to control what you see:
+- **Both** — Show all photos and videos
+- **Photos** — Show only photos
+- **Videos** — Show only videos
+
+The filter is preserved in the URL, so you can bookmark or share specific views.
+
+### Playing Videos
+
+- Click the play button on any video card to open the video player
+- The video plays in a fullscreen modal with standard controls
+- Press **Escape** or click outside to close the player
 
 ### Switching Devices
 
@@ -116,13 +146,13 @@ PORT=3000 PROJECT_ROOT=/home/user/photos python app/main.py
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/projects` | List all projects |
+| GET | `/api/projects` | List all projects (includes photo and video counts) |
 | POST | `/api/projects` | Create a new project |
-| GET | `/api/projects/<name>/images` | Get images for a project |
+| GET | `/api/projects/<name>/images?media=<filter>` | Get media for a project. Filter: `all`, `photos`, or `videos` |
 | PUT | `/api/projects/<name>` | Update project description |
-| POST | `/api/projects/<name>/upload` | Upload images |
-| POST | `/api/projects/<name>/rank` | Save image ranking |
-| GET | `/api/projects/<name>/files/<filename>` | Serve an image file |
+| POST | `/api/projects/<name>/upload` | Upload photos and videos |
+| POST | `/api/projects/<name>/rank` | Save media ranking |
+| GET | `/api/projects/<name>/files/<filename>` | Serve a media file |
 
 ## Project Structure
 

@@ -963,13 +963,16 @@ function getUnrankedItems() {
 function openComparisonSelection() {
   const allCount = state.images.length;
   const unrankedCount = getUnrankedItems().length;
+  const rankedCount = allCount - unrankedCount;
   
   compareAllCount.textContent = `${allCount} item${allCount === 1 ? "" : "s"}`;
   compareUnrankedCount.textContent = `${unrankedCount} new item${unrankedCount === 1 ? "" : "s"}`;
   
-  // Disable unranked button if no unranked items
-  compareUnrankedBtn.disabled = unrankedCount < 2;
-  if (unrankedCount < 2) {
+  // Disable unranked button if no unranked items, or if there's nothing to compare against
+  // (need at least 1 unranked item and at least 2 total items)
+  const canCompareUnranked = unrankedCount >= 1 && allCount >= 2;
+  compareUnrankedBtn.disabled = !canCompareUnranked;
+  if (!canCompareUnranked) {
     compareUnrankedBtn.classList.add("disabled-option");
   } else {
     compareUnrankedBtn.classList.remove("disabled-option");
@@ -987,7 +990,16 @@ function closeComparisonSelection() {
 function startComparisonMode(scope = "all") {
   state.comparisonScope = scope;
   
-  const itemsToCompare = scope === "unranked" ? getUnrankedItems() : [...state.images];
+  // For "unranked" scope, we include ALL items but pre-populate existing rankings
+  // This way new items get compared against existing ranked items
+  const itemsToCompare = [...state.images];
+  const unrankedItems = getUnrankedItems();
+  const unrankedNames = new Set(unrankedItems.map((img) => img.name));
+  
+  if (scope === "unranked" && unrankedItems.length < 1) {
+    alert("Need at least 1 unranked item to compare");
+    return;
+  }
   
   if (itemsToCompare.length < 2) {
     alert("Need at least 2 items to start comparison mode");
@@ -1007,7 +1019,32 @@ function startComparisonMode(scope = "all") {
     losesTo[img.name] = new Set();
   });
   
-  const allPairs = generatePairs(itemsToCompare);
+  // For "unranked" scope, pre-populate relationships from existing rankings
+  // This way we don't ask users to compare already-ranked items against each other
+  if (scope === "unranked") {
+    const rankedItems = state.images.filter((img) => img.isRanked);
+    // Sort by rank to establish existing order
+    rankedItems.sort((a, b) => a.rank - b.rank);
+    
+    // Pre-populate: higher-ranked items beat lower-ranked items
+    for (let i = 0; i < rankedItems.length; i++) {
+      for (let j = i + 1; j < rankedItems.length; j++) {
+        const winner = rankedItems[i].name;
+        const loser = rankedItems[j].name;
+        beatsMap[winner].add(loser);
+        losesTo[loser].add(winner);
+        scores[winner]++;
+      }
+    }
+  }
+  
+  // Generate pairs - for "unranked" scope, only pairs involving at least one unranked item
+  let allPairs;
+  if (scope === "unranked") {
+    allPairs = generatePairsWithUnranked(itemsToCompare, unrankedNames);
+  } else {
+    allPairs = generatePairs(itemsToCompare);
+  }
   
   state.comparison = {
     allPairs,
@@ -1018,12 +1055,32 @@ function startComparisonMode(scope = "all") {
     comparisonsAsked: 0,
     comparisonsSkipped: 0,
     itemsToCompare,
+    unrankedNames, // Track which items are unranked for scoring
   };
   
   comparisonMode.hidden = false;
   document.body.style.overflow = "hidden";
   
   showCurrentPair();
+}
+
+function generatePairsWithUnranked(items, unrankedNames) {
+  // Generate pairs where at least one item is unranked
+  const pairs = [];
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      // Include pair if at least one is unranked
+      if (unrankedNames.has(items[i].name) || unrankedNames.has(items[j].name)) {
+        pairs.push([items[i], items[j]]);
+      }
+    }
+  }
+  // Shuffle pairs for variety
+  for (let i = pairs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  }
+  return pairs;
 }
 
 // Check if the relationship between two items is already known (through transitivity)
@@ -1243,28 +1300,14 @@ async function applyRanking() {
   
   const rankedOrder = state.comparison.rankedOrder;
   
-  if (state.comparisonScope === "unranked") {
-    // For unranked-only comparison, append newly ranked items after existing ranked items
-    const existingRanked = state.images.filter((m) => m.isRanked);
-    const newlyRanked = rankedOrder.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
-    
-    // Mark the newly ranked items as ranked
-    newlyRanked.forEach((m) => {
-      m.isRanked = true;
-      m.rank = existingRanked.length + newlyRanked.indexOf(m) + 1;
-    });
-    
-    state.images = [...existingRanked, ...newlyRanked];
-  } else {
-    // For all-items comparison, use the new order entirely
-    const reordered = rankedOrder.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
-    // Mark all as ranked
-    reordered.forEach((m, idx) => {
-      m.isRanked = true;
-      m.rank = idx + 1;
-    });
-    state.images = reordered;
-  }
+  // Both scopes now produce a complete ranking of all items
+  const reordered = rankedOrder.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
+  // Mark all as ranked
+  reordered.forEach((m, idx) => {
+    m.isRanked = true;
+    m.rank = idx + 1;
+  });
+  state.images = reordered;
   
   // Save to server
   await saveOrder();

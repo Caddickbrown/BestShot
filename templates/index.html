@@ -25,6 +25,10 @@
               ↺ refresh
             </button>
           </div>
+          <div id="all-projects-option" class="all-projects-option">
+            <h3>All Projects</h3>
+            <small>View all media</small>
+          </div>
           <ul id="projects-list" class="projects"></ul>
         </div>
         <form id="new-project-form" class="panel-form">
@@ -68,7 +72,6 @@
             <div class="upload-actions">
               <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
               <button id="browse-files" class="ghost" disabled>Browse</button>
-              <button id="save-order" class="primary" disabled>Save order</button>
               <button id="delete-project" class="ghost danger" disabled>Delete</button>
             </div>
           </div>
@@ -106,6 +109,7 @@
           <span class="rank-pill"></span>
           <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
           <p class="filename"></p>
+          <button class="delete-media-btn" aria-label="Delete photo" title="Delete photo">&times;</button>
         </div>
         <img alt="" loading="lazy" />
         <div class="image-card__tags">
@@ -124,6 +128,7 @@
           <span class="rank-pill"></span>
           <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
           <p class="filename"></p>
+          <button class="delete-media-btn" aria-label="Delete video" title="Delete video">&times;</button>
         </div>
         <div class="video-thumbnail">
           <video muted preload="metadata"></video>

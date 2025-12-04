@@ -9,8 +9,8 @@ const galleryDropZone = document.getElementById("gallery-drop-zone");
 const dropOverlay = document.getElementById("drop-overlay");
 const browseFilesBtn = document.getElementById("browse-files");
 const fileInput = document.getElementById("file-input");
-const saveOrderBtn = document.getElementById("save-order");
 const deleteProjectBtn = document.getElementById("delete-project");
+const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
 const imageTemplate = document.getElementById("image-card-template");
 const videoTemplate = document.getElementById("video-card-template");
@@ -78,6 +78,7 @@ const resultsBackdrop = comparisonResults.querySelector(".comparison-results__ba
 const state = {
   projects: [],
   currentProject: null,
+  isAllProjects: false, // Whether viewing all projects combined
   images: [],
   description: "",
   mediaFilter: "all", // 'all', 'photos', or 'videos'
@@ -103,7 +104,9 @@ function getStateFromURL() {
 
 function updateURL() {
   const params = new URLSearchParams();
-  if (state.currentProject) {
+  if (state.isAllProjects) {
+    params.set("project", "all");
+  } else if (state.currentProject) {
     params.set("project", state.currentProject);
   }
   if (state.mediaFilter && state.mediaFilter !== "all") {
@@ -123,6 +126,7 @@ function restoreStateFromURL() {
       button.classList.toggle("active", button.dataset.mediaFilter === state.mediaFilter);
     });
   }
+  // Return special "all" value or project name
   return urlState.project;
 }
 
@@ -138,9 +142,18 @@ async function fetchProjects(initialProjectFromURL = null) {
 
   if (!state.projects.length) {
     state.currentProject = null;
+    state.isAllProjects = false;
     state.images = [];
     disableWorkspace();
     updateURL();
+    return;
+  }
+
+  // Handle "all" projects from URL
+  if (initialProjectFromURL === "all") {
+    if (!state.isAllProjects) {
+      await selectAllProjects();
+    }
     return;
   }
 
@@ -150,6 +163,9 @@ async function fetchProjects(initialProjectFromURL = null) {
     targetProject = initialProjectFromURL;
   } else if (state.currentProject && state.projects.some((p) => p.name === state.currentProject)) {
     targetProject = state.currentProject;
+  } else if (state.isAllProjects) {
+    // Stay in All Projects view
+    return;
   } else {
     targetProject = state.projects[0].name;
   }
@@ -161,6 +177,10 @@ async function fetchProjects(initialProjectFromURL = null) {
 
 function renderProjects() {
   projectsList.innerHTML = "";
+  
+  // Update All Projects option state
+  allProjectsOption.classList.toggle("active", state.isAllProjects);
+  
   if (!state.projects.length) {
     const empty = document.createElement("li");
     empty.textContent = "No projects yet";
@@ -188,7 +208,7 @@ function renderProjects() {
 
     li.append(title, details, desc);
 
-    if (state.currentProject === project.name) {
+    if (!state.isAllProjects && state.currentProject === project.name) {
       li.classList.add("active");
     }
 
@@ -199,12 +219,51 @@ function renderProjects() {
 
 async function selectProject(name) {
   state.currentProject = name;
+  state.isAllProjects = false;
   renderProjects();
   updateURL();
   await loadProjectState();
 }
 
+async function selectAllProjects() {
+  state.currentProject = null;
+  state.isAllProjects = true;
+  renderProjects();
+  updateURL();
+  await loadAllProjectsState();
+}
+
+async function loadAllProjectsState() {
+  const url = `/api/all-media?media=${state.mediaFilter}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    alert("Unable to load media");
+    return;
+  }
+  const data = await res.json();
+  state.images = data.images;
+  state.description = "";
+  workspaceTitle.textContent = "All Projects";
+  
+  // Update meta text based on media types
+  const imageCount = state.images.filter((m) => m.type === "image").length;
+  const videoCount = state.images.filter((m) => m.type === "video").length;
+  const parts = [];
+  if (imageCount > 0) parts.push(`${imageCount} photo${imageCount === 1 ? "" : "s"}`);
+  if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
+  workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
+  
+  projectDescriptionField.value = "";
+  projectDescriptionStatus.textContent = "All projects view";
+  enableWorkspace();
+  renderImages();
+}
+
 async function loadProjectState() {
+  if (state.isAllProjects) {
+    await loadAllProjectsState();
+    return;
+  }
   if (!state.currentProject) {
     disableWorkspace();
     return;
@@ -334,22 +393,36 @@ function renderImages() {
     // Click handler for fullscreen view
     card.style.cursor = "pointer";
     card.addEventListener("click", (event) => {
-      // Don't open viewer if clicking on tag controls or drag handle
+      // Don't open viewer if clicking on tag controls, drag handle, or delete button
       if (event.target.closest(".image-card__tags")) return;
       if (event.target.closest(".drag-handle")) return;
+      if (event.target.closest(".delete-media-btn")) return;
       openMediaViewer(index);
+    });
+
+    // Delete button handler
+    const deleteBtn = card.querySelector(".delete-media-btn");
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      // Get project name - in All Projects view, it's stored on the media item
+      const projectName = media.project || state.currentProject;
+      if (projectName) {
+        deleteMediaFile(projectName, media.name);
+      }
     });
 
     // Render tags
     renderCardTags(card, media);
 
-    // Always enable drag-drop unless searching
-    card.draggable = !state.searchQuery;
-    if (!state.searchQuery) {
+    // Always enable drag-drop unless searching or in All Projects view
+    const canDrag = !state.searchQuery && !state.isAllProjects;
+    card.draggable = canDrag;
+    if (canDrag) {
       // Mouse drag-and-drop events
       card.addEventListener("dragstart", (event) => {
         event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", ""); // Required for Firefox
+        // Use a custom type to identify card drags vs file drags
+        event.dataTransfer.setData("application/x-gallery-card", originalIndex.toString());
         card.classList.add("dragging");
         card.dataset.dragIndex = originalIndex;
       });
@@ -479,6 +552,33 @@ async function removeTag(filename, tag) {
   await updateMediaTags(filename, newTags);
 }
 
+async function deleteMediaFile(projectName, filename) {
+  if (!projectName) return;
+  
+  if (!confirm(`Delete "${filename}"? This cannot be undone.`)) {
+    return;
+  }
+  
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectName)}/files/${encodeURIComponent(filename)}`,
+    { method: "DELETE" }
+  );
+  
+  if (!res.ok) {
+    alert("Failed to delete file");
+    return;
+  }
+  
+  // Reload the current view
+  if (state.isAllProjects) {
+    await loadAllProjectsState();
+    await fetchProjects();
+  } else {
+    await loadProjectState();
+    await fetchProjects();
+  }
+}
+
 async function updateMediaTags(filename, tags) {
   if (!state.currentProject) return;
 
@@ -505,13 +605,19 @@ async function updateMediaTags(filename, tags) {
   renderImages();
 }
 
-function reorderImages(from, to) {
+async function reorderImages(from, to) {
   if (Number.isNaN(from) || Number.isNaN(to) || from === to) {
+    return;
+  }
+  // Don't allow reordering in All Projects view
+  if (state.isAllProjects) {
     return;
   }
   const [moved] = state.images.splice(from, 1);
   state.images.splice(to, 0, moved);
   renderImages();
+  // Auto-save the new order
+  await saveOrder();
 }
 
 // ============ Touch Drag-and-Drop Support ============
@@ -652,12 +758,12 @@ function enableWorkspace() {
 
 function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
-  browseFilesBtn.disabled = !hasProject;
-  saveOrderBtn.disabled = !hasProject || state.images.length === 0;
+  const hasSelection = hasProject || state.isAllProjects;
+  browseFilesBtn.disabled = !hasProject; // Can't upload in All Projects view
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
-  startCompareBtn.disabled = !hasProject || state.images.length < 2;
+  startCompareBtn.disabled = !hasSelection || state.images.length < 2;
 }
 
 async function createProject(name, description) {
@@ -699,7 +805,7 @@ async function uploadFiles(files) {
 }
 
 async function saveOrder() {
-  if (!state.currentProject) return;
+  if (!state.currentProject || state.isAllProjects) return;
   const order = state.images.map((img) => img.name);
   const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/rank`, {
     method: "POST",
@@ -708,14 +814,9 @@ async function saveOrder() {
   });
 
   if (!res.ok) {
-    alert("Failed to save ranking");
+    console.error("Failed to save ranking");
     return;
   }
-
-  saveOrderBtn.textContent = "Saved";
-  setTimeout(() => {
-    saveOrderBtn.textContent = "Save order";
-  }, 1600);
 }
 
 async function saveDescription(event) {
@@ -904,6 +1005,15 @@ viewerCloseBtn.addEventListener("click", closeMediaViewer);
 viewerBackdrop.addEventListener("click", closeMediaViewer);
 viewerPrevBtn.addEventListener("click", () => navigateViewer(-1));
 viewerNextBtn.addEventListener("click", () => navigateViewer(1));
+
+// Close viewer when clicking on the content area outside of media/info
+const viewerContent = mediaViewerModal.querySelector(".media-viewer-modal__content");
+viewerContent.addEventListener("click", (event) => {
+  // Close if clicking directly on the content area, not on children
+  if (event.target === viewerContent) {
+    closeMediaViewer();
+  }
+});
 
 viewerAddTagBtn.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -1434,17 +1544,16 @@ fileInput.addEventListener("change", () => {
   }
 });
 
-saveOrderBtn.addEventListener("click", () => {
-  if (!state.currentProject) return;
-  saveOrder();
-});
+// All Projects option handler
+allProjectsOption.addEventListener("click", selectAllProjects);
 
 // Gallery drop zone for file uploads
 galleryDropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
   if (galleryDropZone.classList.contains("disabled")) return;
   // Only show overlay for file drops, not internal card reordering
-  if (event.dataTransfer.types.includes("Files")) {
+  const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
+  if (!isCardDrag && event.dataTransfer.types.includes("Files")) {
     dropOverlay.hidden = false;
   }
 });
@@ -1461,7 +1570,11 @@ galleryDropZone.addEventListener("drop", (event) => {
   dropOverlay.hidden = true;
   if (!state.currentProject) return;
   
-  // Only handle file drops, let card drops be handled by card event listeners
+  // Ignore card drops - they are handled by card event listeners
+  const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
+  if (isCardDrag) return;
+  
+  // Only handle file drops
   if (event.dataTransfer.files.length > 0) {
     uploadFiles(event.dataTransfer.files);
   }
@@ -1476,7 +1589,9 @@ fetchProjects(initialProject);
 // Handle browser back/forward navigation
 window.addEventListener("popstate", () => {
   const urlState = getStateFromURL();
-  if (urlState.project && urlState.project !== state.currentProject) {
+  if (urlState.project === "all" && !state.isAllProjects) {
+    selectAllProjects();
+  } else if (urlState.project && urlState.project !== "all" && urlState.project !== state.currentProject) {
     selectProject(urlState.project);
   }
   if (urlState.media && urlState.media !== state.mediaFilter) {

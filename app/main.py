@@ -181,6 +181,7 @@ def create_app() -> Flask:
         files = _list_media_files(folder, media_type)
         current_files = {file.name: file for file in files}
         rankings = [name for name in _load_rankings(folder) if name in current_files]
+        ranked_set = set(rankings)
         remaining = [name for name in current_files if name not in rankings]
         ordered = rankings + sorted(remaining)
         media_meta = _load_media_meta(folder)
@@ -190,10 +191,12 @@ def create_app() -> Flask:
             suffix = file_path.suffix.lower()
             is_video = suffix in VIDEO_EXTENSIONS
             file_meta = media_meta.get(name, {})
+            is_ranked = name in ranked_set
             serialized.append(
                 {
                     "name": name,
-                    "rank": idx,
+                    "rank": idx if is_ranked else None,
+                    "isRanked": is_ranked,
                     "url": f"/api/projects/{folder.name}/files/{name}",
                     "type": "video" if is_video else "image",
                     "tags": file_meta.get("tags", []),

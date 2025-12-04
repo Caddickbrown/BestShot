@@ -59,11 +59,7 @@
               <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
               <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
             </div>
-            <div class="view-toggle" role="group" aria-label="View mode">
-              <button class="toggle active" data-view-mode="rank">Rank</button>
-              <button class="toggle" data-view-mode="gallery">Gallery</button>
-              <button class="toggle" data-view-mode="compare">Compare</button>
-            </div>
+            <button id="start-compare" class="ghost">Compare</button>
             <div class="media-filter" role="group" aria-label="Media filter">
               <button class="toggle active" data-media-filter="all">Both</button>
               <button class="toggle" data-media-filter="photos">Photos</button>
@@ -94,12 +90,11 @@
           </form>
         </section>
 
-        <section id="drop-zone" class="drop-zone disabled" aria-live="polite">
-          <p>Drag files here or use the browser button. Media lands inside the mounted project folder.</p>
-          <small>Photos: JPEG · PNG · TIFF · WebP · HEIC &nbsp;|&nbsp; Videos: MP4 · MOV · AVI · MKV · WebM</small>
-        </section>
-
-        <section class="canvas">
+        <section class="canvas" id="gallery-drop-zone">
+          <div id="drop-overlay" class="drop-overlay" hidden>
+            <p>Drop files to add to gallery</p>
+            <small>New items will be marked as "Unranked"</small>
+          </div>
           <div id="images-grid" class="images-grid"></div>
         </section>
       </section>
@@ -109,6 +104,7 @@
       <div class="image-card" draggable="true">
         <div class="image-card__head">
           <span class="rank-pill"></span>
+          <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
           <p class="filename"></p>
         </div>
         <img alt="" loading="lazy" />
@@ -126,6 +122,7 @@
       <div class="image-card video-card" draggable="true">
         <div class="image-card__head">
           <span class="rank-pill"></span>
+          <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
           <p class="filename"></p>
         </div>
         <div class="video-thumbnail">
@@ -176,6 +173,30 @@
             </div>
             <button id="viewer-add-tag-btn" class="add-tag-btn" aria-label="Add tag">+ tag</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Mode Selection Modal -->
+    <div id="comparison-selection" class="comparison-selection" hidden>
+      <div class="comparison-selection__backdrop"></div>
+      <div class="comparison-selection__content">
+        <h3>Start Comparison</h3>
+        <p>Choose which items to compare and rank</p>
+        <div class="comparison-selection__options">
+          <button id="compare-all" class="comparison-option">
+            <span class="comparison-option__title">All Items</span>
+            <span id="compare-all-count" class="comparison-option__count">0 items</span>
+            <span class="comparison-option__desc">Compare and rank all media in the gallery</span>
+          </button>
+          <button id="compare-unranked" class="comparison-option">
+            <span class="comparison-option__title">Unranked Only</span>
+            <span id="compare-unranked-count" class="comparison-option__count">0 new items</span>
+            <span class="comparison-option__desc">Only compare newly added items against each other</span>
+          </button>
+        </div>
+        <div class="comparison-selection__actions">
+          <button id="cancel-comparison-selection" class="ghost">Cancel</button>
         </div>
       </div>
     </div>

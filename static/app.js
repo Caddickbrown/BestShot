@@ -969,19 +969,27 @@ function startComparisonMode() {
     return;
   }
   
-  // Initialize comparison state
+  // Initialize comparison state with transitive inference tracking
   const scores = {};
+  const beatsMap = {}; // beatsMap[A] = Set of items that A beats (directly or transitively)
+  const losesTo = {}; // losesTo[A] = Set of items that beat A (directly or transitively)
+  
   state.images.forEach((img) => {
     scores[img.name] = 0;
+    beatsMap[img.name] = new Set();
+    losesTo[img.name] = new Set();
   });
   
-  const pairs = generatePairs([...state.images]);
+  const allPairs = generatePairs([...state.images]);
   
   state.comparison = {
-    pairs,
-    currentIndex: 0,
+    allPairs,
+    currentPairIndex: 0,
     scores,
-    totalPairs: pairs.length,
+    beatsMap,
+    losesTo,
+    comparisonsAsked: 0,
+    comparisonsSkipped: 0,
   };
   
   comparisonMode.hidden = false;
@@ -990,25 +998,104 @@ function startComparisonMode() {
   showCurrentPair();
 }
 
+// Check if the relationship between two items is already known (through transitivity)
+function isRelationshipKnown(itemA, itemB) {
+  if (!state.comparison) return false;
+  const { beatsMap } = state.comparison;
+  // Known if A beats B or B beats A
+  return beatsMap[itemA.name].has(itemB.name) || beatsMap[itemB.name].has(itemA.name);
+}
+
+// Record that winner beats loser, and propagate transitively
+function recordWin(winnerName, loserName) {
+  if (!state.comparison) return;
+  const { beatsMap, losesTo, scores } = state.comparison;
+  
+  // If already known, skip
+  if (beatsMap[winnerName].has(loserName)) return;
+  
+  // Direct win
+  beatsMap[winnerName].add(loserName);
+  losesTo[loserName].add(winnerName);
+  scores[winnerName]++;
+  
+  // Transitive propagation:
+  // 1. Winner also beats everything that loser beats
+  for (const item of beatsMap[loserName]) {
+    if (!beatsMap[winnerName].has(item)) {
+      beatsMap[winnerName].add(item);
+      losesTo[item].add(winnerName);
+      scores[winnerName]++;
+      state.comparison.comparisonsSkipped++;
+    }
+  }
+  
+  // 2. Everything that beats winner also beats loser
+  for (const item of losesTo[winnerName]) {
+    if (!beatsMap[item].has(loserName)) {
+      beatsMap[item].add(loserName);
+      losesTo[loserName].add(item);
+      scores[item]++;
+      state.comparison.comparisonsSkipped++;
+    }
+    // And also beats everything loser beats
+    for (const subItem of beatsMap[loserName]) {
+      if (!beatsMap[item].has(subItem)) {
+        beatsMap[item].add(subItem);
+        losesTo[subItem].add(item);
+        scores[item]++;
+        state.comparison.comparisonsSkipped++;
+      }
+    }
+  }
+}
+
 function exitComparisonMode() {
   state.comparison = null;
   comparisonMode.hidden = true;
   document.body.style.overflow = "";
 }
 
+function findNextUnknownPair() {
+  if (!state.comparison) return null;
+  const { allPairs, currentPairIndex } = state.comparison;
+  
+  for (let i = currentPairIndex; i < allPairs.length; i++) {
+    const [left, right] = allPairs[i];
+    if (!isRelationshipKnown(left, right)) {
+      state.comparison.currentPairIndex = i;
+      return [left, right];
+    }
+  }
+  return null; // All pairs are known
+}
+
 function showCurrentPair() {
   if (!state.comparison) return;
   
-  const { pairs, currentIndex, totalPairs } = state.comparison;
+  const nextPair = findNextUnknownPair();
   
-  if (currentIndex >= pairs.length) {
+  if (!nextPair) {
     showComparisonResults();
     return;
   }
   
-  const [left, right] = pairs[currentIndex];
+  const [left, right] = nextPair;
+  const { comparisonsAsked, comparisonsSkipped, allPairs } = state.comparison;
   
-  comparisonProgress.textContent = `Comparison ${currentIndex + 1} of ${totalPairs}`;
+  // Calculate remaining unknown pairs
+  let remainingUnknown = 0;
+  for (let i = state.comparison.currentPairIndex; i < allPairs.length; i++) {
+    const [l, r] = allPairs[i];
+    if (!isRelationshipKnown(l, r)) {
+      remainingUnknown++;
+    }
+  }
+  
+  const statusText = comparisonsSkipped > 0
+    ? `Comparison ${comparisonsAsked + 1} (${comparisonsSkipped} inferred)`
+    : `Comparison ${comparisonsAsked + 1}`;
+  comparisonProgress.textContent = statusText;
   
   // Set left card
   const leftImg = compareLeft.querySelector("img");
@@ -1050,24 +1137,30 @@ function showCurrentPair() {
 function selectWinner(side) {
   if (!state.comparison) return;
   
-  const { pairs, currentIndex, scores } = state.comparison;
-  const [left, right] = pairs[currentIndex];
+  const nextPair = findNextUnknownPair();
+  if (!nextPair) {
+    showComparisonResults();
+    return;
+  }
+  
+  const [left, right] = nextPair;
   
   if (side === "left") {
-    scores[left.name]++;
+    recordWin(left.name, right.name);
   } else if (side === "right") {
-    scores[right.name]++;
+    recordWin(right.name, left.name);
   }
-  // If side is "skip", no score is added
+  // If side is "skip", no relationship is recorded
   
-  state.comparison.currentIndex++;
+  state.comparison.comparisonsAsked++;
+  state.comparison.currentPairIndex++;
   showCurrentPair();
 }
 
 function showComparisonResults() {
   if (!state.comparison) return;
   
-  const { scores } = state.comparison;
+  const { scores, comparisonsAsked, comparisonsSkipped, allPairs } = state.comparison;
   
   // Sort by score descending
   const ranked = Object.entries(scores)
@@ -1075,6 +1168,21 @@ function showComparisonResults() {
     .sort((a, b) => b.score - a.score);
   
   resultsList.innerHTML = "";
+  
+  // Show summary of comparisons
+  const summaryDiv = document.createElement("div");
+  summaryDiv.className = "comparison-results__summary";
+  const totalPossible = allPairs.length;
+  const efficiency = totalPossible > 0 
+    ? Math.round((1 - comparisonsAsked / totalPossible) * 100) 
+    : 0;
+  summaryDiv.innerHTML = `
+    <p style="text-align: center; margin-bottom: 1rem; color: var(--text-secondary);">
+      ${comparisonsAsked} comparisons made, ${comparisonsSkipped} inferred automatically
+      ${efficiency > 0 ? `<br><small>(${efficiency}% fewer comparisons needed)</small>` : ""}
+    </p>
+  `;
+  resultsList.appendChild(summaryDiv);
   
   ranked.forEach((item, index) => {
     const media = state.images.find((m) => m.name === item.name);

@@ -6,14 +6,16 @@ A web-based media ranking tool that helps you compare and sort photos and videos
 
 - **Photo and video support** — Rank both photos and videos in the same project
 - **Media type filtering** — View all media, photos only, or videos only
-- **Video playback** — Click to play videos in a fullscreen modal player
-- **Drag-and-drop ranking** — Reorder media by dragging them (works on both desktop and mobile/tablet)
+- **Fullscreen media viewer** — Click any photo or video to view it fullscreen with arrow key navigation
+- **Drag-and-drop ranking** — Reorder media by dragging them (auto-saves on drop)
+- **Comparison mode** — Side-by-side comparison to rank media by preference with smart transitive inference
+- **All Projects view** — View and browse all media from all projects in one place
 - **Cross-device sync** — Start ranking on your laptop, continue on your phone by sharing the URL
 - **Project management** — Organize media into separate projects with descriptions
-- **Gallery and Rank views** — Switch between ranking mode and gallery browsing
-- **Tagging system** — Add tags to individual photos and videos in gallery mode
+- **Tagging system** — Add tags to individual photos and videos
 - **Search** — Search media by filename or tags
-- **URL state persistence** — Bookmark or share a URL to return to the same project, view, and filter
+- **Media deletion** — Delete individual photos/videos or entire projects
+- **URL state persistence** — Bookmark or share a URL to return to the same project and filter
 - **Responsive design** — Optimized for screens from mobile phones to large monitors
 - **Touch-friendly** — Full touch support for ranking on phones and tablets
 
@@ -75,14 +77,16 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 
 4. Open your browser to `http://localhost:8000`
 
-### Using Docker
+### Using Docker (Optional)
 
-You can also run BestShot in a Docker container:
+If you create a Dockerfile, you can run BestShot in a container:
 
 ```bash
 docker build -t bestshot .
 docker run -p 8000:8000 -v /path/to/your/images:/project bestshot
 ```
+
+Mount your images directory to `/project` inside the container.
 
 ## Usage
 
@@ -99,10 +103,25 @@ docker run -p 8000:8000 -v /path/to/your/images:/project bestshot
 
 ### Ranking Media
 
-1. Make sure you're in **Rank** mode (toggle in the header)
-2. **On desktop**: Drag cards to reorder them
-3. **On mobile/tablet**: Touch and drag cards to reorder
-4. Click **"Save order"** to persist your ranking
+There are two ways to rank your media:
+
+#### Drag-and-Drop
+
+1. **On desktop**: Drag cards to reorder them
+2. **On mobile/tablet**: Touch and drag cards to reorder
+3. Rankings are **automatically saved** when you drop a card
+
+#### Comparison Mode
+
+For a more guided ranking experience, use comparison mode:
+
+1. Click the **"Compare"** button in the header
+2. Choose to compare **All Items** or just **New Items** (unranked)
+3. Click on the preferred image in each side-by-side comparison
+4. Use **Skip** if two items are tied
+5. When complete, click **"Apply Ranking"** to save the new order
+
+Comparison mode uses transitive inference to reduce the number of comparisons needed — if A beats B and B beats C, it knows A beats C without asking.
 
 ### Filtering Media
 
@@ -113,20 +132,26 @@ Use the media filter buttons to control what you see:
 
 The filter is preserved in the URL, so you can bookmark or share specific views.
 
-### Playing Videos
+### Viewing Media
 
-- Click the play button on any video card to open the video player
-- The video plays in a fullscreen modal with standard controls
-- Press **Escape** or click outside to close the player
+- Click on any photo or video to open the fullscreen media viewer
+- Use **← →** arrow keys or click the navigation arrows to browse
+- Add or remove tags directly in the viewer
+- Press **Escape** or click outside to close
 
 ### Tagging Media
 
-1. Switch to **Gallery** mode (toggle in the header)
-2. Click **"+ tag"** on any photo or video card
-3. Type a tag name and press **Enter**
-4. Click the **×** on a tag to remove it
+1. Click **"+ tag"** on any photo or video card
+2. Type a tag name and press **Enter**
+3. Click the **×** on a tag to remove it
+
+You can also add and remove tags in the fullscreen media viewer.
 
 Tags are normalized to lowercase and stored per-media item.
+
+### All Projects View
+
+Click **"All Projects"** in the sidebar to view all media from all projects in one place. This is useful for browsing across your entire library. Note that drag-and-drop ranking is disabled in this view.
 
 ### Searching
 
@@ -137,13 +162,25 @@ Use the search box in the header to filter media:
 
 Note: Drag-and-drop ranking is disabled while searching to preserve the original order.
 
+### Deleting Media
+
+- Click the **×** button on any photo or video card to delete it
+- A confirmation dialog will appear before deletion
+- Deleted files are permanently removed and cannot be recovered
+
+### Deleting Projects
+
+- Click the **"Delete"** button in the header while viewing a project
+- A confirmation dialog will appear before deletion
+- This removes all media files in the project
+
 ### Switching Devices
 
-BestShot stores your current project and view mode in the URL. To continue on another device:
+BestShot stores your current project and media filter in the URL. To continue on another device:
 
-1. Copy the URL from your browser's address bar (e.g., `http://yourserver:8000/?project=my-photos&view=rank`)
+1. Copy the URL from your browser's address bar (e.g., `http://yourserver:8000/?project=my-photos&media=photos`)
 2. Open that URL on your other device
-3. Your project will be automatically selected
+3. Your project and filter settings will be automatically restored
 
 You can also bookmark specific projects for quick access.
 

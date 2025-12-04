@@ -59,8 +59,8 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd bestshot
+   git clone https://github.com/Caddickbrown/BestShot.git
+   cd BestShot
    ```
 
 2. Install Python dependencies:
@@ -170,11 +170,14 @@ PORT=3000 PROJECT_ROOT=/home/user/photos python app/main.py
 | POST | `/api/projects` | Create a new project |
 | GET | `/api/projects/<name>/images?media=<filter>` | Get media for a project. Filter: `all`, `photos`, or `videos` |
 | PUT | `/api/projects/<name>` | Update project description |
+| DELETE | `/api/projects/<name>` | Delete a project and all its contents |
 | POST | `/api/projects/<name>/upload` | Upload photos and videos |
 | POST | `/api/projects/<name>/rank` | Save media ranking |
 | GET | `/api/projects/<name>/files/<filename>` | Serve a media file |
+| DELETE | `/api/projects/<name>/files/<filename>` | Delete a media file from a project |
 | PUT | `/api/projects/<name>/media/<filename>/tags` | Update tags for a media file |
 | GET | `/api/projects/<name>/tags` | Get all unique tags used in a project |
+| GET | `/api/all-media?media=<filter>` | Get all media from all projects combined |
 
 ## Project Structure
 

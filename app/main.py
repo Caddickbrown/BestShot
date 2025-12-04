@@ -55,6 +55,7 @@ VIDEO_EXTENSIONS = {
 ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 RANKING_FILENAME = ".ranking.json"
 META_FILENAME = ".project.json"
+MEDIA_META_FILENAME = ".media-meta.json"
 
 
 def create_app() -> Flask:
@@ -143,6 +144,37 @@ def create_app() -> Flask:
     def _save_metadata(folder: Path, metadata: Dict[str, str]) -> None:
         metadata_file = folder / META_FILENAME
         metadata_file.write_text(json.dumps(metadata, indent=2))
+
+    def _load_media_meta(folder: Path) -> Dict[str, Dict]:
+        """Load per-media metadata (tags, etc.) for all files in a project."""
+        meta_file = folder / MEDIA_META_FILENAME
+        if meta_file.exists():
+            try:
+                data = json.loads(meta_file.read_text())
+                if isinstance(data, dict):
+                    return data
+            except json.JSONDecodeError:
+                pass
+        return {}
+
+    def _save_media_meta(folder: Path, media_meta: Dict[str, Dict]) -> None:
+        """Save per-media metadata for all files in a project."""
+        meta_file = folder / MEDIA_META_FILENAME
+        meta_file.write_text(json.dumps(media_meta, indent=2))
+
+    def _get_media_tags(folder: Path, filename: str) -> List[str]:
+        """Get tags for a specific media file."""
+        media_meta = _load_media_meta(folder)
+        file_meta = media_meta.get(filename, {})
+        return file_meta.get("tags", [])
+
+    def _set_media_tags(folder: Path, filename: str, tags: List[str]) -> None:
+        """Set tags for a specific media file."""
+        media_meta = _load_media_meta(folder)
+        if filename not in media_meta:
+            media_meta[filename] = {}
+        media_meta[filename]["tags"] = tags
+        _save_media_meta(folder, media_meta)
 
     def _serialize_media(folder: Path, media_type: str = "all") -> List[dict]:
         """Serialize media files with type information."""

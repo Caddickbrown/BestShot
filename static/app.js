@@ -5,8 +5,8 @@ const projectDescriptionInput = document.getElementById("project-description-inp
 const refreshProjectsBtn = document.getElementById("refresh-projects");
 const workspaceTitle = document.getElementById("workspace-title");
 const workspaceMeta = document.getElementById("workspace-meta");
-const dropZone = document.getElementById("drop-zone");
-const dropZoneDefault = dropZone.innerHTML;
+const galleryDropZone = document.getElementById("gallery-drop-zone");
+const dropOverlay = document.getElementById("drop-overlay");
 const browseFilesBtn = document.getElementById("browse-files");
 const fileInput = document.getElementById("file-input");
 const saveOrderBtn = document.getElementById("save-order");
@@ -18,10 +18,19 @@ const projectDescriptionForm = document.getElementById("project-description-form
 const projectDescriptionField = document.getElementById("project-description");
 const projectDescriptionStatus = document.getElementById("project-description-status");
 const saveDescriptionBtn = document.getElementById("save-description");
-const viewModeButtons = document.querySelectorAll("[data-view-mode]");
+const startCompareBtn = document.getElementById("start-compare");
 const mediaFilterButtons = document.querySelectorAll("[data-media-filter]");
 const searchInput = document.getElementById("search-input");
 const clearSearchBtn = document.getElementById("clear-search");
+
+// Comparison selection modal elements
+const comparisonSelection = document.getElementById("comparison-selection");
+const compareAllBtn = document.getElementById("compare-all");
+const compareUnrankedBtn = document.getElementById("compare-unranked");
+const compareAllCount = document.getElementById("compare-all-count");
+const compareUnrankedCount = document.getElementById("compare-unranked-count");
+const cancelComparisonSelectionBtn = document.getElementById("cancel-comparison-selection");
+const comparisonSelectionBackdrop = comparisonSelection.querySelector(".comparison-selection__backdrop");
 
 // Video modal elements
 const videoModal = document.getElementById("video-modal");
@@ -71,11 +80,11 @@ const state = {
   currentProject: null,
   images: [],
   description: "",
-  viewMode: "rank",
   mediaFilter: "all", // 'all', 'photos', or 'videos'
   searchQuery: "",
   viewerIndex: -1, // Current index in fullscreen viewer
   comparison: null, // Comparison mode state
+  comparisonScope: "all", // 'all' or 'unranked'
 };
 
 // Touch drag-and-drop state
@@ -88,7 +97,6 @@ function getStateFromURL() {
   const params = new URLSearchParams(window.location.search);
   return {
     project: params.get("project"),
-    view: params.get("view"),
     media: params.get("media"),
   };
 }
@@ -97,9 +105,6 @@ function updateURL() {
   const params = new URLSearchParams();
   if (state.currentProject) {
     params.set("project", state.currentProject);
-  }
-  if (state.viewMode && state.viewMode !== "rank") {
-    params.set("view", state.viewMode);
   }
   if (state.mediaFilter && state.mediaFilter !== "all") {
     params.set("media", state.mediaFilter);
@@ -112,12 +117,6 @@ function updateURL() {
 
 function restoreStateFromURL() {
   const urlState = getStateFromURL();
-  if (urlState.view === "gallery" || urlState.view === "rank") {
-    state.viewMode = urlState.view;
-    viewModeButtons.forEach((button) => {
-      button.classList.toggle("active", button.dataset.viewMode === state.viewMode);
-    });
-  }
   if (urlState.media === "photos" || urlState.media === "videos" || urlState.media === "all") {
     state.mediaFilter = urlState.media;
     mediaFilterButtons.forEach((button) => {
@@ -255,24 +254,29 @@ function getFilteredImages() {
 
 function renderImages() {
   imagesGrid.innerHTML = "";
-  imagesGrid.classList.toggle("gallery", state.viewMode === "gallery");
+  imagesGrid.classList.add("gallery");
 
   const filteredImages = getFilteredImages();
 
   if (!state.images.length) {
-    const empty = document.createElement("p");
+    const empty = document.createElement("div");
+    empty.className = "empty-gallery";
     let emptyText = "Select a project to begin.";
     if (state.currentProject) {
       if (state.mediaFilter === "photos") {
-        emptyText = "No photos yet. Drop them into the project folder.";
+        emptyText = "No photos yet.";
       } else if (state.mediaFilter === "videos") {
-        emptyText = "No videos yet. Drop them into the project folder.";
+        emptyText = "No videos yet.";
       } else {
-        emptyText = "No media yet. Drop files into the project folder.";
+        emptyText = "No media yet.";
       }
+      empty.innerHTML = `
+        <p class="muted">${emptyText}</p>
+        <p class="muted">Drag files here or use the Browse button</p>
+      `;
+    } else {
+      empty.innerHTML = `<p class="muted">${emptyText}</p>`;
     }
-    empty.textContent = emptyText;
-    empty.classList.add("muted");
     imagesGrid.appendChild(empty);
     updateActionStates();
     return;
@@ -295,10 +299,17 @@ function renderImages() {
     card.dataset.index = originalIndex;
     card.dataset.name = media.name;
     card.dataset.mediaType = media.type;
-    card.classList.toggle("is-gallery", state.viewMode === "gallery");
+    card.dataset.isRanked = media.isRanked;
+    card.classList.add("is-gallery");
     
     const rank = card.querySelector(".rank-pill");
-    rank.textContent = `#${originalIndex + 1}`;
+    if (media.isRanked) {
+      rank.textContent = `#${media.rank}`;
+      rank.classList.remove("unranked");
+    } else {
+      rank.textContent = "New";
+      rank.classList.add("unranked");
+    }
     card.querySelector(".filename").textContent = media.name;
 
     if (isVideo) {
@@ -312,11 +323,7 @@ function renderImages() {
       const playButton = card.querySelector(".play-button");
       playButton.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (state.viewMode === "gallery") {
-          openMediaViewer(index);
-        } else {
-          openVideoModal(media);
-        }
+        openMediaViewer(index);
       });
     } else {
       const img = card.querySelector("img");
@@ -324,24 +331,25 @@ function renderImages() {
       img.alt = media.name;
     }
 
-    // Click handler for gallery mode fullscreen view
-    if (state.viewMode === "gallery") {
-      card.style.cursor = "pointer";
-      card.addEventListener("click", (event) => {
-        // Don't open viewer if clicking on tag controls
-        if (event.target.closest(".image-card__tags")) return;
-        openMediaViewer(index);
-      });
-    }
+    // Click handler for fullscreen view
+    card.style.cursor = "pointer";
+    card.addEventListener("click", (event) => {
+      // Don't open viewer if clicking on tag controls or drag handle
+      if (event.target.closest(".image-card__tags")) return;
+      if (event.target.closest(".drag-handle")) return;
+      openMediaViewer(index);
+    });
 
     // Render tags
     renderCardTags(card, media);
 
-    card.draggable = state.viewMode === "rank" && !state.searchQuery;
-    if (state.viewMode === "rank" && !state.searchQuery) {
+    // Always enable drag-drop unless searching
+    card.draggable = !state.searchQuery;
+    if (!state.searchQuery) {
       // Mouse drag-and-drop events
       card.addEventListener("dragstart", (event) => {
         event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", ""); // Required for Firefox
         card.classList.add("dragging");
         card.dataset.dragIndex = originalIndex;
       });
@@ -352,7 +360,10 @@ function renderImages() {
 
       card.addEventListener("dragover", (event) => {
         event.preventDefault();
-        card.classList.add("over");
+        const dragged = document.querySelector(".image-card.dragging");
+        if (dragged && dragged !== card) {
+          card.classList.add("over");
+        }
       });
 
       card.addEventListener("dragleave", () => card.classList.remove("over"));
@@ -384,13 +395,9 @@ function renderCardTags(card, media) {
   const addTagBtn = card.querySelector(".add-tag-btn");
   const tagInputWrapper = card.querySelector(".tag-input-wrapper");
   const tagInput = card.querySelector(".tag-input");
-
-  // Only show tags UI in gallery mode
   const tagsSection = card.querySelector(".image-card__tags");
-  if (state.viewMode !== "gallery") {
-    tagsSection.hidden = true;
-    return;
-  }
+  
+  // Always show tags UI
   tagsSection.hidden = false;
 
   // Render existing tags
@@ -499,7 +506,6 @@ async function updateMediaTags(filename, tags) {
 }
 
 function reorderImages(from, to) {
-  if (state.viewMode !== "rank") return;
   if (Number.isNaN(from) || Number.isNaN(to) || from === to) {
     return;
   }
@@ -512,8 +518,6 @@ function reorderImages(from, to) {
 // Enables ranking on mobile devices (phones/tablets)
 
 function handleTouchStart(event) {
-  if (state.viewMode !== "rank") return;
-
   const card = event.currentTarget;
   const touch = event.touches[0];
 
@@ -627,8 +631,7 @@ function handleTouchEnd(event) {
 }
 
 function disableWorkspace() {
-  dropZone.classList.add("disabled");
-  dropZone.innerHTML = "<p>Select a project to start.</p>";
+  galleryDropZone.classList.add("disabled");
   workspaceTitle.textContent = "Select a project";
   workspaceMeta.textContent = "";
   projectDescriptionField.value = "";
@@ -641,8 +644,7 @@ function disableWorkspace() {
 }
 
 function enableWorkspace() {
-  dropZone.classList.remove("disabled");
-  dropZone.innerHTML = dropZoneDefault;
+  galleryDropZone.classList.remove("disabled");
   projectDescriptionField.disabled = false;
   saveDescriptionBtn.disabled = false;
   updateActionStates();
@@ -651,10 +653,11 @@ function enableWorkspace() {
 function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   browseFilesBtn.disabled = !hasProject;
-  saveOrderBtn.disabled = !hasProject || state.viewMode !== "rank" || state.images.length === 0;
+  saveOrderBtn.disabled = !hasProject || state.images.length === 0;
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
+  startCompareBtn.disabled = !hasProject || state.images.length < 2;
 }
 
 async function createProject(name, description) {
@@ -737,16 +740,6 @@ async function saveDescription(event) {
   saveDescriptionBtn.disabled = false;
   await fetchProjects();
   updateActionStates();
-}
-
-function setViewMode(mode) {
-  if (state.viewMode === mode) return;
-  state.viewMode = mode;
-  viewModeButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.viewMode === state.viewMode);
-  });
-  updateURL();
-  renderImages();
 }
 
 async function setMediaFilter(filter) {
@@ -963,24 +956,58 @@ function generatePairs(items) {
   return pairs;
 }
 
-function startComparisonMode() {
-  if (state.images.length < 2) {
-    alert("Need at least 2 images to start comparison mode");
+function getUnrankedItems() {
+  return state.images.filter((img) => !img.isRanked);
+}
+
+function openComparisonSelection() {
+  const allCount = state.images.length;
+  const unrankedCount = getUnrankedItems().length;
+  
+  compareAllCount.textContent = `${allCount} item${allCount === 1 ? "" : "s"}`;
+  compareUnrankedCount.textContent = `${unrankedCount} new item${unrankedCount === 1 ? "" : "s"}`;
+  
+  // Disable unranked button if no unranked items
+  compareUnrankedBtn.disabled = unrankedCount < 2;
+  if (unrankedCount < 2) {
+    compareUnrankedBtn.classList.add("disabled-option");
+  } else {
+    compareUnrankedBtn.classList.remove("disabled-option");
+  }
+  
+  comparisonSelection.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeComparisonSelection() {
+  comparisonSelection.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function startComparisonMode(scope = "all") {
+  state.comparisonScope = scope;
+  
+  const itemsToCompare = scope === "unranked" ? getUnrankedItems() : [...state.images];
+  
+  if (itemsToCompare.length < 2) {
+    alert("Need at least 2 items to start comparison mode");
     return;
   }
+  
+  closeComparisonSelection();
   
   // Initialize comparison state with transitive inference tracking
   const scores = {};
   const beatsMap = {}; // beatsMap[A] = Set of items that A beats (directly or transitively)
   const losesTo = {}; // losesTo[A] = Set of items that beat A (directly or transitively)
   
-  state.images.forEach((img) => {
+  itemsToCompare.forEach((img) => {
     scores[img.name] = 0;
     beatsMap[img.name] = new Set();
     losesTo[img.name] = new Set();
   });
   
-  const allPairs = generatePairs([...state.images]);
+  const allPairs = generatePairs(itemsToCompare);
   
   state.comparison = {
     allPairs,
@@ -990,6 +1017,7 @@ function startComparisonMode() {
     losesTo,
     comparisonsAsked: 0,
     comparisonsSkipped: 0,
+    itemsToCompare,
   };
   
   comparisonMode.hidden = false;
@@ -1213,11 +1241,30 @@ function showComparisonResults() {
 async function applyRanking() {
   if (!state.comparison || !state.comparison.rankedOrder) return;
   
-  const order = state.comparison.rankedOrder;
+  const rankedOrder = state.comparison.rankedOrder;
   
-  // Reorder images array
-  const reordered = order.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
-  state.images = reordered;
+  if (state.comparisonScope === "unranked") {
+    // For unranked-only comparison, append newly ranked items after existing ranked items
+    const existingRanked = state.images.filter((m) => m.isRanked);
+    const newlyRanked = rankedOrder.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
+    
+    // Mark the newly ranked items as ranked
+    newlyRanked.forEach((m) => {
+      m.isRanked = true;
+      m.rank = existingRanked.length + newlyRanked.indexOf(m) + 1;
+    });
+    
+    state.images = [...existingRanked, ...newlyRanked];
+  } else {
+    // For all-items comparison, use the new order entirely
+    const reordered = rankedOrder.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
+    // Mark all as ranked
+    reordered.forEach((m, idx) => {
+      m.isRanked = true;
+      m.rank = idx + 1;
+    });
+    state.images = reordered;
+  }
   
   // Save to server
   await saveOrder();
@@ -1254,6 +1301,8 @@ document.addEventListener("keydown", (event) => {
       closeDeleteModal();
     } else if (!mediaViewerModal.hidden) {
       closeMediaViewer();
+    } else if (!comparisonSelection.hidden) {
+      closeComparisonSelection();
     } else if (!comparisonMode.hidden) {
       exitComparisonMode();
     } else if (!comparisonResults.hidden) {
@@ -1294,18 +1343,12 @@ projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
 
-viewModeButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    const mode = button.dataset.viewMode;
-    if (mode) {
-      if (mode === "compare") {
-        startComparisonMode();
-      } else {
-        setViewMode(mode);
-      }
-    }
-  });
-});
+// Comparison selection handlers
+startCompareBtn.addEventListener("click", openComparisonSelection);
+compareAllBtn.addEventListener("click", () => startComparisonMode("all"));
+compareUnrankedBtn.addEventListener("click", () => startComparisonMode("unranked"));
+cancelComparisonSelectionBtn.addEventListener("click", closeComparisonSelection);
+comparisonSelectionBackdrop.addEventListener("click", closeComparisonSelection);
 
 mediaFilterButtons.forEach((button) => {
   button.addEventListener("click", () => {
@@ -1353,20 +1396,32 @@ saveOrderBtn.addEventListener("click", () => {
   saveOrder();
 });
 
-dropZone.addEventListener("dragover", (event) => {
+// Gallery drop zone for file uploads
+galleryDropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
-  if (dropZone.classList.contains("disabled")) return;
-  dropZone.classList.add("over");
+  if (galleryDropZone.classList.contains("disabled")) return;
+  // Only show overlay for file drops, not internal card reordering
+  if (event.dataTransfer.types.includes("Files")) {
+    dropOverlay.hidden = false;
+  }
 });
 
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("over"));
+galleryDropZone.addEventListener("dragleave", (event) => {
+  // Only hide if leaving the gallery entirely
+  if (!galleryDropZone.contains(event.relatedTarget)) {
+    dropOverlay.hidden = true;
+  }
+});
 
-dropZone.addEventListener("drop", (event) => {
+galleryDropZone.addEventListener("drop", (event) => {
   event.preventDefault();
-  dropZone.classList.remove("over");
+  dropOverlay.hidden = true;
   if (!state.currentProject) return;
-  const { files } = event.dataTransfer;
-  uploadFiles(files);
+  
+  // Only handle file drops, let card drops be handled by card event listeners
+  if (event.dataTransfer.files.length > 0) {
+    uploadFiles(event.dataTransfer.files);
+  }
 });
 
 // Initialize app with URL state restoration
@@ -1380,9 +1435,6 @@ window.addEventListener("popstate", () => {
   const urlState = getStateFromURL();
   if (urlState.project && urlState.project !== state.currentProject) {
     selectProject(urlState.project);
-  }
-  if (urlState.view && urlState.view !== state.viewMode) {
-    setViewMode(urlState.view);
   }
   if (urlState.media && urlState.media !== state.mediaFilter) {
     setMediaFilter(urlState.media);

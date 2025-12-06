@@ -4,6 +4,7 @@ A web-based media ranking tool that helps you compare and sort photos and videos
 
 ## Features
 
+### Core Features
 - **Photo and video support** — Rank both photos and videos in the same project
 - **Media type filtering** — View all media, photos only, or videos only
 - **Fullscreen media viewer** — Click any photo or video to view it fullscreen with arrow key navigation
@@ -18,6 +19,41 @@ A web-based media ranking tool that helps you compare and sort photos and videos
 - **URL state persistence** — Bookmark or share a URL to return to the same project and filter
 - **Responsive design** — Optimized for screens from mobile phones to large monitors
 - **Touch-friendly** — Full touch support for ranking on phones and tablets
+
+### New Features
+
+#### Performance & UX
+- **Image thumbnails** — Auto-generated WebP thumbnails for faster gallery loading
+- **Upload progress indicator** — Real-time progress bar during file uploads
+- **Loading states** — Visual feedback with spinners during async operations
+- **Grid size options** — Choose between small, medium, and large thumbnail sizes
+
+#### Bulk Operations
+- **Selection mode** — Multi-select media for batch operations
+- **Bulk tagging** — Add tags to multiple files at once
+- **Bulk download** — Download selected files as a ZIP archive
+- **Bulk delete** — Delete multiple files at once
+
+#### Media Information
+- **EXIF metadata display** — View camera info (make, model, aperture, shutter speed, ISO, focal length) in the fullscreen viewer
+- **Comments/notes** — Add personal notes to individual photos and videos
+- **File size display** — See file sizes in the viewer
+
+#### Sorting & Organization
+- **Multiple sort options** — Sort by rank, name (A-Z, Z-A), date (newest/oldest), or size (largest/smallest)
+- **Duplicate detection** — Warns when uploading files that already exist in the project
+
+#### Viewing
+- **Slideshow mode** — Auto-advance through images in fullscreen viewer (press P or click Slideshow button)
+- **Keyboard shortcuts help** — Press ? to see all available keyboard shortcuts
+
+#### Export & Sharing
+- **Export rankings** — Export project data as JSON or CSV
+- **Download all** — Download entire project as a ZIP file
+
+#### Customization
+- **Light/Dark theme** — Toggle between light and dark modes (preference saved)
+- **PWA support** — Install as a Progressive Web App for offline viewing
 
 ## Browser Compatibility
 
@@ -56,6 +92,8 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 
 - Python 3.8+
 - Flask
+- Pillow (optional, for thumbnail generation and EXIF extraction)
+- Gunicorn (optional, for production deployment)
 
 ### Installation
 
@@ -67,7 +105,7 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 
 2. Install Python dependencies:
    ```bash
-   pip install flask
+   pip install -r requirements.txt
    ```
 
 3. Run the application:
@@ -77,16 +115,34 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 
 4. Open your browser to `http://localhost:18473`
 
-### Using Docker (Optional)
+### Using Docker
 
-If you create a Dockerfile, you can run BestShot in a container:
+Build and run BestShot in a container:
 
 ```bash
 docker build -t bestshot .
 docker run -p 18473:18473 -v /path/to/your/images:/project bestshot
 ```
 
+Or use Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
 Mount your images directory to `/project` inside the container.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `←` `→` | Navigate images in viewer |
+| `Esc` | Close modal / Exit mode |
+| `P` | Toggle slideshow |
+| `?` | Show keyboard shortcuts help |
+| `1` or `←` | Pick left (in comparison mode) |
+| `2` or `→` | Pick right (in comparison mode) |
+| `Space` or `S` | Skip/Tie (in comparison mode) |
 
 ## Usage
 
@@ -125,66 +181,54 @@ For a more guided ranking experience, use comparison mode:
 
 Comparison mode uses transitive inference to reduce the number of comparisons needed — if A beats B and B beats C, it knows A beats C without asking.
 
-### Filtering Media
+### Bulk Operations
 
-Use the media filter buttons to control what you see:
-- **Both** — Show all photos and videos
-- **Photos** — Show only photos
-- **Videos** — Show only videos
+1. Click **"Select"** to enter selection mode
+2. Click on photos/videos to select them (checkmarks appear)
+3. Use the bulk action bar at the bottom:
+   - **Add Tag** — Add a tag to all selected items
+   - **Download** — Download selected items as a ZIP
+   - **Delete** — Delete all selected items
+4. Click **"Cancel"** to exit selection mode
 
-The filter is preserved in the URL, so you can bookmark or share specific views.
+### Sorting Media
+
+Click the sort dropdown to change the order:
+- **Rank** — Your custom ranking (default)
+- **Name (A-Z / Z-A)** — Alphabetical order
+- **Date (Newest / Oldest)** — By file modification date
+- **Size (Largest / Smallest)** — By file size
+
+### Grid Size
+
+Use the S/M/L buttons to adjust thumbnail size:
+- **S** — Small thumbnails (more items visible)
+- **M** — Medium thumbnails (default)
+- **L** — Large thumbnails (better detail)
 
 ### Viewing Media
 
 - Click on any photo or video to open the fullscreen media viewer
 - Use **← →** arrow keys or click the navigation arrows to browse
+- View EXIF camera data (if available)
+- Add or edit notes/comments
 - Add or remove tags directly in the viewer
+- Start a slideshow with the **▶ Slideshow** button or press **P**
 - Press **Escape** or click outside to close
 
-### Tagging Media
+### Exporting Data
 
-1. Click **"+ tag"** on any photo or video card
-2. Type a tag name and press **Enter**
-3. Click the **×** on a tag to remove it
-
-You can also add and remove tags in the fullscreen media viewer.
-
-Tags are normalized to lowercase and stored per-media item.
-
-### All Projects View
-
-Click **"All Projects"** in the sidebar to view all media from all projects in one place. This is useful for browsing across your entire library. Note that drag-and-drop ranking is disabled in this view.
-
-### Searching
-
-Use the search box in the header to filter media:
-- Search by **filename** (partial match)
-- Search by **tag** (partial match)
-- Press **Escape** or click the **×** to clear the search
-
-Note: Drag-and-drop ranking is disabled while searching to preserve the original order.
-
-### Deleting Media
-
-- Click the **×** button on any photo or video card to delete it
-- A confirmation dialog will appear before deletion
-- Deleted files are permanently removed and cannot be recovered
-
-### Deleting Projects
-
-- Click the **"Delete"** button in the header while viewing a project
-- A confirmation dialog will appear before deletion
-- This removes all media files in the project
+Click the **"Export"** button and choose:
+- **Export JSON** — Full project data including rankings, tags, and metadata
+- **Export CSV** — Spreadsheet-friendly format with rank, filename, tags, etc.
 
 ### Switching Devices
 
 BestShot stores your current project and media filter in the URL. To continue on another device:
 
-1. Copy the URL from your browser's address bar (e.g., `http://yourserver:18473/?project=my-photos&media=photos`)
+1. Copy the URL from your browser's address bar
 2. Open that URL on your other device
 3. Your project and filter settings will be automatically restored
-
-You can also bookmark specific projects for quick access.
 
 ## Configuration
 
@@ -205,18 +249,32 @@ PORT=3000 PROJECT_ROOT=/home/user/photos python app/main.py
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/projects` | List all projects (includes photo and video counts) |
+| GET | `/health` | Health check endpoint |
+| GET | `/api/projects` | List all projects |
 | POST | `/api/projects` | Create a new project |
-| GET | `/api/projects/<name>/images?media=<filter>` | Get media for a project. Filter: `all`, `photos`, or `videos` |
+| GET | `/api/projects/<name>/images` | Get media for a project (supports `media` and `sort` query params) |
 | PUT | `/api/projects/<name>` | Update project description |
 | DELETE | `/api/projects/<name>` | Delete a project and all its contents |
 | POST | `/api/projects/<name>/upload` | Upload photos and videos |
+| POST | `/api/projects/<name>/check-duplicates` | Check for duplicate files before upload |
 | POST | `/api/projects/<name>/rank` | Save media ranking |
 | GET | `/api/projects/<name>/files/<filename>` | Serve a media file |
-| DELETE | `/api/projects/<name>/files/<filename>` | Delete a media file from a project |
+| GET | `/api/projects/<name>/files/<filename>/download` | Download a media file |
+| GET | `/api/projects/<name>/files/<filename>/exif` | Get EXIF data for an image |
+| DELETE | `/api/projects/<name>/files/<filename>` | Delete a media file |
+| GET | `/api/projects/<name>/thumbs/<filename>` | Serve a thumbnail image |
 | PUT | `/api/projects/<name>/media/<filename>/tags` | Update tags for a media file |
+| PUT | `/api/projects/<name>/media/<filename>/comment` | Update comment for a media file |
+| POST | `/api/projects/<name>/batch-tags` | Batch update tags for multiple files |
+| DELETE | `/api/projects/<name>/batch-delete` | Batch delete multiple files |
+| POST | `/api/projects/<name>/download-selected` | Download selected files as ZIP |
+| GET | `/api/projects/<name>/download` | Download entire project as ZIP |
+| GET | `/api/projects/<name>/export` | Export project data (JSON or CSV) |
 | GET | `/api/projects/<name>/tags` | Get all unique tags used in a project |
-| GET | `/api/all-media?media=<filter>` | Get all media from all projects combined |
+| POST | `/api/projects/<name>/generate-thumbnails` | Generate thumbnails for existing images |
+| GET | `/api/all-media` | Get all media from all projects combined |
+| GET | `/manifest.json` | PWA manifest |
+| GET | `/sw.js` | Service worker for PWA |
 
 ## Project Structure
 
@@ -224,12 +282,17 @@ PORT=3000 PROJECT_ROOT=/home/user/photos python app/main.py
 bestshot/
 ├── app/
 │   ├── __init__.py
-│   └── main.py          # Flask application
+│   └── main.py              # Flask application
 ├── static/
-│   ├── app.js           # Frontend JavaScript
-│   └── styles.css       # Styles
+│   ├── app.js               # Frontend JavaScript
+│   ├── styles.css           # Styles
+│   ├── manifest.json        # PWA manifest
+│   └── sw.js                # Service worker
 ├── templates/
-│   └── index.html       # Main HTML template
+│   └── index.html           # Main HTML template
+├── docker-compose.yml       # Docker Compose config
+├── Dockerfile               # Docker build file
+├── requirements.txt         # Python dependencies
 └── README.md
 ```
 
@@ -237,8 +300,23 @@ bestshot/
 
 - Rankings are stored in `.ranking.json` files within each project folder
 - Project metadata is stored in `.project.json` files
-- Media tags are stored in `.media-meta.json` files within each project folder
+- Media metadata (tags, comments, hashes) is stored in `.media-meta.json` files
+- Thumbnails are stored in `.thumbs/` directories within each project folder
 - Images and videos are served directly from the project folders
+
+## Production Deployment
+
+For production use, the Docker image runs with Gunicorn (4 workers) instead of Flask's development server:
+
+```bash
+docker-compose up -d
+```
+
+Or manually:
+
+```bash
+gunicorn -b 0.0.0.0:18473 -w 4 --timeout 120 app.main:app
+```
 
 ## License
 

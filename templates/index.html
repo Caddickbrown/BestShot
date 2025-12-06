@@ -8,6 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#05070d" />
     <title>BestShot · Terminal Darkroom</title>
+    <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
   <body>
@@ -64,17 +65,45 @@
               <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
             </div>
             <button id="start-compare" class="ghost">Compare</button>
+            <div class="sort-control">
+              <button id="sort-button" class="sort-button">
+                <span id="sort-label">Rank</span>
+                <span class="sort-button__icon">▼</span>
+              </button>
+              <div id="sort-dropdown" class="sort-dropdown" hidden>
+                <button data-sort="rank" class="active">Rank</button>
+                <button data-sort="name">Name (A-Z)</button>
+                <button data-sort="name_desc">Name (Z-A)</button>
+                <button data-sort="date_desc">Date (Newest)</button>
+                <button data-sort="date">Date (Oldest)</button>
+                <button data-sort="size_desc">Size (Largest)</button>
+                <button data-sort="size">Size (Smallest)</button>
+              </div>
+            </div>
             <div class="media-filter" role="group" aria-label="Media filter">
               <button class="toggle active" data-media-filter="all">Both</button>
               <button class="toggle" data-media-filter="photos">Photos</button>
               <button class="toggle" data-media-filter="videos">Videos</button>
             </div>
+            <div class="grid-size-control" role="group" aria-label="Grid size">
+              <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
+              <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
+              <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
+            </div>
             <div class="upload-actions">
               <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
               <button id="browse-files" class="ghost" disabled>Browse</button>
-              <button id="download-all" class="ghost" disabled>Download All</button>
+              <button id="select-mode-btn" class="ghost" disabled title="Toggle selection mode">Select</button>
+              <button id="export-btn" class="ghost" disabled>Export</button>
+              <div id="export-dropdown" class="export-dropdown" hidden>
+                <button data-export="json">Export JSON</button>
+                <button data-export="csv">Export CSV</button>
+              </div>
+              <button id="download-all" class="ghost" disabled>Download</button>
               <button id="delete-project" class="ghost danger" disabled>Delete</button>
             </div>
+            <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark theme">🌙</button>
+            <button id="help-btn" class="help-button" title="Keyboard shortcuts">?</button>
           </div>
         </header>
 
@@ -175,6 +204,10 @@
         <div class="media-viewer-modal__info">
           <p id="viewer-filename" class="media-viewer-modal__name"></p>
           <div class="media-viewer-modal__actions">
+            <div id="slideshow-controls" class="slideshow-controls" hidden>
+              <button id="slideshow-toggle" class="ghost">▶ Slideshow</button>
+              <span id="slideshow-timer" class="slideshow-timer"></span>
+            </div>
             <button id="viewer-download-btn" class="ghost viewer-download-btn">
               <span class="download-icon">↓</span> Download
             </button>
@@ -185,6 +218,13 @@
               <input type="text" id="viewer-tag-input" class="tag-input" placeholder="Add tag..." />
             </div>
             <button id="viewer-add-tag-btn" class="add-tag-btn" aria-label="Add tag">+ tag</button>
+          </div>
+          <div id="viewer-comment" class="comment-field">
+            <textarea id="viewer-comment-input" class="comment-input" placeholder="Add a note about this image..."></textarea>
+          </div>
+          <div id="viewer-exif" class="exif-panel" hidden>
+            <h4 class="exif-panel__title">Camera Info</h4>
+            <div id="exif-grid" class="exif-panel__grid"></div>
           </div>
         </div>
       </div>
@@ -285,6 +325,111 @@
       </div>
     </div>
 
+    <!-- Upload Progress Indicator -->
+    <div id="upload-progress" class="upload-progress" hidden>
+      <div class="upload-progress__header">
+        <p class="upload-progress__title">Uploading...</p>
+        <span id="upload-progress-status" class="upload-progress__status">0%</span>
+      </div>
+      <div class="upload-progress__bar">
+        <div id="upload-progress-fill" class="upload-progress__fill" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div id="bulk-actions-bar" class="bulk-actions-bar" hidden>
+      <span id="bulk-count" class="bulk-actions-bar__count">0 selected</span>
+      <button id="bulk-tag-btn" class="ghost">Add Tag</button>
+      <button id="bulk-download-btn" class="ghost">Download</button>
+      <button id="bulk-delete-btn" class="ghost danger">Delete</button>
+      <button id="bulk-cancel-btn" class="ghost">Cancel</button>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="shortcuts-modal" hidden>
+      <div class="shortcuts-modal__backdrop"></div>
+      <div class="shortcuts-modal__content">
+        <h3>Keyboard Shortcuts</h3>
+        <div class="shortcuts-list">
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Navigate images</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">←</span>
+              <span class="kbd">→</span>
+            </div>
+          </div>
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Close modal / Exit mode</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">Esc</span>
+            </div>
+          </div>
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Pick left (comparison)</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">←</span>
+              <span class="kbd">1</span>
+            </div>
+          </div>
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Pick right (comparison)</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">→</span>
+              <span class="kbd">2</span>
+            </div>
+          </div>
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Skip / Tie (comparison)</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">Space</span>
+              <span class="kbd">S</span>
+            </div>
+          </div>
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Toggle slideshow</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">P</span>
+            </div>
+          </div>
+          <div class="shortcuts-list__item">
+            <span class="shortcuts-list__action">Show this help</span>
+            <div class="shortcuts-list__keys">
+              <span class="kbd">?</span>
+            </div>
+          </div>
+        </div>
+        <div class="shortcuts-modal__actions">
+          <button id="close-shortcuts" class="ghost">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Duplicate Warning Modal -->
+    <div id="duplicate-modal" class="duplicate-modal" hidden>
+      <div class="duplicate-modal__backdrop"></div>
+      <div class="duplicate-modal__content">
+        <h3>⚠️ Duplicate Files Detected</h3>
+        <p>Some files you're uploading already exist in this project:</p>
+        <div id="duplicate-list" class="duplicate-list"></div>
+        <div class="duplicate-modal__actions">
+          <button id="upload-skip-duplicates" class="primary">Skip Duplicates</button>
+          <button id="upload-all-anyway" class="ghost">Upload All</button>
+          <button id="cancel-upload" class="ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay for Gallery -->
+    <div id="gallery-loading" class="loading-overlay" hidden>
+      <div class="spinner spinner--large"></div>
+    </div>
+
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+    <script>
+      // Register Service Worker for PWA
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+      }
+    </script>
   </body>
 </html>

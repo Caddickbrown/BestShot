@@ -78,6 +78,10 @@ const shortcutsBackdrop = shortcutsModal.querySelector(".shortcuts-modal__backdr
 
 // Check if on mobile/touch device
 const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
+const isMobileWidth = () => window.matchMedia("(max-width: 680px)").matches;
+
+// Dropdown backdrop for mobile tap-to-close
+const dropdownBackdrop = document.getElementById("dropdown-backdrop");
 
 // Upload progress
 const uploadProgress = document.getElementById("upload-progress");
@@ -221,7 +225,7 @@ function toggleTheme() {
 
 themeToggleBtn.addEventListener("click", () => {
   toggleTheme();
-  settingsDropdown.hidden = true;
+  closeAllDropdowns();
 });
 initTheme();
 
@@ -288,15 +292,19 @@ function updateSortUI() {
 
 sortButton.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = sortDropdown.hidden;
   closeAllDropdowns();
-  sortDropdown.hidden = !sortDropdown.hidden;
+  sortDropdown.hidden = !wasHidden;
+  if (!sortDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 sortOptions.forEach((btn) => {
   btn.addEventListener("click", async () => {
     state.sortBy = btn.dataset.sort;
     updateSortUI();
-    sortDropdown.hidden = true;
+    closeAllDropdowns();
     updateURL();
     await loadProjectState();
   });
@@ -308,6 +316,24 @@ function closeAllDropdowns() {
   exportDropdown.hidden = true;
   settingsDropdown.hidden = true;
   projectSettingsDropdown.hidden = true;
+  // Hide dropdown backdrop on mobile
+  if (dropdownBackdrop) {
+    dropdownBackdrop.hidden = true;
+  }
+}
+
+// Show dropdown backdrop on mobile when a dropdown opens
+function showDropdownBackdrop() {
+  if (isMobileWidth() && dropdownBackdrop) {
+    dropdownBackdrop.hidden = false;
+  }
+}
+
+// Dropdown backdrop click handler - close all dropdowns on tap outside
+if (dropdownBackdrop) {
+  dropdownBackdrop.addEventListener("click", () => {
+    closeAllDropdowns();
+  });
 }
 
 document.addEventListener("click", (e) => {
@@ -320,26 +346,34 @@ document.addEventListener("click", (e) => {
 // Settings dropdown
 settingsBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = settingsDropdown.hidden;
   closeAllDropdowns();
-  settingsDropdown.hidden = !settingsDropdown.hidden;
+  settingsDropdown.hidden = !wasHidden;
+  if (!settingsDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 // Shortcuts button in settings
 shortcutsBtn.addEventListener("click", () => {
-  settingsDropdown.hidden = true;
+  closeAllDropdowns();
   openShortcutsModal();
 });
 
 // Project settings dropdown
 projectSettingsBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = projectSettingsDropdown.hidden;
   closeAllDropdowns();
-  projectSettingsDropdown.hidden = !projectSettingsDropdown.hidden;
+  projectSettingsDropdown.hidden = !wasHidden;
+  if (!projectSettingsDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 // Rename from project settings menu
 renameProjectMenuBtn.addEventListener("click", () => {
-  projectSettingsDropdown.hidden = true;
+  closeAllDropdowns();
   openRenameModal();
 });
 
@@ -369,14 +403,18 @@ if (savedGridSize) {
 // ============ Export Controls ============
 exportBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = exportDropdown.hidden;
   projectSettingsDropdown.hidden = true;
-  exportDropdown.hidden = !exportDropdown.hidden;
+  exportDropdown.hidden = !wasHidden;
+  if (!exportDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 exportOptions.forEach((btn) => {
   btn.addEventListener("click", () => {
     const format = btn.dataset.export;
-    exportDropdown.hidden = true;
+    closeAllDropdowns();
     if (state.currentProject) {
       const url = `/api/projects/${encodeURIComponent(state.currentProject)}/export?format=${format}`;
       window.open(url, "_blank");
@@ -387,6 +425,8 @@ exportOptions.forEach((btn) => {
 exportBackBtn.addEventListener("click", () => {
   exportDropdown.hidden = true;
   projectSettingsDropdown.hidden = false;
+  // Keep backdrop visible since we're showing another dropdown
+  showDropdownBackdrop();
 });
 
 // ============ Keyboard Shortcuts Modal ============
@@ -1540,7 +1580,7 @@ async function deleteProject() {
 }
 
 deleteProjectBtn.addEventListener("click", () => {
-  projectSettingsDropdown.hidden = true;
+  closeAllDropdowns();
   openDeleteModal();
 });
 confirmDeleteBtn.addEventListener("click", deleteProject);
@@ -1973,7 +2013,7 @@ viewerDownloadBtn.addEventListener("click", () => {
 });
 
 downloadAllBtn.addEventListener("click", () => {
-  projectSettingsDropdown.hidden = true;
+  closeAllDropdowns();
   if (state.currentProject) {
     downloadProject(state.currentProject);
   }

@@ -2604,16 +2604,29 @@ body.light-theme .rank-pill.unranked {
   }
 }
 
-/* Dropdown positioning on mobile */
+/* ============ Dropdown Backdrop (for mobile tap-to-close) ============ */
+
+.dropdown-backdrop {
+  display: none;
+}
+
+.dropdown-backdrop[hidden] {
+  display: none;
+}
+
 @media (max-width: 680px) {
-  .dropdown-control:has(.dropdown-menu:not([hidden]))::before {
-    content: "";
+  .dropdown-backdrop:not([hidden]) {
+    display: block;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 199;
+    backdrop-filter: blur(2px);
   }
-  
+}
+
+/* Dropdown positioning on mobile */
+@media (max-width: 680px) {
   .dropdown-menu {
     position: fixed;
     bottom: 0;

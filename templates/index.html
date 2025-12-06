@@ -7,11 +7,94 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#05070d" />
-    <title>BestShot · Terminal Darkroom</title>
+    <title>BestShot</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
   <body>
+    <header class="app-chrome">
+      <div class="app-chrome__inner">
+        <div class="brand brand--top">
+          <p class="brand-kicker">bestshot</p>
+          <h1>BestShot</h1>
+        </div>
+        <div class="app-chrome__actions">
+          <div class="dropdown-control">
+            <button id="settings-btn" class="icon-button" title="Settings">
+              <span class="icon-gear">⚙</span>
+            </button>
+            <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
+              <div class="dropdown-header">Display</div>
+              <div class="dropdown-section">
+                <span class="dropdown-label">Media type</span>
+                <div class="media-filter" role="group" aria-label="Media filter">
+                  <button class="toggle active" data-media-filter="all">All</button>
+                  <button class="toggle" data-media-filter="photos">Photos</button>
+                  <button class="toggle" data-media-filter="videos">Videos</button>
+                </div>
+              </div>
+              <div class="dropdown-section">
+                <span class="dropdown-label">Grid size</span>
+                <div class="grid-size-control" role="group" aria-label="Grid size">
+                  <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
+                  <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
+                  <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
+                </div>
+              </div>
+              <div class="dropdown-divider"></div>
+              <button id="theme-toggle-btn">
+                <span class="dropdown-icon" id="theme-icon">🌙</span>
+                <span id="theme-label">Dark mode</span>
+              </button>
+              <button id="shortcuts-btn">
+                <span class="dropdown-icon">⌨</span>
+                Keyboard shortcuts
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="app-toolbar">
+      <div class="app-toolbar__inner">
+        <div class="workspace-actions">
+          <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
+            <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
+          </div>
+
+          <button id="start-compare" class="ghost">Compare</button>
+          <div class="sort-control">
+            <button id="sort-button" class="sort-button">
+              <span id="sort-label">Rank</span>
+              <span class="sort-button__icon">▼</span>
+            </button>
+            <div id="sort-dropdown" class="sort-dropdown" hidden>
+              <button data-sort="rank" class="active">Rank</button>
+              <button data-sort="name">Name (A-Z)</button>
+              <button data-sort="name_desc">Name (Z-A)</button>
+              <button data-sort="date_desc">Date (Newest)</button>
+              <button data-sort="date">Date (Oldest)</button>
+              <button data-sort="size_desc">Size (Largest)</button>
+              <button data-sort="size">Size (Smallest)</button>
+            </div>
+          </div>
+          <div class="upload-actions">
+            <input
+              type="file"
+              id="file-input"
+              multiple
+              hidden
+              accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp"
+            />
+            <button id="browse-files" class="ghost" disabled>Upload</button>
+            <button id="select-mode-btn" class="ghost" disabled title="Toggle selection mode">Select</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="shell">
       <!-- Mobile Album Selector -->
       <div class="mobile-project-bar">

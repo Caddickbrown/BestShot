@@ -85,6 +85,21 @@
               <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
               <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
             </div>
+            
+            <!-- Display Controls (always visible) -->
+            <div class="display-controls">
+              <div class="media-filter" role="group" aria-label="Media filter">
+                <button class="toggle active" data-media-filter="all">All</button>
+                <button class="toggle" data-media-filter="photos">Photos</button>
+                <button class="toggle" data-media-filter="videos">Videos</button>
+              </div>
+              <div class="grid-size-control" role="group" aria-label="Grid size">
+                <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
+                <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
+                <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
+              </div>
+            </div>
+            
             <button id="start-compare" class="ghost">Compare</button>
             <div class="sort-control">
               <button id="sort-button" class="sort-button">
@@ -145,24 +160,6 @@
                 <span class="icon-gear">⚙</span>
               </button>
               <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
-                <div class="dropdown-header">Display</div>
-                <div class="dropdown-section">
-                  <label class="dropdown-label">Show</label>
-                  <div class="media-filter" role="group" aria-label="Media filter">
-                    <button class="toggle active" data-media-filter="all">All</button>
-                    <button class="toggle" data-media-filter="photos">Photos</button>
-                    <button class="toggle" data-media-filter="videos">Videos</button>
-                  </div>
-                </div>
-                <div class="dropdown-section">
-                  <label class="dropdown-label">Grid size</label>
-                  <div class="grid-size-control" role="group" aria-label="Grid size">
-                    <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
-                    <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
-                    <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
-                  </div>
-                </div>
-                <div class="dropdown-divider"></div>
                 <button id="theme-toggle-btn">
                   <span class="dropdown-icon" id="theme-icon">🌙</span>
                   <span id="theme-label">Dark mode</span>

@@ -528,6 +528,106 @@ body {
   color: var(--accent);
 }
 
+/* ============ Mobile Project Bar ============ */
+
+.mobile-project-bar {
+  display: none;
+}
+
+.mobile-project-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.mobile-project-toggle:hover {
+  border-color: var(--accent);
+}
+
+.mobile-project-toggle__label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mobile-project-toggle__icon {
+  font-size: 1.1rem;
+}
+
+.mobile-project-toggle__arrow {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.mobile-project-toggle.open .mobile-project-toggle__arrow {
+  transform: rotate(180deg);
+}
+
+/* Desktop/Mobile visibility helpers */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+/* Projects panel backdrop (mobile) */
+.projects-panel-backdrop {
+  display: none;
+}
+
+/* Panel header for mobile */
+.panel--left__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel--left__header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.panel--left__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-close-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.panel-close-btn:hover {
+  background: var(--danger);
+}
+
 @media (max-width: 1100px) {
   .shell {
     grid-template-columns: 1fr;
@@ -545,22 +645,119 @@ body {
 }
 
 @media (max-width: 680px) {
+  .shell {
+    padding: 1rem;
+    gap: 1rem;
+  }
+  
+  /* Show mobile project bar */
+  .mobile-project-bar {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  
+  /* Hide/show helpers */
+  .desktop-only {
+    display: none !important;
+  }
+  
+  .mobile-only {
+    display: flex !important;
+  }
+  
+  /* Projects panel as slide-out drawer */
   .panel--left {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    border-radius: 0;
+    padding: 1.5rem;
     flex-direction: column;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .panel--left.open {
+    transform: translateY(0);
+  }
+  
+  .panel--left .panel-section {
+    flex: none;
+  }
+  
+  .panel--left .panel-form {
+    flex: none;
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  
+  .projects {
+    max-height: none;
+    flex: 1;
+  }
+  
+  /* Backdrop */
+  .projects-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 999;
+    backdrop-filter: blur(4px);
+  }
+  
+  .projects-panel-backdrop[hidden] {
+    display: none;
+  }
+  
+  .projects-panel-backdrop:not([hidden]) {
+    display: block;
   }
 
   .workspace-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .workspace-header {
     flex-direction: column;
-    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .workspace-header > div:first-child {
+    width: 100%;
   }
 
   .upload-actions {
+    width: auto;
+  }
+  
+  .search-box {
     width: 100%;
-    justify-content: flex-start;
+    order: -1;
+  }
+  
+  .search-box input {
+    width: 100%;
   }
 
   .images-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+  
+  /* Smaller project description area on mobile */
+  .project-note {
+    padding: 0.75rem;
+  }
+  
+  .project-note textarea {
+    min-height: 60px;
   }
 }
 

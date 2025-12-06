@@ -13,14 +13,32 @@
   </head>
   <body>
     <div class="shell">
-      <aside class="panel panel--left">
-        <div class="brand">
+      <!-- Mobile Project Selector -->
+      <div class="mobile-project-bar">
+        <button id="mobile-project-toggle" class="mobile-project-toggle">
+          <span class="mobile-project-toggle__label">
+            <span class="mobile-project-toggle__icon">📁</span>
+            <span id="mobile-project-name">Select project</span>
+          </span>
+          <span class="mobile-project-toggle__arrow">▼</span>
+        </button>
+      </div>
+
+      <aside class="panel panel--left" id="projects-panel">
+        <div class="panel--left__header mobile-only">
+          <h2>Projects</h2>
+          <div class="panel--left__header-actions">
+            <button id="refresh-projects-mobile" class="text-button" aria-label="Reload projects">↺</button>
+            <button id="close-projects-panel" class="panel-close-btn" aria-label="Close">×</button>
+          </div>
+        </div>
+        <div class="brand desktop-only">
           <p class="brand-kicker">bestshot</p>
           <h1>Darkroom</h1>
           <p class="brand-copy">Drop, rank, and file your selects in a dockerized studio.</p>
         </div>
         <div class="panel-section">
-          <div class="panel-head">
+          <div class="panel-head desktop-only">
             <h2>Projects</h2>
             <button id="refresh-projects" class="text-button" aria-label="Reload projects">
               ↺ refresh
@@ -51,6 +69,9 @@
           <button type="submit" class="primary">Spin up</button>
         </form>
       </aside>
+      
+      <!-- Mobile backdrop for projects panel -->
+      <div id="projects-panel-backdrop" class="projects-panel-backdrop" hidden></div>
 
       <section class="panel panel--right">
         <header class="workspace-header">

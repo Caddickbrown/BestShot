@@ -11,6 +11,15 @@ const dropOverlay = document.getElementById("drop-overlay");
 const browseFilesBtn = document.getElementById("browse-files");
 const fileInput = document.getElementById("file-input");
 const deleteProjectBtn = document.getElementById("delete-project");
+
+// Mobile project panel elements
+const mobileProjectToggle = document.getElementById("mobile-project-toggle");
+const mobileProjectName = document.getElementById("mobile-project-name");
+const projectsPanel = document.getElementById("projects-panel");
+const projectsPanelBackdrop = document.getElementById("projects-panel-backdrop");
+const closeProjectsPanelBtn = document.getElementById("close-projects-panel");
+const refreshProjectsMobileBtn = document.getElementById("refresh-projects-mobile");
+
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
 const imageTemplate = document.getElementById("image-card-template");
@@ -484,6 +493,8 @@ async function selectProject(name) {
   exitSelectionMode();
   renderProjects();
   updateURL();
+  updateMobileProjectName();
+  closeMobileProjectsPanel();
   await loadProjectState();
 }
 
@@ -493,6 +504,7 @@ async function selectAllProjects() {
   exitSelectionMode();
   renderProjects();
   updateURL();
+  updateMobileProjectName();
   await loadAllProjectsState();
 }
 
@@ -2433,6 +2445,7 @@ newProjectForm.addEventListener("submit", async (event) => {
 projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
+refreshProjectsMobileBtn.addEventListener("click", fetchProjects);
 
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));
@@ -2481,7 +2494,46 @@ fileInput.addEventListener("change", () => {
   }
 });
 
-allProjectsOption.addEventListener("click", selectAllProjects);
+allProjectsOption.addEventListener("click", () => {
+  closeMobileProjectsPanel();
+  selectAllProjects();
+});
+
+// ============ Mobile Projects Panel ============
+function openMobileProjectsPanel() {
+  projectsPanel.classList.add("open");
+  projectsPanelBackdrop.hidden = false;
+  mobileProjectToggle.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeMobileProjectsPanel() {
+  projectsPanel.classList.remove("open");
+  projectsPanelBackdrop.hidden = true;
+  mobileProjectToggle.classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+function updateMobileProjectName() {
+  if (state.isAllProjects) {
+    mobileProjectName.textContent = "All Projects";
+  } else if (state.currentProject) {
+    mobileProjectName.textContent = state.currentProject;
+  } else {
+    mobileProjectName.textContent = "Select project";
+  }
+}
+
+mobileProjectToggle.addEventListener("click", () => {
+  if (projectsPanel.classList.contains("open")) {
+    closeMobileProjectsPanel();
+  } else {
+    openMobileProjectsPanel();
+  }
+});
+
+closeProjectsPanelBtn.addEventListener("click", closeMobileProjectsPanel);
+projectsPanelBackdrop.addEventListener("click", closeMobileProjectsPanel);
 
 // Drop overlay text elements
 const dropOverlayText = document.getElementById("drop-overlay-text");
@@ -2532,6 +2584,7 @@ const initialProject = restoreStateFromURL();
 disableWorkspace();
 updateActionStates();
 updateSortUI();
+updateMobileProjectName();
 fetchProjects(initialProject);
 
 // Handle browser back/forward navigation

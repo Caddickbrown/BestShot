@@ -182,6 +182,7 @@ const exitComparisonBtn = document.getElementById("exit-comparison");
 const compareLeft = document.getElementById("compare-left");
 const compareRight = document.getElementById("compare-right");
 const comparisonSkipBtn = document.getElementById("comparison-skip");
+const continueLaterBtn = document.getElementById("continue-later");
 
 // Comparison results elements
 const comparisonResults = document.getElementById("comparison-results");
@@ -2638,11 +2639,18 @@ function showCurrentPair() {
   }
   
   const [left, right] = nextPair;
-  const { comparisonsAsked, comparisonsSkipped } = state.comparison;
+  const { comparisonsAsked, comparisonsSkipped, allPairs } = state.comparison;
+  
+  // Calculate percentage complete
+  const totalComparisons = allPairs.length;
+  const completedComparisons = comparisonsAsked + comparisonsSkipped;
+  const percentComplete = totalComparisons > 0 
+    ? Math.round((completedComparisons / totalComparisons) * 100)
+    : 0;
   
   const statusText = comparisonsSkipped > 0
-    ? `Comparison ${comparisonsAsked + 1} (${comparisonsSkipped} inferred)`
-    : `Comparison ${comparisonsAsked + 1}`;
+    ? `${percentComplete}% complete • Comparison ${comparisonsAsked + 1} (${comparisonsSkipped} inferred)`
+    : `${percentComplete}% complete • Comparison ${comparisonsAsked + 1}`;
   comparisonProgress.textContent = statusText;
   
   const leftImg = compareLeft.querySelector("img");
@@ -2839,6 +2847,83 @@ function discardRanking() {
   closeComparisonResults();
 }
 
+async function savePartialRanking() {
+  if (!state.comparison) return;
+  
+  const { scores, itemsToCompare, comparisonScope, comparisonsAsked } = state.comparison;
+  
+  // Don't save if no comparisons have been made
+  if (comparisonsAsked === 0) {
+    if (!confirm("No comparisons have been made yet. Exit without saving?")) {
+      return;
+    }
+    exitComparisonMode();
+    return;
+  }
+  
+  // Rank items by their current scores
+  const ranked = Object.entries(scores)
+    .map(([name, score]) => ({ name, score }))
+    .sort((a, b) => b.score - a.score);
+  
+  let finalOrder;
+  
+  if (comparisonScope === "unranked") {
+    // Merge with existing ranked items
+    const existingRanked = state.images.filter((img) => img.isRanked);
+    existingRanked.sort((a, b) => a.rank - b.rank);
+    
+    // Get newly ranked items (those that were unranked before)
+    const newlyRanked = ranked
+      .map((r) => {
+        const media = state.images.find((m) => m.name === r.name);
+        return media && !media.isRanked ? { media, score: r.score } : null;
+      })
+      .filter(Boolean);
+    
+    // Insert newly ranked items into existing ranking based on their scores
+    // For now, append them at the end - they can be refined by continuing later
+    finalOrder = [
+      ...existingRanked.map((m) => m.name),
+      ...newlyRanked.map((r) => r.media.name),
+    ];
+  } else {
+    // Replace all rankings with current scores
+    finalOrder = ranked.map((r) => r.name);
+  }
+  
+  // Update state.images with new rankings
+  const reordered = finalOrder
+    .map((name) => state.images.find((m) => m.name === name))
+    .filter(Boolean);
+  
+  // Preserve items not in the comparison (shouldn't happen in "all" mode, but safe to handle)
+  const notInComparison = state.images.filter(
+    (img) => !itemsToCompare.some((item) => item.name === img.name)
+  );
+  
+  // Combine: ranked items first, then unranked items not in comparison
+  const allItems = [
+    ...reordered.map((m, idx) => {
+      m.isRanked = true;
+      m.rank = idx + 1;
+      return m;
+    }),
+    ...notInComparison,
+  ];
+  
+  state.images = allItems;
+  
+  // Save to server
+  await saveOrder();
+  
+  // Exit comparison mode
+  exitComparisonMode();
+  
+  // Reload project state to reflect changes
+  await loadProjectState();
+}
+
 compareLeft.addEventListener("click", () => selectWinner("left"));
 compareRight.addEventListener("click", () => selectWinner("right"));
 comparisonSkipBtn.addEventListener("click", () => selectWinner("skip"));
@@ -2846,6 +2931,7 @@ exitComparisonBtn.addEventListener("click", exitComparisonMode);
 applyRankingBtn.addEventListener("click", applyRanking);
 discardRankingBtn.addEventListener("click", discardRanking);
 resultsBackdrop.addEventListener("click", discardRanking);
+continueLaterBtn.addEventListener("click", savePartialRanking);
 
 // ============ Global Keyboard Handler ============
 document.addEventListener("keydown", (event) => {

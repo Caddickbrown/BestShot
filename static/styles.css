@@ -1645,6 +1645,52 @@ body {
 
 .comparison-mode__actions {
   margin-top: 2rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.comparison-mode__shortcuts {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.comparison-mode__shortcuts-label {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.comparison-mode__shortcuts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.comparison-mode__shortcuts-list span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.comparison-mode__shortcuts-list .kbd {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
 }
 
 /* ============ Comparison Results Styles ============ */

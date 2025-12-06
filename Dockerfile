@@ -20,4 +20,5 @@ ENV PORT=18473
 
 EXPOSE 18473
 
-CMD ["python", "app/main.py"]
+# Use gunicorn for production
+CMD ["gunicorn", "-b", "0.0.0.0:18473", "-w", "4", "--timeout", "120", "app.main:app"]

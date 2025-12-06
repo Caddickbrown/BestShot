@@ -1,3 +1,4 @@
+// ============ DOM Elements ============
 const projectsList = document.getElementById("projects-list");
 const newProjectForm = document.getElementById("new-project-form");
 const projectNameInput = document.getElementById("project-name");
@@ -23,6 +24,54 @@ const startCompareBtn = document.getElementById("start-compare");
 const mediaFilterButtons = document.querySelectorAll("[data-media-filter]");
 const searchInput = document.getElementById("search-input");
 const clearSearchBtn = document.getElementById("clear-search");
+
+// Sort controls
+const sortButton = document.getElementById("sort-button");
+const sortLabel = document.getElementById("sort-label");
+const sortDropdown = document.getElementById("sort-dropdown");
+const sortOptions = sortDropdown.querySelectorAll("[data-sort]");
+
+// Grid size controls
+const gridSizeButtons = document.querySelectorAll("[data-grid-size]");
+
+// Selection mode
+const selectModeBtn = document.getElementById("select-mode-btn");
+const bulkActionsBar = document.getElementById("bulk-actions-bar");
+const bulkCount = document.getElementById("bulk-count");
+const bulkTagBtn = document.getElementById("bulk-tag-btn");
+const bulkDownloadBtn = document.getElementById("bulk-download-btn");
+const bulkDeleteBtn = document.getElementById("bulk-delete-btn");
+const bulkCancelBtn = document.getElementById("bulk-cancel-btn");
+
+// Export controls
+const exportBtn = document.getElementById("export-btn");
+const exportDropdown = document.getElementById("export-dropdown");
+const exportOptions = exportDropdown.querySelectorAll("[data-export]");
+
+// Theme toggle
+const themeToggle = document.getElementById("theme-toggle");
+
+// Help button
+const helpBtn = document.getElementById("help-btn");
+const shortcutsModal = document.getElementById("shortcuts-modal");
+const closeShortcutsBtn = document.getElementById("close-shortcuts");
+const shortcutsBackdrop = shortcutsModal.querySelector(".shortcuts-modal__backdrop");
+
+// Upload progress
+const uploadProgress = document.getElementById("upload-progress");
+const uploadProgressStatus = document.getElementById("upload-progress-status");
+const uploadProgressFill = document.getElementById("upload-progress-fill");
+
+// Duplicate modal
+const duplicateModal = document.getElementById("duplicate-modal");
+const duplicateList = document.getElementById("duplicate-list");
+const uploadSkipDuplicatesBtn = document.getElementById("upload-skip-duplicates");
+const uploadAllAnywayBtn = document.getElementById("upload-all-anyway");
+const cancelUploadBtn = document.getElementById("cancel-upload");
+const duplicateBackdrop = duplicateModal.querySelector(".duplicate-modal__backdrop");
+
+// Gallery loading overlay
+const galleryLoading = document.getElementById("gallery-loading");
 
 // Comparison selection modal elements
 const comparisonSelection = document.getElementById("comparison-selection");
@@ -77,7 +126,15 @@ const viewerBackdrop = mediaViewerModal.querySelector(".media-viewer-modal__back
 const viewerPrevBtn = mediaViewerModal.querySelector(".media-viewer-modal__prev");
 const viewerNextBtn = mediaViewerModal.querySelector(".media-viewer-modal__next");
 const viewerDownloadBtn = document.getElementById("viewer-download-btn");
+const viewerCommentInput = document.getElementById("viewer-comment-input");
+const viewerExifPanel = document.getElementById("viewer-exif");
+const exifGrid = document.getElementById("exif-grid");
 const downloadAllBtn = document.getElementById("download-all");
+
+// Slideshow controls
+const slideshowControls = document.getElementById("slideshow-controls");
+const slideshowToggle = document.getElementById("slideshow-toggle");
+const slideshowTimer = document.getElementById("slideshow-timer");
 
 // Comparison mode elements
 const comparisonMode = document.getElementById("comparison-mode");
@@ -94,31 +151,60 @@ const applyRankingBtn = document.getElementById("apply-ranking");
 const discardRankingBtn = document.getElementById("discard-ranking");
 const resultsBackdrop = comparisonResults.querySelector(".comparison-results__backdrop");
 
+// ============ Application State ============
 const state = {
   projects: [],
   currentProject: null,
-  isAllProjects: false, // Whether viewing all projects combined
+  isAllProjects: false,
   images: [],
   description: "",
-  mediaFilter: "all", // 'all', 'photos', or 'videos'
+  mediaFilter: "all",
   searchQuery: "",
-  viewerIndex: -1, // Current index in fullscreen viewer
-  comparison: null, // Comparison mode state
-  comparisonScope: "all", // 'all' or 'unranked'
-  pendingFiles: null, // Files waiting to be uploaded (for project selection modal)
+  sortBy: "rank",
+  gridSize: "medium",
+  viewerIndex: -1,
+  comparison: null,
+  comparisonScope: "all",
+  pendingFiles: null,
+  isSelectionMode: false,
+  selectedItems: new Set(),
+  isSlideshow: false,
+  slideshowInterval: null,
+  slideshowDelay: 3000,
+  theme: localStorage.getItem("theme") || "dark",
+  pendingUploadFiles: null, // For duplicate detection flow
 };
 
 // Touch drag-and-drop state
 let touchDragState = null;
 
-// ============ URL State Persistence ============
-// Enables resuming on another device by sharing/bookmarking the URL
+// ============ Theme Management ============
+function initTheme() {
+  if (state.theme === "light") {
+    document.body.classList.add("light-theme");
+    themeToggle.textContent = "☀️";
+  } else {
+    document.body.classList.remove("light-theme");
+    themeToggle.textContent = "🌙";
+  }
+}
 
+function toggleTheme() {
+  state.theme = state.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", state.theme);
+  initTheme();
+}
+
+themeToggle.addEventListener("click", toggleTheme);
+initTheme();
+
+// ============ URL State Persistence ============
 function getStateFromURL() {
   const params = new URLSearchParams(window.location.search);
   return {
     project: params.get("project"),
     media: params.get("media"),
+    sort: params.get("sort"),
   };
 }
 
@@ -131,6 +217,9 @@ function updateURL() {
   }
   if (state.mediaFilter && state.mediaFilter !== "all") {
     params.set("media", state.mediaFilter);
+  }
+  if (state.sortBy && state.sortBy !== "rank") {
+    params.set("sort", state.sortBy);
   }
   const newURL = params.toString()
     ? `${window.location.pathname}?${params.toString()}`
@@ -146,10 +235,106 @@ function restoreStateFromURL() {
       button.classList.toggle("active", button.dataset.mediaFilter === state.mediaFilter);
     });
   }
-  // Return special "all" value or project name
+  if (urlState.sort) {
+    state.sortBy = urlState.sort;
+    updateSortUI();
+  }
   return urlState.project;
 }
 
+// ============ Sort Controls ============
+function updateSortUI() {
+  const labels = {
+    rank: "Rank",
+    name: "Name (A-Z)",
+    name_desc: "Name (Z-A)",
+    date: "Date (Oldest)",
+    date_desc: "Date (Newest)",
+    size: "Size (Smallest)",
+    size_desc: "Size (Largest)",
+  };
+  sortLabel.textContent = labels[state.sortBy] || "Rank";
+  sortOptions.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.sort === state.sortBy);
+  });
+}
+
+sortButton.addEventListener("click", (e) => {
+  e.stopPropagation();
+  sortDropdown.hidden = !sortDropdown.hidden;
+});
+
+sortOptions.forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    state.sortBy = btn.dataset.sort;
+    updateSortUI();
+    sortDropdown.hidden = true;
+    updateURL();
+    await loadProjectState();
+  });
+});
+
+document.addEventListener("click", () => {
+  sortDropdown.hidden = true;
+  exportDropdown.hidden = true;
+});
+
+// ============ Grid Size Controls ============
+function updateGridSize() {
+  imagesGrid.classList.remove("grid-small", "grid-medium", "grid-large");
+  imagesGrid.classList.add(`grid-${state.gridSize}`);
+  gridSizeButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.gridSize === state.gridSize);
+  });
+}
+
+gridSizeButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.gridSize = btn.dataset.gridSize;
+    localStorage.setItem("gridSize", state.gridSize);
+    updateGridSize();
+  });
+});
+
+// Restore grid size from localStorage
+const savedGridSize = localStorage.getItem("gridSize");
+if (savedGridSize) {
+  state.gridSize = savedGridSize;
+}
+
+// ============ Export Controls ============
+exportBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  exportDropdown.hidden = !exportDropdown.hidden;
+});
+
+exportOptions.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const format = btn.dataset.export;
+    exportDropdown.hidden = true;
+    if (state.currentProject) {
+      const url = `/api/projects/${encodeURIComponent(state.currentProject)}/export?format=${format}`;
+      window.open(url, "_blank");
+    }
+  });
+});
+
+// ============ Keyboard Shortcuts Modal ============
+function openShortcutsModal() {
+  shortcutsModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeShortcutsModal() {
+  shortcutsModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+helpBtn.addEventListener("click", openShortcutsModal);
+closeShortcutsBtn.addEventListener("click", closeShortcutsModal);
+shortcutsBackdrop.addEventListener("click", closeShortcutsModal);
+
+// ============ Fetch Projects ============
 async function fetchProjects(initialProjectFromURL = null) {
   const res = await fetch("/api/projects");
   if (!res.ok) {
@@ -169,7 +354,6 @@ async function fetchProjects(initialProjectFromURL = null) {
     return;
   }
 
-  // Handle "all" projects from URL
   if (initialProjectFromURL === "all") {
     if (!state.isAllProjects) {
       await selectAllProjects();
@@ -177,14 +361,12 @@ async function fetchProjects(initialProjectFromURL = null) {
     return;
   }
 
-  // Priority: URL param > current selection > first project
   let targetProject = null;
   if (initialProjectFromURL && state.projects.some((p) => p.name === initialProjectFromURL)) {
     targetProject = initialProjectFromURL;
   } else if (state.currentProject && state.projects.some((p) => p.name === state.currentProject)) {
     targetProject = state.currentProject;
   } else if (state.isAllProjects) {
-    // Stay in All Projects view
     return;
   } else {
     targetProject = state.projects[0].name;
@@ -198,7 +380,6 @@ async function fetchProjects(initialProjectFromURL = null) {
 function renderProjects() {
   projectsList.innerHTML = "";
   
-  // Update All Projects option state
   allProjectsOption.classList.toggle("active", state.isAllProjects);
   
   if (!state.projects.length) {
@@ -240,6 +421,7 @@ function renderProjects() {
 async function selectProject(name) {
   state.currentProject = name;
   state.isAllProjects = false;
+  exitSelectionMode();
   renderProjects();
   updateURL();
   await loadProjectState();
@@ -248,14 +430,17 @@ async function selectProject(name) {
 async function selectAllProjects() {
   state.currentProject = null;
   state.isAllProjects = true;
+  exitSelectionMode();
   renderProjects();
   updateURL();
   await loadAllProjectsState();
 }
 
 async function loadAllProjectsState() {
-  const url = `/api/all-media?media=${state.mediaFilter}`;
+  showGalleryLoading(true);
+  const url = `/api/all-media?media=${state.mediaFilter}&sort=${state.sortBy}`;
   const res = await fetch(url);
+  showGalleryLoading(false);
   if (!res.ok) {
     alert("Unable to load media");
     return;
@@ -265,7 +450,6 @@ async function loadAllProjectsState() {
   state.description = "";
   workspaceTitle.textContent = "All Projects";
   
-  // Update meta text based on media types
   const imageCount = state.images.filter((m) => m.type === "image").length;
   const videoCount = state.images.filter((m) => m.type === "video").length;
   const parts = [];
@@ -288,8 +472,10 @@ async function loadProjectState() {
     disableWorkspace();
     return;
   }
-  const url = `/api/projects/${encodeURIComponent(state.currentProject)}/images?media=${state.mediaFilter}`;
+  showGalleryLoading(true);
+  const url = `/api/projects/${encodeURIComponent(state.currentProject)}/images?media=${state.mediaFilter}&sort=${state.sortBy}`;
   const res = await fetch(url);
+  showGalleryLoading(false);
   if (!res.ok) {
     alert("Unable to load project");
     return;
@@ -299,7 +485,6 @@ async function loadProjectState() {
   state.description = data.description || "";
   workspaceTitle.textContent = data.project;
   
-  // Update meta text based on media types
   const imageCount = state.images.filter((m) => m.type === "image").length;
   const videoCount = state.images.filter((m) => m.type === "video").length;
   const parts = [];
@@ -313,17 +498,19 @@ async function loadProjectState() {
   renderImages();
 }
 
+function showGalleryLoading(show) {
+  galleryLoading.hidden = !show;
+}
+
 function getFilteredImages() {
   if (!state.searchQuery.trim()) {
     return state.images;
   }
   const query = state.searchQuery.toLowerCase().trim();
   return state.images.filter((media) => {
-    // Match filename
     if (media.name.toLowerCase().includes(query)) {
       return true;
     }
-    // Match tags
     if (media.tags && media.tags.some((tag) => tag.toLowerCase().includes(query))) {
       return true;
     }
@@ -334,6 +521,7 @@ function getFilteredImages() {
 function renderImages() {
   imagesGrid.innerHTML = "";
   imagesGrid.classList.add("gallery");
+  updateGridSize();
 
   const filteredImages = getFilteredImages();
 
@@ -381,6 +569,20 @@ function renderImages() {
     card.dataset.isRanked = media.isRanked;
     card.classList.add("is-gallery");
     
+    // Selection mode
+    if (state.isSelectionMode) {
+      card.classList.add("selectable");
+      if (state.selectedItems.has(media.name)) {
+        card.classList.add("selected");
+      }
+      // Add checkbox
+      const checkbox = document.createElement("div");
+      checkbox.className = "selection-checkbox";
+      checkbox.textContent = "✓";
+      card.style.position = "relative";
+      card.appendChild(checkbox);
+    }
+    
     const rank = card.querySelector(".rank-pill");
     if (media.isRanked) {
       rank.textContent = `#${media.rank}`;
@@ -406,7 +608,6 @@ function renderImages() {
     if (isVideo) {
       const video = card.querySelector("video");
       video.src = `${media.url}?v=${Date.now()}`;
-      // Load first frame as thumbnail
       video.addEventListener("loadeddata", () => {
         video.currentTime = 0.1;
       });
@@ -414,22 +615,33 @@ function renderImages() {
       const playButton = card.querySelector(".play-button");
       playButton.addEventListener("click", (event) => {
         event.stopPropagation();
-        openMediaViewer(index);
+        if (!state.isSelectionMode) {
+          openMediaViewer(index);
+        }
       });
     } else {
       const img = card.querySelector("img");
-      img.src = `${media.url}?v=${Date.now()}`;
+      // Use thumbnail if available
+      const imgUrl = media.thumbUrl || media.url;
+      img.src = `${imgUrl}?v=${Date.now()}`;
       img.alt = media.name;
     }
 
-    // Click handler for fullscreen view
+    // Click handler
     card.style.cursor = "pointer";
     card.addEventListener("click", (event) => {
-      // Don't open viewer if clicking on tag controls, drag handle, or delete button
       if (event.target.closest(".image-card__tags")) return;
       if (event.target.closest(".drag-handle")) return;
       if (event.target.closest(".delete-media-btn")) return;
-      openMediaViewer(index);
+      if (event.target.closest(".download-media-btn")) return;
+      
+      if (state.isSelectionMode) {
+        toggleItemSelection(media.name);
+        card.classList.toggle("selected", state.selectedItems.has(media.name));
+        updateBulkActionsBar();
+      } else {
+        openMediaViewer(index);
+      }
     });
 
     // Download button handler
@@ -446,7 +658,6 @@ function renderImages() {
     const deleteBtn = card.querySelector(".delete-media-btn");
     deleteBtn.addEventListener("click", (event) => {
       event.stopPropagation();
-      // Get project name - in All Projects view, it's stored on the media item
       const projectName = media.project || state.currentProject;
       if (projectName) {
         deleteMediaFile(projectName, media.name);
@@ -456,14 +667,12 @@ function renderImages() {
     // Render tags
     renderCardTags(card, media);
 
-    // Always enable drag-drop unless searching or in All Projects view
-    const canDrag = !state.searchQuery && !state.isAllProjects;
+    // Drag-drop for reordering (only when not in selection mode and not searching)
+    const canDrag = !state.searchQuery && !state.isAllProjects && !state.isSelectionMode;
     card.draggable = canDrag;
     if (canDrag) {
-      // Mouse drag-and-drop events
       card.addEventListener("dragstart", (event) => {
         event.dataTransfer.effectAllowed = "move";
-        // Use a custom type to identify card drags vs file drags
         event.dataTransfer.setData("application/x-gallery-card", originalIndex.toString());
         card.classList.add("dragging");
         card.dataset.dragIndex = originalIndex;
@@ -474,8 +683,6 @@ function renderImages() {
       });
 
       card.addEventListener("dragover", (event) => {
-        // Only accept drop for card reordering, not for file drops
-        // This lets file drops bubble to the gallery drop zone
         const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
         if (isCardDrag) {
           event.preventDefault();
@@ -491,11 +698,8 @@ function renderImages() {
       card.addEventListener("drop", (event) => {
         card.classList.remove("over");
         
-        // Only handle card reordering, let file drops bubble to gallery
         const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
         if (!isCardDrag) {
-          // File drop - prevent default browser behavior (which tries to navigate to the file)
-          // then let the event bubble to the gallery handler for processing
           event.preventDefault();
           return;
         }
@@ -508,7 +712,7 @@ function renderImages() {
         reorderImages(from, to);
       });
 
-      // Touch drag-and-drop events (for mobile/tablet)
+      // Touch drag-and-drop
       card.addEventListener("touchstart", handleTouchStart, { passive: false });
       card.addEventListener("touchmove", handleTouchMove, { passive: false });
       card.addEventListener("touchend", handleTouchEnd, { passive: false });
@@ -520,6 +724,141 @@ function renderImages() {
   updateActionStates();
 }
 
+// ============ Selection Mode ============
+function enterSelectionMode() {
+  state.isSelectionMode = true;
+  state.selectedItems.clear();
+  selectModeBtn.textContent = "Cancel";
+  selectModeBtn.classList.add("active");
+  renderImages();
+  updateBulkActionsBar();
+}
+
+function exitSelectionMode() {
+  state.isSelectionMode = false;
+  state.selectedItems.clear();
+  selectModeBtn.textContent = "Select";
+  selectModeBtn.classList.remove("active");
+  bulkActionsBar.hidden = true;
+  renderImages();
+}
+
+function toggleItemSelection(name) {
+  if (state.selectedItems.has(name)) {
+    state.selectedItems.delete(name);
+  } else {
+    state.selectedItems.add(name);
+  }
+}
+
+function updateBulkActionsBar() {
+  const count = state.selectedItems.size;
+  bulkActionsBar.hidden = count === 0;
+  bulkCount.textContent = `${count} selected`;
+}
+
+selectModeBtn.addEventListener("click", () => {
+  if (state.isSelectionMode) {
+    exitSelectionMode();
+  } else {
+    enterSelectionMode();
+  }
+});
+
+bulkCancelBtn.addEventListener("click", exitSelectionMode);
+
+bulkDeleteBtn.addEventListener("click", async () => {
+  if (state.selectedItems.size === 0) return;
+  if (!confirm(`Delete ${state.selectedItems.size} selected file(s)? This cannot be undone.`)) return;
+  
+  const projectName = state.currentProject;
+  if (!projectName) return;
+  
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/batch-delete`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files: Array.from(state.selectedItems) }),
+  });
+  
+  if (!res.ok) {
+    alert("Failed to delete files");
+    return;
+  }
+  
+  exitSelectionMode();
+  await loadProjectState();
+  await fetchProjects();
+});
+
+bulkDownloadBtn.addEventListener("click", async () => {
+  if (state.selectedItems.size === 0) return;
+  
+  const projectName = state.currentProject;
+  if (!projectName) return;
+  
+  // Create a form to POST and download
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `/api/projects/${encodeURIComponent(projectName)}/download-selected`;
+  form.style.display = "none";
+  
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "files";
+  input.value = JSON.stringify(Array.from(state.selectedItems));
+  form.appendChild(input);
+  
+  document.body.appendChild(form);
+  
+  // Use fetch to trigger download
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/download-selected`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files: Array.from(state.selectedItems) }),
+  });
+  
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${projectName}_selected.zip`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } else {
+    alert("Failed to download files");
+  }
+  
+  document.body.removeChild(form);
+});
+
+bulkTagBtn.addEventListener("click", async () => {
+  if (state.selectedItems.size === 0) return;
+  
+  const tag = prompt("Enter tag to add to selected items:");
+  if (!tag || !tag.trim()) return;
+  
+  const projectName = state.currentProject;
+  if (!projectName) return;
+  
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/batch-tags`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      files: Array.from(state.selectedItems),
+      addTags: [tag.trim()],
+    }),
+  });
+  
+  if (!res.ok) {
+    alert("Failed to add tag");
+    return;
+  }
+  
+  await loadProjectState();
+});
+
+// ============ Tag Functions ============
 function renderCardTags(card, media) {
   const tagsContainer = card.querySelector(".tags-list");
   const addTagBtn = card.querySelector(".add-tag-btn");
@@ -527,10 +866,8 @@ function renderCardTags(card, media) {
   const tagInput = card.querySelector(".tag-input");
   const tagsSection = card.querySelector(".image-card__tags");
   
-  // Always show tags UI
   tagsSection.hidden = false;
 
-  // Render existing tags
   tagsContainer.innerHTML = "";
   if (media.tags && media.tags.length) {
     media.tags.forEach((tag) => {
@@ -545,7 +882,6 @@ function renderCardTags(card, media) {
     });
   }
 
-  // Add tag button
   addTagBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     tagInputWrapper.hidden = false;
@@ -553,7 +889,6 @@ function renderCardTags(card, media) {
     tagInput.focus();
   });
 
-  // Tag input handling
   tagInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -590,7 +925,6 @@ async function addTag(filename, tag) {
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
   
-  // Use media's project property (in All Projects view) or current project
   const projectName = media.project || state.currentProject;
   if (!projectName) return;
 
@@ -606,7 +940,6 @@ async function removeTag(filename, tag) {
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
   
-  // Use media's project property (in All Projects view) or current project
   const projectName = media.project || state.currentProject;
   if (!projectName) return;
 
@@ -618,7 +951,6 @@ async function removeTag(filename, tag) {
 function downloadMediaFile(projectName, filename) {
   if (!projectName) return;
   
-  // Create a temporary link and trigger download
   const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/files/${encodeURIComponent(filename)}/download`;
   const link = document.createElement("a");
   link.href = downloadUrl;
@@ -631,7 +963,6 @@ function downloadMediaFile(projectName, filename) {
 async function downloadProject(projectName) {
   if (!projectName) return;
   
-  // Trigger the ZIP download
   const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/download`;
   const link = document.createElement("a");
   link.href = downloadUrl;
@@ -658,7 +989,6 @@ async function deleteMediaFile(projectName, filename) {
     return;
   }
   
-  // Reload the current view
   if (state.isAllProjects) {
     await loadAllProjectsState();
     await fetchProjects();
@@ -686,7 +1016,6 @@ async function updateMediaTags(projectName, filename, tags) {
   }
 
   const data = await res.json();
-  // Update local state
   const media = state.images.find((m) => m.name === filename);
   if (media) {
     media.tags = data.tags;
@@ -698,29 +1027,23 @@ async function reorderImages(from, to) {
   if (Number.isNaN(from) || Number.isNaN(to) || from === to) {
     return;
   }
-  // Bounds check to prevent unexpected behavior
   if (from < 0 || from >= state.images.length || to < 0 || to >= state.images.length) {
     return;
   }
-  // Don't allow reordering in All Projects view
   if (state.isAllProjects) {
     return;
   }
   const [moved] = state.images.splice(from, 1);
   state.images.splice(to, 0, moved);
   renderImages();
-  // Auto-save the new order
   await saveOrder();
 }
 
 // ============ Touch Drag-and-Drop Support ============
-// Enables ranking on mobile devices (phones/tablets)
-
 function handleTouchStart(event) {
   const card = event.currentTarget;
   const touch = event.touches[0];
 
-  // Allow some time to determine if this is a scroll or drag
   touchDragState = {
     card: card,
     startX: touch.clientX,
@@ -741,13 +1064,11 @@ function handleTouchMove(event) {
   const deltaX = Math.abs(touch.clientX - touchDragState.startX);
   const deltaY = Math.abs(touch.clientY - touchDragState.startY);
 
-  // Start dragging after moving beyond threshold
   if (!touchDragState.isDragging) {
     if (deltaX > touchDragState.scrollThreshold || deltaY > touchDragState.scrollThreshold) {
       touchDragState.isDragging = true;
       touchDragState.card.classList.add("dragging");
 
-      // Create a visual clone that follows the finger
       const rect = touchDragState.card.getBoundingClientRect();
       const clone = touchDragState.card.cloneNode(true);
       clone.classList.add("touch-drag-clone");
@@ -770,18 +1091,16 @@ function handleTouchMove(event) {
   }
 
   if (touchDragState.isDragging) {
-    event.preventDefault(); // Prevent scrolling while dragging
+    event.preventDefault();
 
     touchDragState.currentX = touch.clientX;
     touchDragState.currentY = touch.clientY;
 
-    // Move the clone
     if (touchDragState.clone) {
       touchDragState.clone.style.left = `${touch.clientX - touchDragState.offsetX}px`;
       touchDragState.clone.style.top = `${touch.clientY - touchDragState.offsetY}px`;
     }
 
-    // Highlight the card under the touch point
     const allCards = imagesGrid.querySelectorAll(".image-card");
     allCards.forEach((c) => c.classList.remove("over"));
 
@@ -800,7 +1119,6 @@ function handleTouchEnd(event) {
 
   const { card, isDragging, clone, index } = touchDragState;
 
-  // Clean up the clone
   if (clone) {
     clone.remove();
   }
@@ -808,7 +1126,6 @@ function handleTouchEnd(event) {
   card.classList.remove("dragging");
 
   if (isDragging) {
-    // Find the card we dropped on
     const allCards = imagesGrid.querySelectorAll(".image-card");
     allCards.forEach((c) => c.classList.remove("over"));
 
@@ -829,6 +1146,7 @@ function handleTouchEnd(event) {
   touchDragState = null;
 }
 
+// ============ Workspace State ============
 function disableWorkspace() {
   galleryDropZone.classList.add("disabled");
   workspaceTitle.textContent = "Select a project";
@@ -853,13 +1171,15 @@ function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
   const hasMedia = state.images.length > 0;
-  browseFilesBtn.disabled = !hasProject; // Can't upload in All Projects view
+  browseFilesBtn.disabled = !hasProject;
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
   editProjectNameBtn.hidden = !hasProject; // Show edit button only when a project is selected
-  downloadAllBtn.disabled = !hasProject || !hasMedia; // Need project with files
+  downloadAllBtn.disabled = !hasProject || !hasMedia;
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
+  selectModeBtn.disabled = !hasProject || !hasMedia;
+  exportBtn.disabled = !hasProject;
 }
 
 async function createProject(name, description) {
@@ -880,41 +1200,173 @@ async function createProject(name, description) {
   await selectProject(created.name);
 }
 
-async function uploadFiles(files) {
+// ============ Upload with Progress & Duplicate Detection ============
+async function uploadFiles(files, skipDuplicateCheck = false) {
   if (!state.currentProject || !files.length) return;
 
-  // Ensure files is an array (convert FileList if needed)
   const filesArray = Array.isArray(files) ? files : Array.from(files);
   if (!filesArray.length) return;
 
+  // Check for duplicates first if not skipping
+  if (!skipDuplicateCheck) {
+    const checkFormData = new FormData();
+    filesArray.forEach((file) => {
+      if (file instanceof File) {
+        checkFormData.append("files", file);
+      }
+    });
+
+    try {
+      const checkRes = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/check-duplicates`, {
+        method: "POST",
+        body: checkFormData,
+      });
+
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.duplicates && checkData.duplicates.length > 0) {
+          // Store files and show modal
+          state.pendingUploadFiles = filesArray;
+          showDuplicateModal(checkData.duplicates);
+          return;
+        }
+      }
+    } catch (e) {
+      // Continue with upload if check fails
+      console.error("Duplicate check failed:", e);
+    }
+  }
+
+  // Proceed with upload
+  await performUpload(filesArray);
+}
+
+async function performUpload(filesArray) {
   const formData = new FormData();
   filesArray.forEach((file) => {
-    // Validate file is actually a File object
     if (file instanceof File) {
       formData.append("files", file);
     }
   });
 
+  // Show progress
+  uploadProgress.hidden = false;
+  uploadProgressFill.style.width = "0%";
+  uploadProgressStatus.textContent = "0%";
+
   try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/upload`, {
-      method: "POST",
-      body: formData,
-      // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+    // Use XMLHttpRequest for progress tracking
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          uploadProgressFill.style.width = `${percent}%`;
+          uploadProgressStatus.textContent = `${percent}%`;
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.response);
+        } else {
+          reject(new Error(xhr.statusText));
+        }
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+
+      xhr.open("POST", `/api/projects/${encodeURIComponent(state.currentProject)}/upload`);
+      xhr.send(formData);
     });
 
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "Unknown error");
-      alert(`Upload failed: ${errorText || "Make sure the files are supported images/videos."}`);
-      return;
-    }
+    uploadProgressFill.style.width = "100%";
+    uploadProgressStatus.textContent = "Complete!";
+    
+    setTimeout(() => {
+      uploadProgress.hidden = true;
+    }, 1500);
 
     await loadProjectState();
     await fetchProjects();
   } catch (error) {
     console.error("Upload error:", error);
+    uploadProgress.hidden = true;
     alert(`Upload failed: ${error.message || "Network error. Please try again."}`);
   }
 }
+
+function showDuplicateModal(duplicates) {
+  duplicateList.innerHTML = "";
+  duplicates.forEach((dup) => {
+    const item = document.createElement("div");
+    item.className = "duplicate-list__item";
+    item.innerHTML = `
+      <span class="duplicate-list__new">${escapeHtml(dup.filename)}</span>
+      <span class="duplicate-list__existing">matches ${escapeHtml(dup.existingFile)}</span>
+    `;
+    duplicateList.appendChild(item);
+  });
+  duplicateModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeDuplicateModal() {
+  duplicateModal.hidden = true;
+  document.body.style.overflow = "";
+  state.pendingUploadFiles = null;
+}
+
+uploadSkipDuplicatesBtn.addEventListener("click", async () => {
+  if (!state.pendingUploadFiles) return;
+  closeDuplicateModal();
+  // Upload with duplicate check enabled (server will skip duplicates)
+  const formData = new FormData();
+  state.pendingUploadFiles.forEach((file) => {
+    if (file instanceof File) {
+      formData.append("files", file);
+    }
+  });
+  formData.append("checkDuplicates", "true");
+  
+  uploadProgress.hidden = false;
+  uploadProgressFill.style.width = "0%";
+  
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    
+    uploadProgressFill.style.width = "100%";
+    uploadProgressStatus.textContent = "Complete!";
+    
+    setTimeout(() => {
+      uploadProgress.hidden = true;
+    }, 1500);
+
+    if (!res.ok) {
+      throw new Error("Upload failed");
+    }
+    
+    await loadProjectState();
+    await fetchProjects();
+  } catch (error) {
+    uploadProgress.hidden = true;
+    alert("Upload failed: " + error.message);
+  }
+});
+
+uploadAllAnywayBtn.addEventListener("click", async () => {
+  if (!state.pendingUploadFiles) return;
+  const files = state.pendingUploadFiles;
+  closeDuplicateModal();
+  await performUpload(files);
+});
+
+cancelUploadBtn.addEventListener("click", closeDuplicateModal);
+duplicateBackdrop.addEventListener("click", closeDuplicateModal);
 
 async function saveOrder() {
   if (!state.currentProject || state.isAllProjects) return;
@@ -966,7 +1418,6 @@ async function setMediaFilter(filter) {
 }
 
 // ============ Video Modal Functions ============
-
 function openVideoModal(media) {
   modalVideo.src = media.url;
   modalVideoName.textContent = media.name;
@@ -982,12 +1433,10 @@ function closeVideoModal() {
   document.body.style.overflow = "";
 }
 
-// Video modal event listeners
 modalCloseBtn.addEventListener("click", closeVideoModal);
 modalBackdrop.addEventListener("click", closeVideoModal);
 
 // ============ Delete Project Functions ============
-
 function openDeleteModal() {
   if (!state.currentProject) return;
   deleteProjectName.textContent = state.currentProject;
@@ -1090,11 +1539,9 @@ renameProjectInput.addEventListener("keydown", (e) => {
 });
 
 // ============ Project Selection Modal Functions ============
-
 function openProjectSelectModal(files) {
   state.pendingFiles = files;
   
-  // Populate project list
   projectSelectList.innerHTML = "";
   state.projects.forEach((project) => {
     const btn = document.createElement("button");
@@ -1124,14 +1571,11 @@ async function selectProjectForUpload(projectName) {
   const files = state.pendingFiles;
   closeProjectSelectModal();
   
-  // Ensure files is an array
   const filesArray = Array.isArray(files) ? files : Array.from(files);
   if (!filesArray.length) return;
   
-  // Upload files to the selected project
   const formData = new FormData();
   filesArray.forEach((file) => {
-    // Validate file is actually a File object
     if (file instanceof File) {
       formData.append("files", file);
     }
@@ -1141,7 +1585,6 @@ async function selectProjectForUpload(projectName) {
     const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/upload`, {
       method: "POST",
       body: formData,
-      // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
     });
     
     if (!res.ok) {
@@ -1150,7 +1593,6 @@ async function selectProjectForUpload(projectName) {
       return;
     }
     
-    // Reload All Projects view and project list
     await loadAllProjectsState();
     await fetchProjects();
   } catch (error) {
@@ -1168,7 +1610,6 @@ async function createProjectAndUpload() {
   
   if (!state.pendingFiles) return;
   
-  // Create the project first
   const createRes = await fetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1182,8 +1623,6 @@ async function createProjectAndUpload() {
   }
   
   const created = await createRes.json();
-  
-  // Now upload files to the new project
   await selectProjectForUpload(created.name);
 }
 
@@ -1200,8 +1639,7 @@ projectSelectNewName.addEventListener("keydown", (e) => {
   }
 });
 
-// ============ Media Viewer Functions (Fullscreen Gallery) ============
-
+// ============ Media Viewer Functions ============
 function openMediaViewer(index) {
   const filteredImages = getFilteredImages();
   if (index < 0 || index >= filteredImages.length) return;
@@ -1215,20 +1653,25 @@ function openMediaViewer(index) {
     viewerImage.hidden = true;
     viewerVideo.hidden = false;
     viewerVideo.src = media.url;
+    slideshowControls.hidden = true;
   } else {
     viewerVideo.hidden = true;
     viewerImage.hidden = false;
-    viewerImage.src = media.url;
+    viewerImage.src = media.url; // Use full image, not thumbnail
     viewerImage.alt = media.name;
+    slideshowControls.hidden = false;
   }
   
   renderViewerTags(media);
+  loadViewerComment(media);
+  loadViewerExif(media);
   
   mediaViewerModal.hidden = false;
   document.body.style.overflow = "hidden";
 }
 
 function closeMediaViewer() {
+  stopSlideshow();
   viewerVideo.pause();
   viewerVideo.src = "";
   viewerImage.src = "";
@@ -1263,11 +1706,110 @@ function renderViewerTags(media) {
   }
 }
 
+function loadViewerComment(media) {
+  viewerCommentInput.value = media.comment || "";
+}
+
+async function saveViewerComment() {
+  const filteredImages = getFilteredImages();
+  const media = filteredImages[state.viewerIndex];
+  if (!media) return;
+  
+  const projectName = media.project || state.currentProject;
+  if (!projectName) return;
+  
+  const comment = viewerCommentInput.value.trim();
+  
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectName)}/media/${encodeURIComponent(media.name)}/comment`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment }),
+    }
+  );
+  
+  if (res.ok) {
+    media.comment = comment;
+  }
+}
+
+viewerCommentInput.addEventListener("blur", saveViewerComment);
+viewerCommentInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    saveViewerComment();
+  }
+});
+
+async function loadViewerExif(media) {
+  viewerExifPanel.hidden = true;
+  exifGrid.innerHTML = "";
+  
+  if (media.type !== "image") return;
+  
+  const projectName = media.project || state.currentProject;
+  if (!projectName) return;
+  
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectName)}/files/${encodeURIComponent(media.name)}/exif`
+    );
+    
+    if (!res.ok) return;
+    
+    const data = await res.json();
+    const exif = data.exif || {};
+    const fileInfo = data.fileInfo || {};
+    
+    // Show file size
+    if (fileInfo.size) {
+      addExifItem("Size", formatFileSize(fileInfo.size));
+    }
+    
+    // Show EXIF data
+    if (exif.Make) addExifItem("Camera", exif.Make);
+    if (exif.Model) addExifItem("Model", exif.Model);
+    if (exif.DateTimeOriginal) addExifItem("Date", exif.DateTimeOriginal);
+    if (exif.FNumber) addExifItem("Aperture", `f/${exif.FNumber}`);
+    if (exif.ExposureTime) {
+      const exposure = exif.ExposureTime < 1 
+        ? `1/${Math.round(1/exif.ExposureTime)}s` 
+        : `${exif.ExposureTime}s`;
+      addExifItem("Shutter", exposure);
+    }
+    if (exif.ISOSpeedRatings || exif.ISO) addExifItem("ISO", exif.ISOSpeedRatings || exif.ISO);
+    if (exif.FocalLength) addExifItem("Focal", `${exif.FocalLength}mm`);
+    if (exif.LensModel) addExifItem("Lens", exif.LensModel);
+    
+    if (exifGrid.children.length > 0) {
+      viewerExifPanel.hidden = false;
+    }
+  } catch (e) {
+    console.error("Failed to load EXIF:", e);
+  }
+}
+
+function addExifItem(label, value) {
+  const item = document.createElement("div");
+  item.className = "exif-panel__item";
+  item.innerHTML = `
+    <span class="exif-panel__label">${escapeHtml(label)}</span>
+    <span class="exif-panel__value">${escapeHtml(String(value))}</span>
+  `;
+  exifGrid.appendChild(item);
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
 async function addViewerTag(filename, tag) {
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
   
-  // Use media's project property (in All Projects view) or current project
   const projectName = media.project || state.currentProject;
   if (!projectName) return;
   
@@ -1278,7 +1820,6 @@ async function addViewerTag(filename, tag) {
   const newTags = [...currentTags, normalizedTag];
   await updateMediaTags(projectName, filename, newTags);
   
-  // Re-render viewer tags
   const updatedMedia = state.images.find((m) => m.name === filename);
   if (updatedMedia) renderViewerTags(updatedMedia);
 }
@@ -1287,7 +1828,6 @@ async function removeViewerTag(filename, tag) {
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
   
-  // Use media's project property (in All Projects view) or current project
   const projectName = media.project || state.currentProject;
   if (!projectName) return;
   
@@ -1295,17 +1835,54 @@ async function removeViewerTag(filename, tag) {
   const newTags = currentTags.filter((t) => t !== tag);
   await updateMediaTags(projectName, filename, newTags);
   
-  // Re-render viewer tags
   const updatedMedia = state.images.find((m) => m.name === filename);
   if (updatedMedia) renderViewerTags(updatedMedia);
 }
+
+// ============ Slideshow Functions ============
+function startSlideshow() {
+  state.isSlideshow = true;
+  slideshowToggle.textContent = "⏸ Pause";
+  let countdown = state.slideshowDelay / 1000;
+  slideshowTimer.textContent = countdown;
+  
+  state.slideshowInterval = setInterval(() => {
+    countdown--;
+    slideshowTimer.textContent = countdown;
+    
+    if (countdown <= 0) {
+      navigateViewer(1);
+      countdown = state.slideshowDelay / 1000;
+    }
+  }, 1000);
+}
+
+function stopSlideshow() {
+  state.isSlideshow = false;
+  slideshowToggle.textContent = "▶ Slideshow";
+  slideshowTimer.textContent = "";
+  
+  if (state.slideshowInterval) {
+    clearInterval(state.slideshowInterval);
+    state.slideshowInterval = null;
+  }
+}
+
+function toggleSlideshow() {
+  if (state.isSlideshow) {
+    stopSlideshow();
+  } else {
+    startSlideshow();
+  }
+}
+
+slideshowToggle.addEventListener("click", toggleSlideshow);
 
 viewerCloseBtn.addEventListener("click", closeMediaViewer);
 viewerBackdrop.addEventListener("click", closeMediaViewer);
 viewerPrevBtn.addEventListener("click", () => navigateViewer(-1));
 viewerNextBtn.addEventListener("click", () => navigateViewer(1));
 
-// Viewer download button
 viewerDownloadBtn.addEventListener("click", () => {
   const filteredImages = getFilteredImages();
   const media = filteredImages[state.viewerIndex];
@@ -1317,17 +1894,14 @@ viewerDownloadBtn.addEventListener("click", () => {
   }
 });
 
-// Download All button
 downloadAllBtn.addEventListener("click", () => {
   if (state.currentProject) {
     downloadProject(state.currentProject);
   }
 });
 
-// Close viewer when clicking on the content area outside of media/info
 const viewerContent = mediaViewerModal.querySelector(".media-viewer-modal__content");
 viewerContent.addEventListener("click", (event) => {
-  // Close if clicking directly on the content area, not on children
   if (event.target === viewerContent) {
     closeMediaViewer();
   }
@@ -1367,16 +1941,13 @@ viewerTagInput.addEventListener("blur", () => {
 });
 
 // ============ Comparison Mode Functions ============
-
 function generatePairs(items) {
-  // Generate all unique pairs for comparison
   const pairs = [];
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
       pairs.push([items[i], items[j]]);
     }
   }
-  // Shuffle pairs for variety
   for (let i = pairs.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
@@ -1391,13 +1962,10 @@ function getUnrankedItems() {
 function openComparisonSelection() {
   const allCount = state.images.length;
   const unrankedCount = getUnrankedItems().length;
-  const rankedCount = allCount - unrankedCount;
   
   compareAllCount.textContent = `${allCount} item${allCount === 1 ? "" : "s"}`;
   compareUnrankedCount.textContent = `${unrankedCount} new item${unrankedCount === 1 ? "" : "s"}`;
   
-  // Disable unranked button if no unranked items, or if there's nothing to compare against
-  // (need at least 1 unranked item and at least 2 total items)
   const canCompareUnranked = unrankedCount >= 1 && allCount >= 2;
   compareUnrankedBtn.disabled = !canCompareUnranked;
   if (!canCompareUnranked) {
@@ -1418,8 +1986,6 @@ function closeComparisonSelection() {
 function startComparisonMode(scope = "all") {
   state.comparisonScope = scope;
   
-  // For "unranked" scope, we include ALL items but pre-populate existing rankings
-  // This way new items get compared against existing ranked items
   const itemsToCompare = [...state.images];
   const unrankedItems = getUnrankedItems();
   const unrankedNames = new Set(unrankedItems.map((img) => img.name));
@@ -1436,10 +2002,9 @@ function startComparisonMode(scope = "all") {
   
   closeComparisonSelection();
   
-  // Initialize comparison state with transitive inference tracking
   const scores = {};
-  const beatsMap = {}; // beatsMap[A] = Set of items that A beats (directly or transitively)
-  const losesTo = {}; // losesTo[A] = Set of items that beat A (directly or transitively)
+  const beatsMap = {};
+  const losesTo = {};
   
   itemsToCompare.forEach((img) => {
     scores[img.name] = 0;
@@ -1447,14 +2012,10 @@ function startComparisonMode(scope = "all") {
     losesTo[img.name] = new Set();
   });
   
-  // For "unranked" scope, pre-populate relationships from existing rankings
-  // This way we don't ask users to compare already-ranked items against each other
   if (scope === "unranked") {
     const rankedItems = state.images.filter((img) => img.isRanked);
-    // Sort by rank to establish existing order
     rankedItems.sort((a, b) => a.rank - b.rank);
     
-    // Pre-populate: higher-ranked items beat lower-ranked items
     for (let i = 0; i < rankedItems.length; i++) {
       for (let j = i + 1; j < rankedItems.length; j++) {
         const winner = rankedItems[i].name;
@@ -1466,7 +2027,6 @@ function startComparisonMode(scope = "all") {
     }
   }
   
-  // Generate pairs - for "unranked" scope, only pairs involving at least one unranked item
   let allPairs;
   if (scope === "unranked") {
     allPairs = generatePairsWithUnranked(itemsToCompare, unrankedNames);
@@ -1483,7 +2043,7 @@ function startComparisonMode(scope = "all") {
     comparisonsAsked: 0,
     comparisonsSkipped: 0,
     itemsToCompare,
-    unrankedNames, // Track which items are unranked for scoring
+    unrankedNames,
   };
   
   comparisonMode.hidden = false;
@@ -1493,17 +2053,14 @@ function startComparisonMode(scope = "all") {
 }
 
 function generatePairsWithUnranked(items, unrankedNames) {
-  // Generate pairs where at least one item is unranked
   const pairs = [];
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      // Include pair if at least one is unranked
       if (unrankedNames.has(items[i].name) || unrankedNames.has(items[j].name)) {
         pairs.push([items[i], items[j]]);
       }
     }
   }
-  // Shuffle pairs for variety
   for (let i = pairs.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
@@ -1511,29 +2068,22 @@ function generatePairsWithUnranked(items, unrankedNames) {
   return pairs;
 }
 
-// Check if the relationship between two items is already known (through transitivity)
 function isRelationshipKnown(itemA, itemB) {
   if (!state.comparison) return false;
   const { beatsMap } = state.comparison;
-  // Known if A beats B or B beats A
   return beatsMap[itemA.name].has(itemB.name) || beatsMap[itemB.name].has(itemA.name);
 }
 
-// Record that winner beats loser, and propagate transitively
 function recordWin(winnerName, loserName) {
   if (!state.comparison) return;
   const { beatsMap, losesTo, scores } = state.comparison;
   
-  // If already known, skip
   if (beatsMap[winnerName].has(loserName)) return;
   
-  // Direct win
   beatsMap[winnerName].add(loserName);
   losesTo[loserName].add(winnerName);
   scores[winnerName]++;
   
-  // Transitive propagation:
-  // 1. Winner also beats everything that loser beats
   for (const item of beatsMap[loserName]) {
     if (!beatsMap[winnerName].has(item)) {
       beatsMap[winnerName].add(item);
@@ -1543,7 +2093,6 @@ function recordWin(winnerName, loserName) {
     }
   }
   
-  // 2. Everything that beats winner also beats loser
   for (const item of losesTo[winnerName]) {
     if (!beatsMap[item].has(loserName)) {
       beatsMap[item].add(loserName);
@@ -1551,7 +2100,6 @@ function recordWin(winnerName, loserName) {
       scores[item]++;
       state.comparison.comparisonsSkipped++;
     }
-    // And also beats everything loser beats
     for (const subItem of beatsMap[loserName]) {
       if (!beatsMap[item].has(subItem)) {
         beatsMap[item].add(subItem);
@@ -1580,7 +2128,7 @@ function findNextUnknownPair() {
       return [left, right];
     }
   }
-  return null; // All pairs are known
+  return null;
 }
 
 function showCurrentPair() {
@@ -1594,23 +2142,13 @@ function showCurrentPair() {
   }
   
   const [left, right] = nextPair;
-  const { comparisonsAsked, comparisonsSkipped, allPairs } = state.comparison;
-  
-  // Calculate remaining unknown pairs
-  let remainingUnknown = 0;
-  for (let i = state.comparison.currentPairIndex; i < allPairs.length; i++) {
-    const [l, r] = allPairs[i];
-    if (!isRelationshipKnown(l, r)) {
-      remainingUnknown++;
-    }
-  }
+  const { comparisonsAsked, comparisonsSkipped } = state.comparison;
   
   const statusText = comparisonsSkipped > 0
     ? `Comparison ${comparisonsAsked + 1} (${comparisonsSkipped} inferred)`
     : `Comparison ${comparisonsAsked + 1}`;
   comparisonProgress.textContent = statusText;
   
-  // Set left card
   const leftImg = compareLeft.querySelector("img");
   const leftVideo = compareLeft.querySelector("video");
   const leftName = compareLeft.querySelector(".comparison-card__name");
@@ -1628,7 +2166,6 @@ function showCurrentPair() {
   }
   leftName.textContent = left.name;
   
-  // Set right card
   const rightImg = compareRight.querySelector("img");
   const rightVideo = compareRight.querySelector("video");
   const rightName = compareRight.querySelector(".comparison-card__name");
@@ -1663,7 +2200,6 @@ function selectWinner(side) {
   } else if (side === "right") {
     recordWin(right.name, left.name);
   }
-  // If side is "skip", no relationship is recorded
   
   state.comparison.comparisonsAsked++;
   state.comparison.currentPairIndex++;
@@ -1675,14 +2211,12 @@ function showComparisonResults() {
   
   const { scores, comparisonsAsked, comparisonsSkipped, allPairs } = state.comparison;
   
-  // Sort by score descending
   const ranked = Object.entries(scores)
     .map(([name, score]) => ({ name, score }))
     .sort((a, b) => b.score - a.score);
   
   resultsList.innerHTML = "";
   
-  // Show summary of comparisons
   const summaryDiv = document.createElement("div");
   summaryDiv.className = "comparison-results__summary";
   const totalPossible = allPairs.length;
@@ -1704,7 +2238,7 @@ function showComparisonResults() {
     
     const thumb = media.type === "video" 
       ? `<video class="comparison-results__thumb" src="${media.url}" muted></video>`
-      : `<img class="comparison-results__thumb" src="${media.url}" alt="" />`;
+      : `<img class="comparison-results__thumb" src="${media.thumbUrl || media.url}" alt="" />`;
     
     div.innerHTML = `
       <span class="comparison-results__rank">#${index + 1}</span>
@@ -1716,7 +2250,6 @@ function showComparisonResults() {
     resultsList.appendChild(div);
   });
   
-  // Store ranked order for applying
   state.comparison.rankedOrder = ranked.map((r) => r.name);
   
   comparisonMode.hidden = true;
@@ -1728,16 +2261,13 @@ async function applyRanking() {
   
   const rankedOrder = state.comparison.rankedOrder;
   
-  // Both scopes now produce a complete ranking of all items
   const reordered = rankedOrder.map((name) => state.images.find((m) => m.name === name)).filter(Boolean);
-  // Mark all as ranked
   reordered.forEach((m, idx) => {
     m.isRanked = true;
     m.rank = idx + 1;
   });
   state.images = reordered;
   
-  // Save to server
   await saveOrder();
   
   closeComparisonResults();
@@ -1762,11 +2292,18 @@ applyRankingBtn.addEventListener("click", applyRanking);
 discardRankingBtn.addEventListener("click", discardRanking);
 resultsBackdrop.addEventListener("click", discardRanking);
 
-// Global keyboard handler
+// ============ Global Keyboard Handler ============
 document.addEventListener("keydown", (event) => {
-  // Escape key handling for all modals
+  // ? key for shortcuts
+  if (event.key === "?" && !event.target.matches("input, textarea")) {
+    openShortcutsModal();
+    return;
+  }
+  
   if (event.key === "Escape") {
-    if (!videoModal.hidden) {
+    if (!shortcutsModal.hidden) {
+      closeShortcutsModal();
+    } else if (!videoModal.hidden) {
       closeVideoModal();
     } else if (!deleteModal.hidden) {
       closeDeleteModal();
@@ -1774,6 +2311,8 @@ document.addEventListener("keydown", (event) => {
       closeRenameModal();
     } else if (!projectSelectModal.hidden) {
       closeProjectSelectModal();
+    } else if (!duplicateModal.hidden) {
+      closeDuplicateModal();
     } else if (!mediaViewerModal.hidden) {
       closeMediaViewer();
     } else if (!comparisonSelection.hidden) {
@@ -1782,6 +2321,15 @@ document.addEventListener("keydown", (event) => {
       exitComparisonMode();
     } else if (!comparisonResults.hidden) {
       discardRanking();
+    } else if (state.isSelectionMode) {
+      exitSelectionMode();
+    }
+  }
+  
+  // P for slideshow toggle
+  if (event.key === "p" || event.key === "P") {
+    if (!mediaViewerModal.hidden && !event.target.matches("input, textarea")) {
+      toggleSlideshow();
     }
   }
   
@@ -1807,6 +2355,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// ============ Form Event Handlers ============
 newProjectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = projectNameInput.value.trim();
@@ -1818,7 +2367,6 @@ projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
 
-// Comparison selection handlers
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));
 compareUnrankedBtn.addEventListener("click", () => startComparisonMode("unranked"));
@@ -1866,7 +2414,6 @@ fileInput.addEventListener("change", () => {
   }
 });
 
-// All Projects option handler
 allProjectsOption.addEventListener("click", selectAllProjects);
 
 // Drop overlay text elements
@@ -1876,12 +2423,9 @@ const dropOverlaySubtext = document.getElementById("drop-overlay-subtext");
 // Gallery drop zone for file uploads
 galleryDropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
-  // Don't show overlay if gallery is disabled
   if (galleryDropZone.classList.contains("disabled")) return;
-  // Only show overlay for file drops, not internal card reordering
   const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
   if (!isCardDrag && event.dataTransfer.types.includes("Files")) {
-    // Update overlay text based on current view
     if (state.isAllProjects) {
       dropOverlayText.textContent = "Drop files to add";
       dropOverlaySubtext.textContent = "You'll choose which project to add them to";
@@ -1894,7 +2438,6 @@ galleryDropZone.addEventListener("dragover", (event) => {
 });
 
 galleryDropZone.addEventListener("dragleave", (event) => {
-  // Only hide if leaving the gallery entirely
   if (!galleryDropZone.contains(event.relatedTarget)) {
     dropOverlay.hidden = true;
   }
@@ -1904,17 +2447,12 @@ galleryDropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropOverlay.hidden = true;
   
-  // Ignore card drops - they are handled by card event listeners
   const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
   if (isCardDrag) return;
   
-  // Only handle file drops
-  // IMPORTANT: Convert FileList to array immediately to prevent ERR_ACCESS_DENIED
-  // The FileList from dataTransfer can become invalid after the event handler completes
   if (event.dataTransfer.files.length > 0) {
     const files = Array.from(event.dataTransfer.files);
     if (state.isAllProjects) {
-      // Show project selection modal
       openProjectSelectModal(files);
     } else if (state.currentProject) {
       uploadFiles(files);
@@ -1922,10 +2460,11 @@ galleryDropZone.addEventListener("drop", (event) => {
   }
 });
 
-// Initialize app with URL state restoration
+// ============ Initialize App ============
 const initialProject = restoreStateFromURL();
 disableWorkspace();
 updateActionStates();
+updateSortUI();
 fetchProjects(initialProject);
 
 // Handle browser back/forward navigation

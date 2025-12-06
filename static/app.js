@@ -4,6 +4,7 @@ const newProjectForm = document.getElementById("new-project-form");
 const projectNameInput = document.getElementById("project-name");
 const projectDescriptionInput = document.getElementById("project-description-input");
 const refreshProjectsBtn = document.getElementById("refresh-projects");
+const toggleProjectsPanelBtn = document.getElementById("toggle-projects-panel");
 
 // Create album modal elements
 const createAlbumBtn = document.getElementById("create-album-btn");
@@ -80,6 +81,7 @@ const projectSettingsControl = document.getElementById("project-settings-control
 const projectSettingsBtn = document.getElementById("project-settings-btn");
 const projectSettingsDropdown = document.getElementById("project-settings-dropdown");
 const renameProjectMenuBtn = document.getElementById("rename-project-menu-btn");
+const removeAllRankingsBtn = document.getElementById("remove-all-rankings-btn");
 
 // Help/shortcuts
 const shortcutsModal = document.getElementById("shortcuts-modal");
@@ -823,9 +825,17 @@ function renderImages() {
 
     if (isVideo) {
       const video = card.querySelector("video");
+      const videoThumbnail = card.querySelector(".video-thumbnail");
       video.src = `${media.url}?v=${Date.now()}`;
       video.addEventListener("loadeddata", () => {
         video.currentTime = 0.1;
+        if (videoThumbnail) {
+          videoThumbnail.style.opacity = "0";
+          videoThumbnail.style.transition = "opacity 0.3s ease";
+          setTimeout(() => {
+            videoThumbnail.style.opacity = "1";
+          }, 10);
+        }
       });
       
       const playButton = card.querySelector(".play-button");
@@ -848,6 +858,16 @@ function renderImages() {
       }
       img.alt = media.name;
       img.loading = "lazy"; // Use native lazy loading
+      
+      // Add fade-in animation when image loads
+      img.addEventListener("load", () => {
+        img.classList.add("loaded");
+      });
+      
+      // If image is already loaded (cached), add class immediately
+      if (img.complete) {
+        img.classList.add("loaded");
+      }
     }
 
     // Click handler
@@ -1445,6 +1465,7 @@ function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
   const hasMedia = state.images.length > 0;
+  const hasRankedItems = state.images.some((img) => img.isRanked);
   
   // Upload is always enabled when we have projects
   browseFilesBtn.disabled = state.projects.length === 0;
@@ -1454,6 +1475,7 @@ function updateActionStates() {
   deleteProjectBtn.disabled = !hasProject;
   downloadAllBtn.disabled = !hasProject || !hasMedia;
   exportBtn.disabled = !hasProject;
+  removeAllRankingsBtn.disabled = !hasProject || !hasRankedItems;
   
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
   selectModeBtn.disabled = !hasSelection || !hasMedia;
@@ -1784,6 +1806,37 @@ deleteProjectBtn.addEventListener("click", () => {
   openDeleteModal();
 });
 confirmDeleteBtn.addEventListener("click", deleteProject);
+
+async function removeAllRankings() {
+  if (!state.currentProject || state.isAllProjects) return;
+  if (!confirm("Remove all rankings from this album? This will reset all items to 'New' status.")) {
+    return;
+  }
+  
+  const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/rankings`, {
+    method: "DELETE",
+  });
+  
+  if (!res.ok) {
+    alert("Failed to remove rankings");
+    return;
+  }
+  
+  // Update state - mark all items as unranked
+  state.images.forEach((img) => {
+    img.isRanked = false;
+    delete img.rank;
+  });
+  
+  closeAllDropdowns();
+  renderImages();
+  await fetchProjects();
+}
+
+removeAllRankingsBtn.addEventListener("click", () => {
+  closeAllDropdowns();
+  removeAllRankings();
+});
 cancelDeleteBtn.addEventListener("click", closeDeleteModal);
 deleteBackdrop.addEventListener("click", closeDeleteModal);
 
@@ -3133,6 +3186,18 @@ mobileProjectToggle.addEventListener("click", () => {
 
 closeProjectsPanelBtn.addEventListener("click", closeMobileProjectsPanel);
 projectsPanelBackdrop.addEventListener("click", closeMobileProjectsPanel);
+
+// Desktop panel collapse toggle
+if (toggleProjectsPanelBtn) {
+  toggleProjectsPanelBtn.addEventListener("click", () => {
+    const shell = document.querySelector(".shell");
+    projectsPanel.classList.toggle("collapsed");
+    shell?.classList.toggle("panel-collapsed");
+    const isCollapsed = projectsPanel.classList.contains("collapsed");
+    toggleProjectsPanelBtn.setAttribute("aria-label", isCollapsed ? "Expand albums panel" : "Collapse albums panel");
+    toggleProjectsPanelBtn.title = isCollapsed ? "Expand" : "Collapse";
+  });
+}
 
 // Drop overlay text elements
 const dropOverlayText = document.getElementById("drop-overlay-text");

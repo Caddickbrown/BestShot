@@ -634,6 +634,15 @@ def create_app() -> Flask:
         _save_rankings(folder, cleaned_order)
         return jsonify({"order": cleaned_order})
 
+    @app.delete("/api/projects/<project_name>/rankings")
+    def clear_rankings(project_name: str):
+        """Remove all rankings from a project."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        _save_rankings(folder, [])
+        return jsonify({"cleared": True})
+
     @app.get("/api/projects/<project_name>/files/<path:filename>")
     def serve_file(project_name: str, filename: str):
         folder = _project_path(project_name)

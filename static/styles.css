@@ -38,10 +38,11 @@ body {
 .app-title {
   margin: 0;
   margin-right: auto;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.02em;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
 }
 
 .app-toolbar {
@@ -59,6 +60,11 @@ body {
   padding: 0 clamp(1rem, 4vw, 3rem) 3rem;
   max-width: 1500px;
   margin: 0 auto;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.shell.panel-collapsed {
+  grid-template-columns: 0 1fr;
 }
 
 .panel {
@@ -73,6 +79,17 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
+  transition: width 0.3s ease, opacity 0.3s ease;
+}
+
+.panel--left.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+  opacity: 0;
+  border: none;
+  margin: 0;
 }
 
 .brand h1 {
@@ -104,6 +121,12 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
+}
+
+.panel-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .panel-head h2 {
@@ -476,6 +499,12 @@ body {
   object-fit: cover;
   border-radius: 10px;
   background: #020617;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-card img.loaded {
+  opacity: 1;
 }
 
 .images-grid.gallery .image-card img {

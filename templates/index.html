@@ -90,7 +90,6 @@
 
       <aside class="panel panel--left" id="projects-panel">
         <div class="panel--left__header mobile-only">
-          <h2>Albums</h2>
           <div class="panel--left__header-actions">
             <button id="close-projects-panel" class="panel-close-btn" aria-label="Close">×</button>
           </div>
@@ -98,9 +97,12 @@
         <div class="panel-section">
           <div class="panel-head desktop-only">
             <h2>Albums</h2>
-            <button id="refresh-projects" class="text-button" aria-label="Reload albums">
-              ↺ refresh
-            </button>
+            <div class="panel-head__actions">
+              <button id="refresh-projects" class="text-button" aria-label="Reload albums">
+                ↺ refresh
+              </button>
+              <button id="toggle-projects-panel" class="panel-close-btn desktop-only" aria-label="Collapse albums panel" title="Collapse">×</button>
+            </div>
           </div>
           <div id="all-projects-option" class="all-projects-option">
             <h3>All Albums</h3>
@@ -149,6 +151,11 @@
                 <button id="export-btn" disabled>
                   <span class="dropdown-icon">📋</span>
                   Export metadata...
+                </button>
+                <div class="dropdown-divider"></div>
+                <button id="remove-all-rankings-btn" class="dropdown-danger" disabled>
+                  <span class="dropdown-icon">↺</span>
+                  Remove all rankings
                 </button>
                 <div class="dropdown-divider"></div>
                 <button id="delete-project" class="dropdown-danger" disabled>

@@ -211,10 +211,9 @@ body {
 }
 
 .workspace-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   gap: 1rem;
-  flex-wrap: wrap;
   align-items: flex-start;
 }
 
@@ -235,11 +234,34 @@ body {
   color: var(--text-muted);
 }
 
+/* Workspace brand in header */
+.workspace-brand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.workspace-brand__name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
 .workspace-actions {
   display: flex;
   gap: 0.75rem;
   align-items: center;
   flex-wrap: wrap;
+  grid-column: 1 / -1;
+}
+
+/* Display controls group */
+.display-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .view-toggle,
@@ -726,12 +748,33 @@ body {
   }
   
   .workspace-header {
-    flex-direction: column;
-    gap: 0.75rem;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem 1rem;
   }
   
   .workspace-header > div:first-child {
+    grid-column: 1;
+  }
+  
+  .workspace-brand {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  
+  .workspace-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  
+  .display-controls {
     width: 100%;
+    order: -1;
+    justify-content: flex-start;
+  }
+  
+  .display-controls .media-filter,
+  .display-controls .grid-size-control {
+    flex: 0 0 auto;
   }
 
   .upload-actions {
@@ -2565,18 +2608,6 @@ body.light-theme .rank-pill.unranked {
   margin-top: 0.25rem;
 }
 
-/* Keep media filter and grid size styles in dropdown */
-.dropdown-menu .media-filter,
-.dropdown-menu .grid-size-control {
-  margin: 0;
-  width: 100%;
-  justify-content: stretch;
-}
-
-.dropdown-menu .toggle {
-  flex: 1;
-  text-align: center;
-}
 
 /* Mobile-specific: disable drag */
 @media (pointer: coarse) {
@@ -2660,16 +2691,6 @@ body.light-theme .rank-pill.unranked {
   
   .dropdown-section {
     padding: 0.75rem 0;
-  }
-  
-  .dropdown-menu .media-filter,
-  .dropdown-menu .grid-size-control {
-    gap: 0.5rem;
-  }
-  
-  .dropdown-menu .toggle {
-    padding: 0.6rem 1rem;
-    min-height: 44px;
   }
 }
 

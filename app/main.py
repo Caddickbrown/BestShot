@@ -473,6 +473,21 @@ def create_app() -> Flask:
         if not folder.exists():
             abort(404, description="Project not found")
         payload = request.get_json(silent=True) or {}
+        
+        # Handle project rename if new_name is provided
+        new_name = payload.get("name")
+        if new_name and new_name != project_name:
+            new_name = str(new_name).strip()
+            if not new_name:
+                abort(400, description="Project name cannot be empty")
+            new_folder = _project_path(new_name)
+            if new_folder.exists():
+                abort(400, description="A project with that name already exists")
+            # Rename the folder
+            folder.rename(new_folder)
+            folder = new_folder
+        
+        # Handle description update
         description = str(payload.get("description", "") or "").strip()
         _save_metadata(folder, {"description": description})
         return jsonify({"name": folder.name, "description": description})

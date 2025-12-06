@@ -11,6 +11,7 @@ const dropOverlay = document.getElementById("drop-overlay");
 const browseFilesBtn = document.getElementById("browse-files");
 const fileInput = document.getElementById("file-input");
 const deleteProjectBtn = document.getElementById("delete-project");
+const editProjectNameBtn = document.getElementById("edit-project-name");
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
 const imageTemplate = document.getElementById("image-card-template");
@@ -94,6 +95,14 @@ const deleteProjectName = document.getElementById("delete-project-name");
 const confirmDeleteBtn = document.getElementById("confirm-delete");
 const cancelDeleteBtn = document.getElementById("cancel-delete");
 const deleteBackdrop = deleteModal.querySelector(".delete-modal__backdrop");
+
+// Rename modal elements
+const renameModal = document.getElementById("rename-modal");
+const renameProjectCurrent = document.getElementById("rename-project-current");
+const renameProjectInput = document.getElementById("rename-project-input");
+const confirmRenameBtn = document.getElementById("confirm-rename");
+const cancelRenameBtn = document.getElementById("cancel-rename");
+const renameBackdrop = renameModal.querySelector(".rename-modal__backdrop");
 
 // Project select modal elements (for file drops in All Projects view)
 const projectSelectModal = document.getElementById("project-select-modal");
@@ -1166,6 +1175,7 @@ function updateActionStates() {
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
+  editProjectNameBtn.hidden = !hasProject; // Show edit button only when a project is selected
   downloadAllBtn.disabled = !hasProject || !hasMedia;
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
   selectModeBtn.disabled = !hasProject || !hasMedia;
@@ -1457,6 +1467,76 @@ deleteProjectBtn.addEventListener("click", openDeleteModal);
 confirmDeleteBtn.addEventListener("click", deleteProject);
 cancelDeleteBtn.addEventListener("click", closeDeleteModal);
 deleteBackdrop.addEventListener("click", closeDeleteModal);
+
+// ============ Rename Project Functions ============
+
+function openRenameModal() {
+  if (!state.currentProject) return;
+  renameProjectCurrent.textContent = state.currentProject;
+  renameProjectInput.value = state.currentProject;
+  renameModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  // Focus and select the input for easy editing
+  setTimeout(() => {
+    renameProjectInput.focus();
+    renameProjectInput.select();
+  }, 50);
+}
+
+function closeRenameModal() {
+  renameModal.hidden = true;
+  document.body.style.overflow = "";
+  renameProjectInput.value = "";
+}
+
+async function renameProject() {
+  if (!state.currentProject) return;
+  
+  const newName = renameProjectInput.value.trim();
+  if (!newName) {
+    alert("Project name cannot be empty");
+    return;
+  }
+  
+  if (newName === state.currentProject) {
+    closeRenameModal();
+    return;
+  }
+  
+  const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: newName, description: state.description }),
+  });
+  
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert(error.description || "Failed to rename project");
+    return;
+  }
+  
+  const data = await res.json();
+  closeRenameModal();
+  
+  // Update state and reload
+  state.currentProject = data.name;
+  await fetchProjects();
+  await loadProjectState();
+}
+
+editProjectNameBtn.addEventListener("click", openRenameModal);
+confirmRenameBtn.addEventListener("click", renameProject);
+cancelRenameBtn.addEventListener("click", closeRenameModal);
+renameBackdrop.addEventListener("click", closeRenameModal);
+
+renameProjectInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    renameProject();
+  } else if (e.key === "Escape") {
+    closeRenameModal();
+  }
+});
 
 // ============ Project Selection Modal Functions ============
 function openProjectSelectModal(files) {
@@ -2227,6 +2307,8 @@ document.addEventListener("keydown", (event) => {
       closeVideoModal();
     } else if (!deleteModal.hidden) {
       closeDeleteModal();
+    } else if (!renameModal.hidden) {
+      closeRenameModal();
     } else if (!projectSelectModal.hidden) {
       closeProjectSelectModal();
     } else if (!duplicateModal.hidden) {

@@ -60,6 +60,7 @@
         <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
         <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
       </div>
+      <button id="refresh-projects" class="ghost" aria-label="Reload albums" title="Reload albums">↺ Refresh</button>
       <button id="start-compare" class="ghost">Compare</button>
       <div class="sort-control">
         <button id="sort-button" class="sort-button">
@@ -94,40 +95,21 @@
         <div class="panel--left__header mobile-only">
           <h2>Albums</h2>
           <div class="panel--left__header-actions">
-            <button id="refresh-projects-mobile" class="text-button" aria-label="Reload albums">↺</button>
             <button id="close-projects-panel" class="panel-close-btn" aria-label="Close">×</button>
           </div>
         </div>
         <div class="panel-section">
           <div class="panel-head desktop-only">
             <h2>Albums</h2>
-            <button id="refresh-projects" class="text-button" aria-label="Reload albums">
-              ↺ refresh
-            </button>
           </div>
           <div id="all-projects-option" class="all-projects-option">
             <h3>All Albums</h3>
           </div>
           <ul id="projects-list" class="projects"></ul>
         </div>
-        <form id="new-project-form" class="panel-form">
-          <label for="project-name">Create album</label>
-          <input
-            type="text"
-            id="project-name"
-            name="project-name"
-            placeholder="night-run-01"
-            autocomplete="off"
-            required
-          />
-          <textarea
-            id="project-description-input"
-            name="project-description"
-            placeholder='Optional note (e.g. "Portrait set B")'
-            rows="2"
-          ></textarea>
-          <button type="submit" class="primary">Create Album</button>
-        </form>
+        <div class="panel-section">
+          <button id="create-album-btn" class="primary" style="width: 100%;">Create Album</button>
+        </div>
       </aside>
       
       <!-- Mobile backdrop for projects panel -->
@@ -401,6 +383,36 @@
           <button id="confirm-delete" class="primary danger">Delete</button>
           <button id="cancel-delete" class="ghost">Cancel</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Create Album Modal -->
+    <div id="create-album-modal" class="create-album-modal" hidden>
+      <div class="create-album-modal__backdrop"></div>
+      <div class="create-album-modal__content">
+        <h3>Create Album</h3>
+        <form id="new-project-form">
+          <label for="project-name">Album name</label>
+          <input
+            type="text"
+            id="project-name"
+            name="project-name"
+            placeholder="night-run-01"
+            autocomplete="off"
+            required
+          />
+          <label for="project-description-input">Description (optional)</label>
+          <textarea
+            id="project-description-input"
+            name="project-description"
+            placeholder='Optional note (e.g. "Portrait set B")'
+            rows="2"
+          ></textarea>
+          <div class="create-album-modal__actions">
+            <button type="submit" class="primary">Create Album</button>
+            <button type="button" id="cancel-create-album" class="ghost">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
 

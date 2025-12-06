@@ -18,7 +18,6 @@ const mobileProjectName = document.getElementById("mobile-project-name");
 const projectsPanel = document.getElementById("projects-panel");
 const projectsPanelBackdrop = document.getElementById("projects-panel-backdrop");
 const closeProjectsPanelBtn = document.getElementById("close-projects-panel");
-const refreshProjectsMobileBtn = document.getElementById("refresh-projects-mobile");
 
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
@@ -132,6 +131,12 @@ const renameProjectInput = document.getElementById("rename-project-input");
 const confirmRenameBtn = document.getElementById("confirm-rename");
 const cancelRenameBtn = document.getElementById("cancel-rename");
 const renameBackdrop = renameModal.querySelector(".rename-modal__backdrop");
+
+// Create album modal elements
+const createAlbumModal = document.getElementById("create-album-modal");
+const createAlbumBtn = document.getElementById("create-album-btn");
+const cancelCreateAlbumBtn = document.getElementById("cancel-create-album");
+const createAlbumBackdrop = createAlbumModal.querySelector(".create-album-modal__backdrop");
 
 // Project select modal elements (for file drops in All Projects view)
 const projectSelectModal = document.getElementById("project-select-modal");
@@ -1331,8 +1336,7 @@ async function createProject(name, description) {
     return;
   }
   const created = await res.json();
-  projectNameInput.value = "";
-  projectDescriptionInput.value = "";
+  closeCreateAlbumModal();
   await fetchProjects();
   await selectProject(created.name);
 }
@@ -2512,6 +2516,8 @@ document.addEventListener("keydown", (event) => {
       closeDeleteModal();
     } else if (!renameModal.hidden) {
       closeRenameModal();
+    } else if (!createAlbumModal.hidden) {
+      closeCreateAlbumModal();
     } else if (!projectSelectModal.hidden) {
       closeProjectSelectModal();
     } else if (!duplicateModal.hidden) {
@@ -2569,7 +2575,28 @@ newProjectForm.addEventListener("submit", async (event) => {
 projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
-refreshProjectsMobileBtn.addEventListener("click", fetchProjects);
+
+// Create Album Modal Functions
+function openCreateAlbumModal() {
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
+  createAlbumModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  setTimeout(() => {
+    projectNameInput.focus();
+  }, 50);
+}
+
+function closeCreateAlbumModal() {
+  createAlbumModal.hidden = true;
+  document.body.style.overflow = "";
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
+}
+
+createAlbumBtn.addEventListener("click", openCreateAlbumModal);
+cancelCreateAlbumBtn.addEventListener("click", closeCreateAlbumModal);
+createAlbumBackdrop.addEventListener("click", closeCreateAlbumModal);
 
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));

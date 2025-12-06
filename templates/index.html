@@ -55,7 +55,10 @@
         <header class="workspace-header">
           <div>
             <p class="eyebrow">project</p>
-            <h2 id="workspace-title">Select a project</h2>
+            <div class="workspace-title-row">
+              <h2 id="workspace-title">Select a project</h2>
+              <button id="edit-project-name" class="edit-name-btn" title="Rename project" hidden>✎</button>
+            </div>
             <p id="workspace-meta" class="muted"></p>
           </div>
           <div class="workspace-actions">
@@ -250,6 +253,20 @@
         <div class="comparison-results__actions">
           <button id="apply-ranking" class="primary">Apply Ranking</button>
           <button id="discard-ranking" class="ghost">Discard</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rename Project Modal -->
+    <div id="rename-modal" class="rename-modal" hidden>
+      <div class="rename-modal__backdrop"></div>
+      <div class="rename-modal__content">
+        <h3>Rename Project</h3>
+        <p>Enter a new name for <strong id="rename-project-current"></strong></p>
+        <input type="text" id="rename-project-input" placeholder="New project name..." autocomplete="off" />
+        <div class="rename-modal__actions">
+          <button id="confirm-rename" class="primary">Rename</button>
+          <button id="cancel-rename" class="ghost">Cancel</button>
         </div>
       </div>
     </div>

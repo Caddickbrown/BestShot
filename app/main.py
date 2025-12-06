@@ -8,12 +8,16 @@ from typing import Dict, List
 
 import shutil
 
+from io import BytesIO
+import zipfile
+
 from flask import (
     Flask,
     abort,
     jsonify,
     render_template,
     request,
+    send_file,
     send_from_directory,
 )
 from werkzeug.utils import secure_filename
@@ -320,6 +324,44 @@ def create_app() -> Flask:
         if not file_path.exists():
             abort(404, description="File not found")
         return send_from_directory(folder, filename)
+
+    @app.get("/api/projects/<project_name>/files/<path:filename>/download")
+    def download_file(project_name: str, filename: str):
+        """Download a single media file."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        file_path = (folder / filename).resolve()
+        if folder not in file_path.parents and file_path != folder:
+            abort(400, description="Invalid file path")
+        if not file_path.exists():
+            abort(404, description="File not found")
+        return send_from_directory(folder, filename, as_attachment=True)
+
+    @app.get("/api/projects/<project_name>/download")
+    def download_project(project_name: str):
+        """Download all media files in a project as a ZIP archive."""
+        folder = _project_path(project_name)
+        if not folder.exists():
+            abort(404, description="Project not found")
+        
+        media_files = _list_media_files(folder, "all")
+        if not media_files:
+            abort(400, description="No media files to download")
+        
+        # Create ZIP in memory
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file_path in media_files:
+                zf.write(file_path, file_path.name)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f"{project_name}.zip"
+        )
 
     @app.put("/api/projects/<project_name>/media/<path:filename>/tags")
     def update_media_tags(project_name: str, filename: str):

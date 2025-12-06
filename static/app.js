@@ -67,6 +67,8 @@ const viewerCloseBtn = mediaViewerModal.querySelector(".media-viewer-modal__clos
 const viewerBackdrop = mediaViewerModal.querySelector(".media-viewer-modal__backdrop");
 const viewerPrevBtn = mediaViewerModal.querySelector(".media-viewer-modal__prev");
 const viewerNextBtn = mediaViewerModal.querySelector(".media-viewer-modal__next");
+const viewerDownloadBtn = document.getElementById("viewer-download-btn");
+const downloadAllBtn = document.getElementById("download-all");
 
 // Comparison mode elements
 const comparisonMode = document.getElementById("comparison-mode");
@@ -421,6 +423,16 @@ function renderImages() {
       openMediaViewer(index);
     });
 
+    // Download button handler
+    const downloadBtn = card.querySelector(".download-media-btn");
+    downloadBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const projectName = media.project || state.currentProject;
+      if (projectName) {
+        downloadMediaFile(projectName, media.name);
+      }
+    });
+
     // Delete button handler
     const deleteBtn = card.querySelector(".delete-media-btn");
     deleteBtn.addEventListener("click", (event) => {
@@ -592,6 +604,32 @@ async function removeTag(filename, tag) {
   const currentTags = media.tags || [];
   const newTags = currentTags.filter((t) => t !== tag);
   await updateMediaTags(projectName, filename, newTags);
+}
+
+function downloadMediaFile(projectName, filename) {
+  if (!projectName) return;
+  
+  // Create a temporary link and trigger download
+  const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/files/${encodeURIComponent(filename)}/download`;
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+async function downloadProject(projectName) {
+  if (!projectName) return;
+  
+  // Trigger the ZIP download
+  const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/download`;
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = `${projectName}.zip`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 async function deleteMediaFile(projectName, filename) {
@@ -805,10 +843,12 @@ function enableWorkspace() {
 function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
+  const hasMedia = state.images.length > 0;
   browseFilesBtn.disabled = !hasProject; // Can't upload in All Projects view
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
+  downloadAllBtn.disabled = !hasProject || !hasMedia; // Need project with files
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
 }
 
@@ -1184,6 +1224,25 @@ viewerCloseBtn.addEventListener("click", closeMediaViewer);
 viewerBackdrop.addEventListener("click", closeMediaViewer);
 viewerPrevBtn.addEventListener("click", () => navigateViewer(-1));
 viewerNextBtn.addEventListener("click", () => navigateViewer(1));
+
+// Viewer download button
+viewerDownloadBtn.addEventListener("click", () => {
+  const filteredImages = getFilteredImages();
+  const media = filteredImages[state.viewerIndex];
+  if (media) {
+    const projectName = media.project || state.currentProject;
+    if (projectName) {
+      downloadMediaFile(projectName, media.name);
+    }
+  }
+});
+
+// Download All button
+downloadAllBtn.addEventListener("click", () => {
+  if (state.currentProject) {
+    downloadProject(state.currentProject);
+  }
+});
 
 // Close viewer when clicking on the content area outside of media/info
 const viewerContent = mediaViewerModal.querySelector(".media-viewer-modal__content");

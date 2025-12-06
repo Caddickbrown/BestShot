@@ -13,12 +13,12 @@
   </head>
   <body>
     <div class="shell">
-      <!-- Mobile Project Selector -->
+      <!-- Mobile Album Selector -->
       <div class="mobile-project-bar">
         <button id="mobile-project-toggle" class="mobile-project-toggle">
           <span class="mobile-project-toggle__label">
             <span class="mobile-project-toggle__icon">📁</span>
-            <span id="mobile-project-name">Select project</span>
+            <span id="mobile-project-name">Select album</span>
           </span>
           <span class="mobile-project-toggle__arrow">▼</span>
         </button>
@@ -26,32 +26,32 @@
 
       <aside class="panel panel--left" id="projects-panel">
         <div class="panel--left__header mobile-only">
-          <h2>Projects</h2>
+          <h2>Albums</h2>
           <div class="panel--left__header-actions">
-            <button id="refresh-projects-mobile" class="text-button" aria-label="Reload projects">↺</button>
+            <button id="refresh-projects-mobile" class="text-button" aria-label="Reload albums">↺</button>
             <button id="close-projects-panel" class="panel-close-btn" aria-label="Close">×</button>
           </div>
         </div>
-        <div class="brand desktop-only">
+        <div class="brand">
           <p class="brand-kicker">bestshot</p>
           <h1>Darkroom</h1>
-          <p class="brand-copy">Drop, rank, and file your selects in a dockerized studio.</p>
+          <p class="brand-copy desktop-only">Drop, rank, and file your selects in a dockerized studio.</p>
         </div>
         <div class="panel-section">
           <div class="panel-head desktop-only">
-            <h2>Projects</h2>
-            <button id="refresh-projects" class="text-button" aria-label="Reload projects">
+            <h2>Albums</h2>
+            <button id="refresh-projects" class="text-button" aria-label="Reload albums">
               ↺ refresh
             </button>
           </div>
           <div id="all-projects-option" class="all-projects-option">
-            <h3>All Projects</h3>
+            <h3>All Albums</h3>
             <small>View all media</small>
           </div>
           <ul id="projects-list" class="projects"></ul>
         </div>
         <form id="new-project-form" class="panel-form">
-          <label for="project-name">Create project</label>
+          <label for="project-name">Create album</label>
           <input
             type="text"
             id="project-name"
@@ -66,7 +66,7 @@
             placeholder='Optional note (e.g. "Portrait set B")'
             rows="2"
           ></textarea>
-          <button type="submit" class="primary">Spin up</button>
+          <button type="submit" class="primary">Create Album</button>
         </form>
       </aside>
       
@@ -76,31 +76,50 @@
       <section class="panel panel--right">
         <header class="workspace-header">
           <div>
-            <p class="eyebrow">project</p>
-            <h2 id="workspace-title">Select a project</h2>
+            <p class="eyebrow">album</p>
+            <h2 id="workspace-title">Select an album</h2>
             <p id="workspace-meta" class="muted"></p>
           </div>
-          <div class="workspace-brand">
-            <span class="workspace-brand__name">BestShot</span>
+          <div class="workspace-header-right">
+            <!-- App Settings Dropdown (now in header right) -->
+            <div class="dropdown-control">
+              <button id="settings-btn" class="icon-button" title="Settings">
+                <span class="icon-gear">⚙</span>
+              </button>
+              <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
+                <div class="dropdown-header">Display</div>
+                <div class="dropdown-section">
+                  <span class="dropdown-label">Media type</span>
+                  <div class="media-filter" role="group" aria-label="Media filter">
+                    <button class="toggle active" data-media-filter="all">All</button>
+                    <button class="toggle" data-media-filter="photos">Photos</button>
+                    <button class="toggle" data-media-filter="videos">Videos</button>
+                  </div>
+                </div>
+                <div class="dropdown-section">
+                  <span class="dropdown-label">Grid size</span>
+                  <div class="grid-size-control" role="group" aria-label="Grid size">
+                    <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
+                    <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
+                    <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
+                  </div>
+                </div>
+                <div class="dropdown-divider"></div>
+                <button id="theme-toggle-btn">
+                  <span class="dropdown-icon" id="theme-icon">🌙</span>
+                  <span id="theme-label">Dark mode</span>
+                </button>
+                <button id="shortcuts-btn">
+                  <span class="dropdown-icon">⌨</span>
+                  Keyboard shortcuts
+                </button>
+              </div>
+            </div>
           </div>
           <div class="workspace-actions">
             <div class="search-box">
               <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
               <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
-            </div>
-            
-            <!-- Display Controls (always visible) -->
-            <div class="display-controls">
-              <div class="media-filter" role="group" aria-label="Media filter">
-                <button class="toggle active" data-media-filter="all">All</button>
-                <button class="toggle" data-media-filter="photos">Photos</button>
-                <button class="toggle" data-media-filter="videos">Videos</button>
-              </div>
-              <div class="grid-size-control" role="group" aria-label="Grid size">
-                <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
-                <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
-                <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
-              </div>
             </div>
             
             <button id="start-compare" class="ghost">Compare</button>
@@ -125,16 +144,16 @@
               <button id="select-mode-btn" class="ghost" disabled title="Toggle selection mode">Select</button>
             </div>
             
-            <!-- Project Settings Dropdown -->
+            <!-- Album Settings Dropdown -->
             <div class="dropdown-control" id="project-settings-control" hidden>
-              <button id="project-settings-btn" class="icon-button" title="Project settings">
+              <button id="project-settings-btn" class="icon-button" title="Album settings">
                 <span class="icon-dots">⋮</span>
               </button>
               <div id="project-settings-dropdown" class="dropdown-menu" hidden>
-                <div class="dropdown-header">Project</div>
+                <div class="dropdown-header">Album</div>
                 <button id="rename-project-menu-btn">
                   <span class="dropdown-icon">✎</span>
-                  Rename project
+                  Rename album
                 </button>
                 <button id="download-all" disabled>
                   <span class="dropdown-icon">↓</span>
@@ -147,30 +166,13 @@
                 <div class="dropdown-divider"></div>
                 <button id="delete-project" class="dropdown-danger" disabled>
                   <span class="dropdown-icon">🗑</span>
-                  Delete project
+                  Delete album
                 </button>
               </div>
               <div id="export-dropdown" class="dropdown-menu dropdown-submenu" hidden>
                 <button data-export="json">Export as JSON</button>
                 <button data-export="csv">Export as CSV</button>
                 <button id="export-back-btn" class="dropdown-back">← Back</button>
-              </div>
-            </div>
-
-            <!-- App Settings Dropdown -->
-            <div class="dropdown-control">
-              <button id="settings-btn" class="icon-button" title="Settings">
-                <span class="icon-gear">⚙</span>
-              </button>
-              <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
-                <button id="theme-toggle-btn">
-                  <span class="dropdown-icon" id="theme-icon">🌙</span>
-                  <span id="theme-label">Dark mode</span>
-                </button>
-                <button id="shortcuts-btn">
-                  <span class="dropdown-icon">⌨</span>
-                  Keyboard shortcuts
-                </button>
               </div>
             </div>
           </div>
@@ -186,7 +188,6 @@
               disabled
             ></textarea>
             <div class="note-actions">
-              <small id="project-description-status" class="muted">Idle</small>
               <button id="save-description" class="ghost" disabled>Save note</button>
             </div>
           </form>
@@ -368,13 +369,13 @@
       </div>
     </div>
 
-    <!-- Rename Project Modal -->
+    <!-- Rename Album Modal -->
     <div id="rename-modal" class="rename-modal" hidden>
       <div class="rename-modal__backdrop"></div>
       <div class="rename-modal__content">
-        <h3>Rename Project</h3>
+        <h3>Rename Album</h3>
         <p>Enter a new name for <strong id="rename-project-current"></strong></p>
-        <input type="text" id="rename-project-input" placeholder="New project name..." autocomplete="off" />
+        <input type="text" id="rename-project-input" placeholder="New album name..." autocomplete="off" />
         <div class="rename-modal__actions">
           <button id="confirm-rename" class="primary">Rename</button>
           <button id="cancel-rename" class="ghost">Cancel</button>
@@ -386,7 +387,7 @@
     <div id="delete-modal" class="delete-modal" hidden>
       <div class="delete-modal__backdrop"></div>
       <div class="delete-modal__content">
-        <h3>Delete Project?</h3>
+        <h3>Delete Album?</h3>
         <p>Are you sure you want to delete <strong id="delete-project-name"></strong>? This will remove all media files and cannot be undone.</p>
         <div class="delete-modal__actions">
           <button id="confirm-delete" class="primary danger">Delete</button>
@@ -395,16 +396,16 @@
       </div>
     </div>
 
-    <!-- Project Selection Modal (for file drops in All Projects view) -->
+    <!-- Album Selection Modal (for file drops in All Albums view) -->
     <div id="project-select-modal" class="project-select-modal" hidden>
       <div class="project-select-modal__backdrop"></div>
       <div class="project-select-modal__content">
-        <h3>Choose a Project</h3>
-        <p>Select which project to add these files to, or create a new project.</p>
+        <h3>Choose an Album</h3>
+        <p>Select which album to add these files to, or create a new album.</p>
         <div id="project-select-list" class="project-select-modal__list"></div>
         <div class="project-select-modal__divider">or create new</div>
         <div class="project-select-modal__new">
-          <input type="text" id="project-select-new-name" placeholder="New project name..." />
+          <input type="text" id="project-select-new-name" placeholder="New album name..." />
           <button id="project-select-create" class="primary">Create</button>
         </div>
         <div class="project-select-modal__actions">

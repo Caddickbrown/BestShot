@@ -1002,23 +1002,61 @@ bulkDeleteBtn.addEventListener("click", async () => {
   if (state.selectedItems.size === 0) return;
   if (!confirm(`Delete ${state.selectedItems.size} selected file(s)? This cannot be undone.`)) return;
   
-  const projectName = state.currentProject;
-  if (!projectName) return;
-  
-  const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/batch-delete`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ files: Array.from(state.selectedItems) }),
-  });
-  
-  if (!res.ok) {
-    alert("Failed to delete files");
-    return;
+  if (state.isAllProjects) {
+    // In All Albums view, group files by project
+    const filesByProject = new Map();
+    for (const filename of state.selectedItems) {
+      const media = state.images.find(m => m.name === filename);
+      if (media && media.project) {
+        if (!filesByProject.has(media.project)) {
+          filesByProject.set(media.project, []);
+        }
+        filesByProject.get(media.project).push(filename);
+      }
+    }
+    
+    // Delete files from each project
+    let allSucceeded = true;
+    for (const [projectName, files] of filesByProject.entries()) {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/batch-delete`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files }),
+      });
+      
+      if (!res.ok) {
+        allSucceeded = false;
+        console.error(`Failed to delete files from ${projectName}`);
+      }
+    }
+    
+    if (!allSucceeded) {
+      alert("Some files failed to delete");
+    }
+    
+    exitSelectionMode();
+    await loadAllProjectsState();
+    await fetchProjects();
+  } else {
+    // Single project view
+    const projectName = state.currentProject;
+    if (!projectName) return;
+    
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/batch-delete`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: Array.from(state.selectedItems) }),
+    });
+    
+    if (!res.ok) {
+      alert("Failed to delete files");
+      return;
+    }
+    
+    exitSelectionMode();
+    await loadProjectState();
+    await fetchProjects();
   }
-  
-  exitSelectionMode();
-  await loadProjectState();
-  await fetchProjects();
 });
 
 bulkDownloadBtn.addEventListener("click", async () => {

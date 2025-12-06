@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -28,7 +29,7 @@ from werkzeug.utils import secure_filename
 
 # Pillow for thumbnails and EXIF
 try:
-    from PIL import Image, ExifTags
+    from PIL import Image, ExifTags, ImageOps
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -77,6 +78,23 @@ THUMBS_DIR_NAME = ".thumbs"
 THUMBNAIL_SIZE = (400, 400)
 
 
+def _sanitize_project_name(name: str) -> str:
+    """Sanitize project name to be writing-friendly while preventing path traversal.
+    
+    Allows: letters, numbers, spaces, apostrophes, hyphens, underscores, periods, commas
+    Removes: path separators, control characters, and other dangerous characters
+    """
+    # Remove path separators and dangerous characters
+    # Keep: alphanumeric, spaces, apostrophes, hyphens, underscores, periods, commas
+    # Remove: / \ : * ? " < > | and control characters
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', name)
+    # Remove leading/trailing spaces and dots (Windows doesn't allow these)
+    sanitized = sanitized.strip(' .')
+    # Replace multiple consecutive spaces with single space
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    return sanitized
+
+
 def create_app() -> Flask:
     app = Flask(
         __name__,
@@ -96,10 +114,12 @@ def create_app() -> Flask:
     project_root.mkdir(parents=True, exist_ok=True)
 
     def _project_path(name: str) -> Path:
-        safe_name = secure_filename(name)
+        # Use writing-friendly sanitization for project names
+        safe_name = _sanitize_project_name(name)
         if not safe_name:
             abort(400, description="Invalid project name")
         project_path = (project_root / safe_name).resolve()
+        # Security check: ensure path is within project root (prevents path traversal)
         if project_root not in project_path.parents and project_path != project_root:
             abort(400, description="Project path is outside of the root")
         return project_path
@@ -264,6 +284,13 @@ def create_app() -> Flask:
         
         try:
             with Image.open(file_path) as img:
+                # Apply EXIF orientation if present (fixes rotation for vertical photos)
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    # If exif_transpose fails, continue without rotation
+                    pass
+                
                 # Convert to RGB if necessary (for PNG with transparency, etc.)
                 if img.mode in ('RGBA', 'LA', 'P'):
                     background = Image.new('RGB', img.size, (0, 0, 0))

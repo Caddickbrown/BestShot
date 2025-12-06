@@ -826,12 +826,15 @@ function renderImages() {
     if (isVideo) {
       const video = card.querySelector("video");
       const videoThumbnail = card.querySelector(".video-thumbnail");
+      if (videoThumbnail) {
+        // Set transition before modifying opacity to ensure animation works
+        videoThumbnail.style.transition = "opacity 0.3s ease";
+        videoThumbnail.style.opacity = "0";
+      }
       video.src = `${media.url}?v=${Date.now()}`;
       video.addEventListener("loadeddata", () => {
         video.currentTime = 0.1;
         if (videoThumbnail) {
-          videoThumbnail.style.opacity = "0";
-          videoThumbnail.style.transition = "opacity 0.3s ease";
           setTimeout(() => {
             videoThumbnail.style.opacity = "1";
           }, 10);
@@ -847,6 +850,10 @@ function renderImages() {
       });
     } else {
       const img = card.querySelector("img");
+      img.alt = media.name;
+      // Set loading attribute before src to ensure lazy loading works correctly
+      img.loading = "lazy";
+      
       // Always use thumbnail if available for faster loading
       if (media.thumbUrl) {
         img.src = `${media.thumbUrl}?v=${Date.now()}`;
@@ -856,8 +863,6 @@ function renderImages() {
       } else {
         img.src = `${media.url}?v=${Date.now()}`;
       }
-      img.alt = media.name;
-      img.loading = "lazy"; // Use native lazy loading
       
       // Add fade-in animation when image loads
       img.addEventListener("load", () => {

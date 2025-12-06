@@ -4,6 +4,12 @@ const newProjectForm = document.getElementById("new-project-form");
 const projectNameInput = document.getElementById("project-name");
 const projectDescriptionInput = document.getElementById("project-description-input");
 const refreshProjectsBtn = document.getElementById("refresh-projects");
+
+// Create album modal elements
+const createAlbumBtn = document.getElementById("create-album-btn");
+const createAlbumModal = document.getElementById("create-album-modal");
+const cancelCreateAlbumBtn = document.getElementById("cancel-create-album");
+const createAlbumBackdrop = createAlbumModal.querySelector(".create-album-modal__backdrop");
 const workspaceTitle = document.getElementById("workspace-title");
 const workspaceMeta = document.getElementById("workspace-meta");
 const galleryDropZone = document.getElementById("gallery-drop-zone");
@@ -1277,8 +1283,7 @@ function disableWorkspace() {
   workspaceTitle.textContent = "Select an album";
   workspaceMeta.textContent = "";
   projectDescriptionField.value = "";
-  projectDescriptionField.disabled = true;
-  saveDescriptionBtn.disabled = true;
+  projectNoteSection.hidden = true;
   state.images = [];
   state.description = "";
   updateActionStates();
@@ -1286,8 +1291,6 @@ function disableWorkspace() {
 
 function enableWorkspace() {
   galleryDropZone.classList.remove("disabled");
-  projectDescriptionField.disabled = false;
-  saveDescriptionBtn.disabled = false;
   updateActionStates();
 }
 
@@ -1295,9 +1298,9 @@ function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
   const hasMedia = state.images.length > 0;
-  browseFilesBtn.disabled = !hasProject;
-  saveDescriptionBtn.disabled = !hasProject;
-  projectDescriptionField.disabled = !hasProject;
+  
+  // Upload is always enabled when we have projects
+  browseFilesBtn.disabled = state.projects.length === 0;
   
   // Project settings dropdown visibility and button states
   projectSettingsControl.hidden = !hasProject;
@@ -1306,7 +1309,7 @@ function updateActionStates() {
   exportBtn.disabled = !hasProject;
   
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
-  selectModeBtn.disabled = !hasProject || !hasMedia;
+  selectModeBtn.disabled = !hasSelection || !hasMedia;
 }
 
 async function createProject(name, description) {
@@ -1323,9 +1326,30 @@ async function createProject(name, description) {
   const created = await res.json();
   projectNameInput.value = "";
   projectDescriptionInput.value = "";
+  closeCreateAlbumModal();
   await fetchProjects();
   await selectProject(created.name);
 }
+
+// ============ Create Album Modal Functions ============
+function openCreateAlbumModal() {
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
+  createAlbumModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  setTimeout(() => projectNameInput.focus(), 50);
+}
+
+function closeCreateAlbumModal() {
+  createAlbumModal.hidden = true;
+  document.body.style.overflow = "";
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
+}
+
+createAlbumBtn.addEventListener("click", openCreateAlbumModal);
+cancelCreateAlbumBtn.addEventListener("click", closeCreateAlbumModal);
+createAlbumBackdrop.addEventListener("click", closeCreateAlbumModal);
 
 // ============ Upload with Progress & Duplicate Detection ============
 async function uploadFiles(files, skipDuplicateCheck = false) {
@@ -2467,6 +2491,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (!shortcutsModal.hidden) {
       closeShortcutsModal();
+    } else if (!createAlbumModal.hidden) {
+      closeCreateAlbumModal();
     } else if (!videoModal.hidden) {
       closeVideoModal();
     } else if (!deleteModal.hidden) {
@@ -2487,6 +2513,8 @@ document.addEventListener("keydown", (event) => {
       discardRanking();
     } else if (state.isSelectionMode) {
       exitSelectionMode();
+    } else if (isEditingDescription) {
+      exitDescriptionEditMode(false);
     }
   }
   
@@ -2526,8 +2554,6 @@ newProjectForm.addEventListener("submit", async (event) => {
   if (!name) return;
   await createProject(name, projectDescriptionInput.value.trim());
 });
-
-projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
 

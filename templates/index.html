@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#05070d" />
-    <title>BestShot · Terminal Darkroom</title>
+    <title>BestShot</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
@@ -107,24 +107,7 @@
           </div>
           <ul id="projects-list" class="projects"></ul>
         </div>
-        <form id="new-project-form" class="panel-form">
-          <label for="project-name">Create album</label>
-          <input
-            type="text"
-            id="project-name"
-            name="project-name"
-            placeholder="night-run-01"
-            autocomplete="off"
-            required
-          />
-          <textarea
-            id="project-description-input"
-            name="project-description"
-            placeholder='Optional note (e.g. "Portrait set B")'
-            rows="2"
-          ></textarea>
-          <button type="submit" class="primary">Create Album</button>
-        </form>
+        <button id="create-album-btn" class="primary create-album-btn">+ New Album</button>
       </aside>
       
       <!-- Mobile backdrop for projects panel -->
@@ -371,6 +354,40 @@
           <button id="apply-ranking" class="primary">Apply Ranking</button>
           <button id="discard-ranking" class="ghost">Discard</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Create Album Modal -->
+    <div id="create-album-modal" class="create-album-modal" hidden>
+      <div class="create-album-modal__backdrop"></div>
+      <div class="create-album-modal__content">
+        <h3>Create New Album</h3>
+        <form id="new-project-form">
+          <div class="form-field">
+            <label for="project-name">Album name</label>
+            <input
+              type="text"
+              id="project-name"
+              name="project-name"
+              placeholder="night-run-01"
+              autocomplete="off"
+              required
+            />
+          </div>
+          <div class="form-field">
+            <label for="project-description-input">Description (optional)</label>
+            <input
+              type="text"
+              id="project-description-input"
+              name="project-description"
+              placeholder='e.g. "Portrait set B"'
+            />
+          </div>
+          <div class="create-album-modal__actions">
+            <button type="submit" class="primary">Create Album</button>
+            <button type="button" id="cancel-create-album" class="ghost">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
 

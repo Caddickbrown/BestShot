@@ -28,11 +28,15 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 1rem clamp(1rem, 4vw, 3rem);
   max-width: 1500px;
   margin: 0 auto;
   gap: 1.5rem;
+}
+
+.app-title {
+  margin-right: auto;
 }
 
 .app-title {
@@ -462,6 +466,11 @@ body {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  position: relative;
+}
+
+.image-card__head .download-media-btn {
+  display: none;
 }
 
 .image-card img {
@@ -1112,6 +1121,15 @@ body {
   min-height: 28px;
   padding-top: 0.25rem;
   border-top: 1px solid var(--border);
+  position: relative;
+  padding-right: 2rem;
+}
+
+.image-card__tags .download-media-btn {
+  position: absolute;
+  right: 0;
+  top: 0.25rem;
+  margin-top: 0;
 }
 
 .image-card__tags[hidden] {
@@ -2477,10 +2495,16 @@ body.light-theme .dropdown-menu button:not(.toggle):hover:not(:disabled) {
 }
 
 body.light-theme .toggle {
-  color: var(--text-muted);
+  color: var(--text);
+  background: transparent;
 }
 
 body.light-theme .toggle.active {
+  background: var(--accent);
+  color: white;
+}
+
+body.light-theme .rank-pill {
   background: var(--accent);
   color: white;
 }
@@ -2709,11 +2733,46 @@ body.light-theme .panel-close-btn:hover {
 
 .project-select-modal__item-name {
   font-weight: 600;
+  color: var(--text);
 }
 
 .project-select-modal__item-count {
   font-size: 0.8rem;
   color: var(--accent);
+}
+
+body.light-theme .project-select-modal__item {
+  background: rgba(241, 245, 249, 0.6);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+body.light-theme .project-select-modal__item:hover {
+  background: rgba(2, 132, 199, 0.1);
+  border-color: var(--accent);
+}
+
+body.light-theme .project-select-modal__item-name {
+  color: var(--text);
+}
+
+body.light-theme .project-select-modal__content {
+  background: white;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+body.light-theme .project-select-modal__content h3 {
+  color: var(--text);
+}
+
+body.light-theme .project-select-modal__new input {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text);
+}
+
+body.light-theme .project-select-modal__new input:focus {
+  background: white;
+  border-color: var(--accent);
 }
 
 .project-select-modal__divider {

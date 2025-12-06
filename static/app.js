@@ -550,9 +550,12 @@ function renderProjects() {
     // Enable drop zone for moving files between albums
     li.addEventListener("dragover", (e) => {
       const isCardDrag = e.dataTransfer.types.includes("application/x-gallery-card");
-      if (isCardDrag && project.name !== state.currentProject) {
-        e.preventDefault();
-        li.classList.add("drop-target");
+      if (isCardDrag) {
+        // Allow drop if in All Albums view, or if target is different from current project
+        if (state.isAllProjects || project.name !== state.currentProject) {
+          e.preventDefault();
+          li.classList.add("drop-target");
+        }
       }
     });
     
@@ -573,7 +576,18 @@ function renderProjects() {
       if (!draggedCard) return;
       
       const mediaName = draggedCard.dataset.name;
-      const sourceProject = state.currentProject;
+      
+      // Get source project - from media item if in All Albums view, otherwise from current project
+      let sourceProject = state.currentProject;
+      if (state.isAllProjects) {
+        const media = state.images.find(m => m.name === mediaName);
+        if (media && media.project) {
+          sourceProject = media.project;
+        } else {
+          // Can't determine source project
+          return;
+        }
+      }
       
       if (!sourceProject || !mediaName || project.name === sourceProject) return;
       
@@ -1252,6 +1266,14 @@ async function reorderImages(from, to) {
   }
   const [moved] = state.images.splice(from, 1);
   state.images.splice(to, 0, moved);
+  
+  // Update rankings immediately for visual feedback
+  state.images.forEach((img, idx) => {
+    if (img.isRanked) {
+      img.rank = idx + 1;
+    }
+  });
+  
   renderImages();
   await saveOrder();
 }
@@ -1909,7 +1931,31 @@ function openMediaViewer(index) {
   } else {
     viewerVideo.hidden = true;
     viewerImage.hidden = false;
-    viewerImage.src = media.url; // Use full image, not thumbnail
+    
+    // Use preloaded image if available, otherwise load
+    if (preloadedImages.has(media.url)) {
+      const preloaded = preloadedImages.get(media.url);
+      if (preloaded.complete) {
+        viewerImage.src = media.url;
+      } else {
+        preloaded.onload = () => {
+          viewerImage.src = media.url;
+        };
+        viewerImage.src = media.thumbUrl || media.url; // Show thumbnail while loading
+      }
+    } else {
+      // Show thumbnail first for instant feedback
+      if (media.thumbUrl) {
+        viewerImage.src = media.thumbUrl;
+        const fullImg = new Image();
+        fullImg.onload = () => {
+          viewerImage.src = media.url;
+        };
+        fullImg.src = media.url;
+      } else {
+        viewerImage.src = media.url;
+      }
+    }
     viewerImage.alt = media.name;
     slideshowControls.hidden = false;
   }
@@ -1941,6 +1987,9 @@ function navigateViewer(direction) {
   
   if (newIndex < 0) newIndex = filteredImages.length - 1;
   if (newIndex >= filteredImages.length) newIndex = 0;
+  
+  // Preload next images before navigating
+  preloadAdjacentImages(filteredImages, newIndex);
   
   openMediaViewer(newIndex);
 }
@@ -2116,6 +2165,10 @@ function startSlideshow() {
   let countdown = state.slideshowDelay / 1000;
   slideshowTimer.textContent = countdown;
   
+  // Preload next images for smoother slideshow
+  const filteredImages = getFilteredImages();
+  preloadAdjacentImages(filteredImages, state.viewerIndex);
+  
   state.slideshowInterval = setInterval(() => {
     countdown--;
     slideshowTimer.textContent = countdown;
@@ -2123,6 +2176,9 @@ function startSlideshow() {
     if (countdown <= 0) {
       navigateViewer(1);
       countdown = state.slideshowDelay / 1000;
+      // Preload more images as slideshow progresses
+      const currentFiltered = getFilteredImages();
+      preloadAdjacentImages(currentFiltered, state.viewerIndex);
     }
   }, 1000);
 }

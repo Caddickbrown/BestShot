@@ -27,6 +27,11 @@ const videoTemplate = document.getElementById("video-card-template");
 const projectDescriptionForm = document.getElementById("project-description-form");
 const projectDescriptionField = document.getElementById("project-description");
 const saveDescriptionBtn = document.getElementById("save-description");
+const cancelDescriptionBtn = document.getElementById("cancel-description");
+const projectNoteSection = document.getElementById("project-note-section");
+const projectDescriptionDisplay = document.getElementById("project-description-display");
+const projectDescriptionText = document.getElementById("project-description-text");
+const editDescriptionMenuBtn = document.getElementById("edit-description-menu-btn");
 const startCompareBtn = document.getElementById("start-compare");
 const mediaFilterButtons = document.querySelectorAll("[data-media-filter]");
 const searchInput = document.getElementById("search-input");
@@ -380,6 +385,12 @@ renameProjectMenuBtn.addEventListener("click", () => {
   openRenameModal();
 });
 
+// Edit description from project settings menu
+editDescriptionMenuBtn.addEventListener("click", () => {
+  closeAllDropdowns();
+  enterDescriptionEditMode();
+});
+
 // ============ Grid Size Controls ============
 function updateGridSize() {
   imagesGrid.classList.remove("grid-small", "grid-medium", "grid-large");
@@ -573,7 +584,10 @@ async function loadAllProjectsState() {
   if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
-  projectDescriptionField.value = "";
+  // Hide description section for All Albums
+  exitDescriptionEditMode();
+  projectDescriptionDisplay.hidden = true;
+  
   enableWorkspace();
   renderImages();
 }
@@ -607,7 +621,9 @@ async function loadProjectState() {
   if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
-  projectDescriptionField.value = state.description;
+  // Update description display
+  updateDescriptionDisplay();
+  
   enableWorkspace();
   renderImages();
 }
@@ -1285,18 +1301,42 @@ function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
   const hasMedia = state.images.length > 0;
-  browseFilesBtn.disabled = !hasProject;
-  saveDescriptionBtn.disabled = !hasProject;
-  projectDescriptionField.disabled = !hasProject;
+  // Upload is always enabled now - we'll ask which album to upload to
+  browseFilesBtn.disabled = false;
   
   // Project settings dropdown visibility and button states
   projectSettingsControl.hidden = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
   downloadAllBtn.disabled = !hasProject || !hasMedia;
   exportBtn.disabled = !hasProject;
+  editDescriptionMenuBtn.disabled = !hasProject;
   
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
   selectModeBtn.disabled = !hasProject || !hasMedia;
+}
+
+// ============ Description Edit Mode Functions ============
+function enterDescriptionEditMode() {
+  projectDescriptionField.value = state.description;
+  projectNoteSection.hidden = false;
+  projectDescriptionDisplay.hidden = true;
+  projectDescriptionField.disabled = false;
+  projectDescriptionField.focus();
+}
+
+function exitDescriptionEditMode() {
+  projectNoteSection.hidden = true;
+  projectDescriptionField.disabled = true;
+}
+
+function updateDescriptionDisplay() {
+  if (state.description && state.description.trim()) {
+    projectDescriptionText.textContent = state.description;
+    projectDescriptionDisplay.hidden = false;
+  } else {
+    projectDescriptionDisplay.hidden = true;
+  }
+  exitDescriptionEditMode();
 }
 
 async function createProject(name, description) {
@@ -1504,21 +1544,22 @@ async function saveDescription(event) {
   event.preventDefault();
   if (!state.currentProject) return;
   const description = projectDescriptionField.value.trim();
-  saveDescriptionBtn.disabled = true;
   const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ description }),
   });
   if (!res.ok) {
-    saveDescriptionBtn.disabled = false;
     alert("Could not save description");
     return;
   }
   state.description = description;
-  saveDescriptionBtn.disabled = false;
+  updateDescriptionDisplay();
   await fetchProjects();
-  updateActionStates();
+}
+
+function cancelDescriptionEdit() {
+  updateDescriptionDisplay();
 }
 
 async function setMediaFilter(filter) {
@@ -2561,10 +2602,19 @@ browseFilesBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
   if (fileInput.files.length) {
-    uploadFiles(fileInput.files);
+    // Always ask which album to upload to
+    if (state.currentProject) {
+      // If we have a current project, still ask to confirm or choose different album
+      openProjectSelectModal(fileInput.files);
+    } else {
+      // If no current project (including All Albums view), ask which album
+      openProjectSelectModal(fileInput.files);
+    }
     fileInput.value = "";
   }
 });
+
+cancelDescriptionBtn.addEventListener("click", cancelDescriptionEdit);
 
 allProjectsOption.addEventListener("click", () => {
   closeMobileProjectsPanel();
@@ -2643,11 +2693,8 @@ galleryDropZone.addEventListener("drop", (event) => {
   
   if (event.dataTransfer.files.length > 0) {
     const files = Array.from(event.dataTransfer.files);
-    if (state.isAllProjects) {
-      openProjectSelectModal(files);
-    } else if (state.currentProject) {
-      uploadFiles(files);
-    }
+    // Always ask which album to upload to
+    openProjectSelectModal(files);
   }
 });
 

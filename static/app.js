@@ -78,6 +78,10 @@ const shortcutsBackdrop = shortcutsModal.querySelector(".shortcuts-modal__backdr
 
 // Check if on mobile/touch device
 const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
+const isMobileWidth = () => window.matchMedia("(max-width: 680px)").matches;
+
+// Dropdown backdrop for mobile tap-to-close
+const dropdownBackdrop = document.getElementById("dropdown-backdrop");
 
 // Upload progress
 const uploadProgress = document.getElementById("upload-progress");
@@ -150,6 +154,9 @@ const viewerNextBtn = mediaViewerModal.querySelector(".media-viewer-modal__next"
 const viewerDownloadBtn = document.getElementById("viewer-download-btn");
 const viewerCommentInput = document.getElementById("viewer-comment-input");
 const viewerExifPanel = document.getElementById("viewer-exif");
+const viewerExifSection = document.getElementById("viewer-exif-section");
+const viewerExifToggle = document.getElementById("viewer-exif-toggle");
+const exifToggleLabel = document.getElementById("exif-toggle-label");
 const exifGrid = document.getElementById("exif-grid");
 const downloadAllBtn = document.getElementById("download-all");
 
@@ -195,6 +202,7 @@ const state = {
   slideshowDelay: 3000,
   theme: localStorage.getItem("theme") || "dark",
   pendingUploadFiles: null, // For duplicate detection flow
+  showExif: false, // EXIF panel visibility in media viewer
 };
 
 // Touch drag-and-drop state
@@ -221,7 +229,7 @@ function toggleTheme() {
 
 themeToggleBtn.addEventListener("click", () => {
   toggleTheme();
-  settingsDropdown.hidden = true;
+  closeAllDropdowns();
 });
 initTheme();
 
@@ -288,15 +296,19 @@ function updateSortUI() {
 
 sortButton.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = sortDropdown.hidden;
   closeAllDropdowns();
-  sortDropdown.hidden = !sortDropdown.hidden;
+  sortDropdown.hidden = !wasHidden;
+  if (!sortDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 sortOptions.forEach((btn) => {
   btn.addEventListener("click", async () => {
     state.sortBy = btn.dataset.sort;
     updateSortUI();
-    sortDropdown.hidden = true;
+    closeAllDropdowns();
     updateURL();
     await loadProjectState();
   });
@@ -308,6 +320,24 @@ function closeAllDropdowns() {
   exportDropdown.hidden = true;
   settingsDropdown.hidden = true;
   projectSettingsDropdown.hidden = true;
+  // Hide dropdown backdrop on mobile
+  if (dropdownBackdrop) {
+    dropdownBackdrop.hidden = true;
+  }
+}
+
+// Show dropdown backdrop on mobile when a dropdown opens
+function showDropdownBackdrop() {
+  if (isMobileWidth() && dropdownBackdrop) {
+    dropdownBackdrop.hidden = false;
+  }
+}
+
+// Dropdown backdrop click handler - close all dropdowns on tap outside
+if (dropdownBackdrop) {
+  dropdownBackdrop.addEventListener("click", () => {
+    closeAllDropdowns();
+  });
 }
 
 document.addEventListener("click", (e) => {
@@ -320,26 +350,34 @@ document.addEventListener("click", (e) => {
 // Settings dropdown
 settingsBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = settingsDropdown.hidden;
   closeAllDropdowns();
-  settingsDropdown.hidden = !settingsDropdown.hidden;
+  settingsDropdown.hidden = !wasHidden;
+  if (!settingsDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 // Shortcuts button in settings
 shortcutsBtn.addEventListener("click", () => {
-  settingsDropdown.hidden = true;
+  closeAllDropdowns();
   openShortcutsModal();
 });
 
 // Project settings dropdown
 projectSettingsBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = projectSettingsDropdown.hidden;
   closeAllDropdowns();
-  projectSettingsDropdown.hidden = !projectSettingsDropdown.hidden;
+  projectSettingsDropdown.hidden = !wasHidden;
+  if (!projectSettingsDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 // Rename from project settings menu
 renameProjectMenuBtn.addEventListener("click", () => {
-  projectSettingsDropdown.hidden = true;
+  closeAllDropdowns();
   openRenameModal();
 });
 
@@ -369,14 +407,18 @@ if (savedGridSize) {
 // ============ Export Controls ============
 exportBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasHidden = exportDropdown.hidden;
   projectSettingsDropdown.hidden = true;
-  exportDropdown.hidden = !exportDropdown.hidden;
+  exportDropdown.hidden = !wasHidden;
+  if (!exportDropdown.hidden) {
+    showDropdownBackdrop();
+  }
 });
 
 exportOptions.forEach((btn) => {
   btn.addEventListener("click", () => {
     const format = btn.dataset.export;
-    exportDropdown.hidden = true;
+    closeAllDropdowns();
     if (state.currentProject) {
       const url = `/api/projects/${encodeURIComponent(state.currentProject)}/export?format=${format}`;
       window.open(url, "_blank");
@@ -387,6 +429,8 @@ exportOptions.forEach((btn) => {
 exportBackBtn.addEventListener("click", () => {
   exportDropdown.hidden = true;
   projectSettingsDropdown.hidden = false;
+  // Keep backdrop visible since we're showing another dropdown
+  showDropdownBackdrop();
 });
 
 // ============ Keyboard Shortcuts Modal ============
@@ -1540,7 +1584,7 @@ async function deleteProject() {
 }
 
 deleteProjectBtn.addEventListener("click", () => {
-  projectSettingsDropdown.hidden = true;
+  closeAllDropdowns();
   openDeleteModal();
 });
 confirmDeleteBtn.addEventListener("click", deleteProject);
@@ -1824,17 +1868,27 @@ async function loadViewerExif(media) {
   viewerExifPanel.hidden = true;
   exifGrid.innerHTML = "";
   
-  if (media.type !== "image") return;
+  // Hide entire section for videos
+  if (media.type !== "image") {
+    viewerExifSection.hidden = true;
+    return;
+  }
   
   const projectName = media.project || state.currentProject;
-  if (!projectName) return;
+  if (!projectName) {
+    viewerExifSection.hidden = true;
+    return;
+  }
   
   try {
     const res = await fetch(
       `/api/projects/${encodeURIComponent(projectName)}/files/${encodeURIComponent(media.name)}/exif`
     );
     
-    if (!res.ok) return;
+    if (!res.ok) {
+      viewerExifSection.hidden = true;
+      return;
+    }
     
     const data = await res.json();
     const exif = data.exif || {};
@@ -1860,11 +1914,16 @@ async function loadViewerExif(media) {
     if (exif.FocalLength) addExifItem("Focal", `${exif.FocalLength}mm`);
     if (exif.LensModel) addExifItem("Lens", exif.LensModel);
     
+    // Show section with toggle if we have EXIF data
     if (exifGrid.children.length > 0) {
-      viewerExifPanel.hidden = false;
+      viewerExifSection.hidden = false;
+      updateExifVisibility();
+    } else {
+      viewerExifSection.hidden = true;
     }
   } catch (e) {
     console.error("Failed to load EXIF:", e);
+    viewerExifSection.hidden = true;
   }
 }
 
@@ -1973,7 +2032,7 @@ viewerDownloadBtn.addEventListener("click", () => {
 });
 
 downloadAllBtn.addEventListener("click", () => {
-  projectSettingsDropdown.hidden = true;
+  closeAllDropdowns();
   if (state.currentProject) {
     downloadProject(state.currentProject);
   }
@@ -1985,6 +2044,24 @@ viewerContent.addEventListener("click", (event) => {
     closeMediaViewer();
   }
 });
+
+// EXIF toggle handler
+viewerExifToggle.addEventListener("click", () => {
+  state.showExif = !state.showExif;
+  updateExifVisibility();
+});
+
+function updateExifVisibility() {
+  if (state.showExif && exifGrid.children.length > 0) {
+    viewerExifPanel.hidden = false;
+    viewerExifToggle.classList.add("active");
+    exifToggleLabel.textContent = "Hide camera info";
+  } else {
+    viewerExifPanel.hidden = true;
+    viewerExifToggle.classList.remove("active");
+    exifToggleLabel.textContent = "Show camera info";
+  }
+}
 
 viewerAddTagBtn.addEventListener("click", (e) => {
   e.stopPropagation();

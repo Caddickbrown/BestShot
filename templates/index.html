@@ -7,11 +7,118 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#05070d" />
-    <title>BestShot · Terminal Darkroom</title>
+    <title>BestShot</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
   <body>
+    <header class="app-chrome app-frame">
+      <div class="app-brand">
+        <h1>BestShot</h1>
+      </div>
+      <div class="app-chrome__settings">
+        <div class="dropdown-control">
+          <button id="settings-btn" class="icon-button" title="Settings">
+            <span class="icon-gear">⚙</span>
+          </button>
+          <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
+            <div class="dropdown-header">Display</div>
+            <div class="dropdown-section">
+              <span class="dropdown-label">Media type</span>
+              <div class="media-filter" role="group" aria-label="Media filter">
+                <button class="toggle active" data-media-filter="all">All</button>
+                <button class="toggle" data-media-filter="photos">Photos</button>
+                <button class="toggle" data-media-filter="videos">Videos</button>
+              </div>
+            </div>
+            <div class="dropdown-section">
+              <span class="dropdown-label">Grid size</span>
+              <div class="grid-size-control" role="group" aria-label="Grid size">
+                <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
+                <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
+                <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
+              </div>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button id="theme-toggle-btn">
+              <span class="dropdown-icon" id="theme-icon">🌙</span>
+              <span id="theme-label">Dark mode</span>
+            </button>
+            <button id="shortcuts-btn">
+              <span class="dropdown-icon">⌨</span>
+              Keyboard shortcuts
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace-actions-bar app-frame">
+      <div class="workspace-actions">
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
+          <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
+        </div>
+
+        <button id="start-compare" class="ghost">Compare</button>
+        <div class="sort-control">
+          <button id="sort-button" class="sort-button">
+            <span id="sort-label">Rank</span>
+            <span class="sort-button__icon">▼</span>
+          </button>
+          <div id="sort-dropdown" class="sort-dropdown" hidden>
+            <button data-sort="rank" class="active">Rank</button>
+            <button data-sort="name">Name (A-Z)</button>
+            <button data-sort="name_desc">Name (Z-A)</button>
+            <button data-sort="date_desc">Date (Newest)</button>
+            <button data-sort="date">Date (Oldest)</button>
+            <button data-sort="size_desc">Size (Largest)</button>
+            <button data-sort="size">Size (Smallest)</button>
+          </div>
+        </div>
+        <div class="upload-actions">
+          <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
+          <button id="browse-files" class="ghost" disabled>Upload</button>
+          <button id="select-mode-btn" class="ghost" disabled title="Toggle selection mode">Select</button>
+        </div>
+
+        <div class="dropdown-control" id="project-settings-control" hidden>
+          <button id="project-settings-btn" class="icon-button" title="Album settings">
+            <span class="icon-dots">⋮</span>
+          </button>
+          <div id="project-settings-dropdown" class="dropdown-menu" hidden>
+            <div class="dropdown-header">Album</div>
+            <button id="rename-project-menu-btn">
+              <span class="dropdown-icon">✎</span>
+              Rename album
+            </button>
+            <button id="edit-description-menu-btn">
+              <span class="dropdown-icon">📝</span>
+              Edit description
+            </button>
+            <button id="download-all" disabled>
+              <span class="dropdown-icon">↓</span>
+              Download all files
+            </button>
+            <button id="export-btn" disabled>
+              <span class="dropdown-icon">📋</span>
+              Export metadata...
+            </button>
+            <div class="dropdown-divider"></div>
+            <button id="delete-project" class="dropdown-danger" disabled>
+              <span class="dropdown-icon">🗑</span>
+              Delete album
+            </button>
+          </div>
+          <div id="export-dropdown" class="dropdown-menu dropdown-submenu" hidden>
+            <button data-export="json">Export as JSON</button>
+            <button data-export="csv">Export as CSV</button>
+            <button id="export-back-btn" class="dropdown-back">← Back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="shell">
       <!-- Mobile Album Selector -->
       <div class="mobile-project-bar">
@@ -32,11 +139,6 @@
             <button id="close-projects-panel" class="panel-close-btn" aria-label="Close">×</button>
           </div>
         </div>
-        <div class="brand">
-          <p class="brand-kicker">bestshot</p>
-          <h1>Darkroom</h1>
-          <p class="brand-copy desktop-only">Drop, rank, and file your selects in a dockerized studio.</p>
-        </div>
         <div class="panel-section">
           <div class="panel-head desktop-only">
             <h2>Albums</h2>
@@ -46,7 +148,6 @@
           </div>
           <div id="all-projects-option" class="all-projects-option">
             <h3>All Albums</h3>
-            <small>View all media</small>
           </div>
           <ul id="projects-list" class="projects"></ul>
         </div>
@@ -80,115 +181,23 @@
             <h2 id="workspace-title">Select an album</h2>
             <p id="workspace-meta" class="muted"></p>
           </div>
-          <div class="workspace-header-right">
-            <!-- App Settings Dropdown (now in header right) -->
-            <div class="dropdown-control">
-              <button id="settings-btn" class="icon-button" title="Settings">
-                <span class="icon-gear">⚙</span>
-              </button>
-              <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
-                <div class="dropdown-header">Display</div>
-                <div class="dropdown-section">
-                  <span class="dropdown-label">Media type</span>
-                  <div class="media-filter" role="group" aria-label="Media filter">
-                    <button class="toggle active" data-media-filter="all">All</button>
-                    <button class="toggle" data-media-filter="photos">Photos</button>
-                    <button class="toggle" data-media-filter="videos">Videos</button>
-                  </div>
-                </div>
-                <div class="dropdown-section">
-                  <span class="dropdown-label">Grid size</span>
-                  <div class="grid-size-control" role="group" aria-label="Grid size">
-                    <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
-                    <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
-                    <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
-                  </div>
-                </div>
-                <div class="dropdown-divider"></div>
-                <button id="theme-toggle-btn">
-                  <span class="dropdown-icon" id="theme-icon">🌙</span>
-                  <span id="theme-label">Dark mode</span>
-                </button>
-                <button id="shortcuts-btn">
-                  <span class="dropdown-icon">⌨</span>
-                  Keyboard shortcuts
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="workspace-actions">
-            <div class="search-box">
-              <input type="text" id="search-input" placeholder="Search by name or tag..." autocomplete="off" />
-              <button id="clear-search" class="search-clear" hidden aria-label="Clear search">&times;</button>
-            </div>
-            
-            <button id="start-compare" class="ghost">Compare</button>
-            <div class="sort-control">
-              <button id="sort-button" class="sort-button">
-                <span id="sort-label">Rank</span>
-                <span class="sort-button__icon">▼</span>
-              </button>
-              <div id="sort-dropdown" class="sort-dropdown" hidden>
-                <button data-sort="rank" class="active">Rank</button>
-                <button data-sort="name">Name (A-Z)</button>
-                <button data-sort="name_desc">Name (Z-A)</button>
-                <button data-sort="date_desc">Date (Newest)</button>
-                <button data-sort="date">Date (Oldest)</button>
-                <button data-sort="size_desc">Size (Largest)</button>
-                <button data-sort="size">Size (Smallest)</button>
-              </div>
-            </div>
-            <div class="upload-actions">
-              <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
-              <button id="browse-files" class="ghost" disabled>Browse</button>
-              <button id="select-mode-btn" class="ghost" disabled title="Toggle selection mode">Select</button>
-            </div>
-            
-            <!-- Album Settings Dropdown -->
-            <div class="dropdown-control" id="project-settings-control" hidden>
-              <button id="project-settings-btn" class="icon-button" title="Album settings">
-                <span class="icon-dots">⋮</span>
-              </button>
-              <div id="project-settings-dropdown" class="dropdown-menu" hidden>
-                <div class="dropdown-header">Album</div>
-                <button id="rename-project-menu-btn">
-                  <span class="dropdown-icon">✎</span>
-                  Rename album
-                </button>
-                <button id="download-all" disabled>
-                  <span class="dropdown-icon">↓</span>
-                  Download all files
-                </button>
-                <button id="export-btn" disabled>
-                  <span class="dropdown-icon">📋</span>
-                  Export metadata...
-                </button>
-                <div class="dropdown-divider"></div>
-                <button id="delete-project" class="dropdown-danger" disabled>
-                  <span class="dropdown-icon">🗑</span>
-                  Delete album
-                </button>
-              </div>
-              <div id="export-dropdown" class="dropdown-menu dropdown-submenu" hidden>
-                <button data-export="json">Export as JSON</button>
-                <button data-export="csv">Export as CSV</button>
-                <button id="export-back-btn" class="dropdown-back">← Back</button>
-              </div>
-            </div>
-          </div>
         </header>
 
-        <section class="project-note">
-          <form id="project-description-form">
+        <section class="project-note" id="project-note">
+          <div class="project-note__label">
             <label for="project-description">Description</label>
+          </div>
+          <p id="project-description-display" class="project-description__display muted">No description yet.</p>
+          <form id="project-description-form" hidden>
             <textarea
               id="project-description"
               placeholder="Leave a short note for this set"
-              rows="3"
+              rows="2"
               disabled
             ></textarea>
             <div class="note-actions">
-              <button id="save-description" class="ghost" disabled>Save note</button>
+              <button id="save-description" class="primary" disabled>Save note</button>
+              <button type="button" id="cancel-description" class="ghost">Cancel</button>
             </div>
           </form>
         </section>

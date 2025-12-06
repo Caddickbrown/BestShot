@@ -72,6 +72,7 @@
             <div class="upload-actions">
               <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
               <button id="browse-files" class="ghost" disabled>Browse</button>
+              <button id="download-all" class="ghost" disabled>Download All</button>
               <button id="delete-project" class="ghost danger" disabled>Delete</button>
             </div>
           </div>
@@ -109,6 +110,7 @@
           <span class="rank-pill"></span>
           <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
           <p class="filename"></p>
+          <button class="download-media-btn" aria-label="Download photo" title="Download photo">↓</button>
           <button class="delete-media-btn" aria-label="Delete photo" title="Delete photo">&times;</button>
         </div>
         <img alt="" loading="lazy" />
@@ -128,6 +130,7 @@
           <span class="rank-pill"></span>
           <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
           <p class="filename"></p>
+          <button class="download-media-btn" aria-label="Download video" title="Download video">↓</button>
           <button class="delete-media-btn" aria-label="Delete video" title="Delete video">&times;</button>
         </div>
         <div class="video-thumbnail">
@@ -171,6 +174,11 @@
         </div>
         <div class="media-viewer-modal__info">
           <p id="viewer-filename" class="media-viewer-modal__name"></p>
+          <div class="media-viewer-modal__actions">
+            <button id="viewer-download-btn" class="ghost viewer-download-btn">
+              <span class="download-icon">↓</span> Download
+            </button>
+          </div>
           <div class="media-viewer-modal__tags">
             <div id="viewer-tags-list" class="tags-list"></div>
             <div id="viewer-tag-input-wrapper" class="tag-input-wrapper" hidden>

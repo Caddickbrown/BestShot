@@ -4,6 +4,12 @@ const newProjectForm = document.getElementById("new-project-form");
 const projectNameInput = document.getElementById("project-name");
 const projectDescriptionInput = document.getElementById("project-description-input");
 const refreshProjectsBtn = document.getElementById("refresh-projects");
+
+// Create album modal elements
+const createAlbumBtn = document.getElementById("create-album-btn");
+const createAlbumModal = document.getElementById("create-album-modal");
+const cancelCreateAlbumBtn = document.getElementById("cancel-create-album");
+const createAlbumBackdrop = createAlbumModal.querySelector(".create-album-modal__backdrop");
 const workspaceTitle = document.getElementById("workspace-title");
 const workspaceMeta = document.getElementById("workspace-meta");
 const galleryDropZone = document.getElementById("gallery-drop-zone");
@@ -18,7 +24,12 @@ const mobileProjectName = document.getElementById("mobile-project-name");
 const projectsPanel = document.getElementById("projects-panel");
 const projectsPanelBackdrop = document.getElementById("projects-panel-backdrop");
 const closeProjectsPanelBtn = document.getElementById("close-projects-panel");
-const refreshProjectsMobileBtn = document.getElementById("refresh-projects-mobile");
+
+// Description editing elements
+const projectNoteSection = document.getElementById("project-note-section");
+const noteActions = document.getElementById("note-actions");
+const cancelDescriptionBtn = document.getElementById("cancel-description");
+const editDescriptionBtn = document.getElementById("edit-description-btn");
 
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
@@ -573,6 +584,8 @@ async function loadAllProjectsState() {
   if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
+  // Hide description section for All Albums view
+  projectNoteSection.hidden = true;
   projectDescriptionField.value = "";
   enableWorkspace();
   renderImages();
@@ -607,6 +620,9 @@ async function loadProjectState() {
   if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
+  // Show description section and exit edit mode
+  projectNoteSection.hidden = false;
+  exitDescriptionEditMode(false);
   projectDescriptionField.value = state.description;
   enableWorkspace();
   renderImages();
@@ -1267,8 +1283,7 @@ function disableWorkspace() {
   workspaceTitle.textContent = "Select an album";
   workspaceMeta.textContent = "";
   projectDescriptionField.value = "";
-  projectDescriptionField.disabled = true;
-  saveDescriptionBtn.disabled = true;
+  projectNoteSection.hidden = true;
   state.images = [];
   state.description = "";
   updateActionStates();
@@ -1276,8 +1291,6 @@ function disableWorkspace() {
 
 function enableWorkspace() {
   galleryDropZone.classList.remove("disabled");
-  projectDescriptionField.disabled = false;
-  saveDescriptionBtn.disabled = false;
   updateActionStates();
 }
 
@@ -1285,9 +1298,9 @@ function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
   const hasMedia = state.images.length > 0;
-  browseFilesBtn.disabled = !hasProject;
-  saveDescriptionBtn.disabled = !hasProject;
-  projectDescriptionField.disabled = !hasProject;
+  
+  // Upload is always enabled when we have projects
+  browseFilesBtn.disabled = state.projects.length === 0;
   
   // Project settings dropdown visibility and button states
   projectSettingsControl.hidden = !hasProject;
@@ -1296,7 +1309,7 @@ function updateActionStates() {
   exportBtn.disabled = !hasProject;
   
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
-  selectModeBtn.disabled = !hasProject || !hasMedia;
+  selectModeBtn.disabled = !hasSelection || !hasMedia;
 }
 
 async function createProject(name, description) {
@@ -1313,9 +1326,30 @@ async function createProject(name, description) {
   const created = await res.json();
   projectNameInput.value = "";
   projectDescriptionInput.value = "";
+  closeCreateAlbumModal();
   await fetchProjects();
   await selectProject(created.name);
 }
+
+// ============ Create Album Modal Functions ============
+function openCreateAlbumModal() {
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
+  createAlbumModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  setTimeout(() => projectNameInput.focus(), 50);
+}
+
+function closeCreateAlbumModal() {
+  createAlbumModal.hidden = true;
+  document.body.style.overflow = "";
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
+}
+
+createAlbumBtn.addEventListener("click", openCreateAlbumModal);
+cancelCreateAlbumBtn.addEventListener("click", closeCreateAlbumModal);
+createAlbumBackdrop.addEventListener("click", closeCreateAlbumModal);
 
 // ============ Upload with Progress & Duplicate Detection ============
 async function uploadFiles(files, skipDuplicateCheck = false) {
@@ -1501,7 +1535,7 @@ async function saveOrder() {
 }
 
 async function saveDescription(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   if (!state.currentProject) return;
   const description = projectDescriptionField.value.trim();
   saveDescriptionBtn.disabled = true;
@@ -1517,9 +1551,13 @@ async function saveDescription(event) {
   }
   state.description = description;
   saveDescriptionBtn.disabled = false;
+  exitDescriptionEditMode(true);
   await fetchProjects();
   updateActionStates();
 }
+
+// Save button click handler
+saveDescriptionBtn.addEventListener("click", saveDescription);
 
 async function setMediaFilter(filter) {
   if (state.mediaFilter === filter) return;
@@ -2453,6 +2491,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (!shortcutsModal.hidden) {
       closeShortcutsModal();
+    } else if (!createAlbumModal.hidden) {
+      closeCreateAlbumModal();
     } else if (!videoModal.hidden) {
       closeVideoModal();
     } else if (!deleteModal.hidden) {
@@ -2473,6 +2513,8 @@ document.addEventListener("keydown", (event) => {
       discardRanking();
     } else if (state.isSelectionMode) {
       exitSelectionMode();
+    } else if (isEditingDescription) {
+      exitDescriptionEditMode(false);
     }
   }
   
@@ -2513,10 +2555,7 @@ newProjectForm.addEventListener("submit", async (event) => {
   await createProject(name, projectDescriptionInput.value.trim());
 });
 
-projectDescriptionForm.addEventListener("submit", saveDescription);
-
 refreshProjectsBtn.addEventListener("click", fetchProjects);
-refreshProjectsMobileBtn.addEventListener("click", fetchProjects);
 
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));
@@ -2561,10 +2600,45 @@ browseFilesBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
   if (fileInput.files.length) {
-    uploadFiles(fileInput.files);
+    // Always prompt for album selection
+    openProjectSelectModal(Array.from(fileInput.files));
     fileInput.value = "";
   }
 });
+
+// ============ Description Editing Mode ============
+let isEditingDescription = false;
+let originalDescription = "";
+
+function enterDescriptionEditMode() {
+  if (!state.currentProject) return;
+  isEditingDescription = true;
+  originalDescription = projectDescriptionField.value;
+  projectDescriptionField.readOnly = false;
+  projectDescriptionField.disabled = false;
+  projectDescriptionField.focus();
+  projectNoteSection.classList.add("editing");
+  noteActions.hidden = false;
+  closeAllDropdowns();
+}
+
+function exitDescriptionEditMode(save = false) {
+  isEditingDescription = false;
+  if (!save) {
+    projectDescriptionField.value = originalDescription;
+  }
+  projectDescriptionField.readOnly = true;
+  projectNoteSection.classList.remove("editing");
+  noteActions.hidden = true;
+}
+
+if (editDescriptionBtn) {
+  editDescriptionBtn.addEventListener("click", enterDescriptionEditMode);
+}
+
+if (cancelDescriptionBtn) {
+  cancelDescriptionBtn.addEventListener("click", () => exitDescriptionEditMode(false));
+}
 
 allProjectsOption.addEventListener("click", () => {
   closeMobileProjectsPanel();

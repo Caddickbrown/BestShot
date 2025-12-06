@@ -23,11 +23,48 @@ body {
   color: var(--text);
 }
 
+/* App Header (Brand and Settings) */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem clamp(1rem, 4vw, 3rem) 1rem;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.app-header .brand {
+  margin: 0;
+}
+
+.app-header .brand h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Top Actions Bar (Search, Compare, Rank) */
+.top-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0 0 1rem clamp(1rem, 4vw, 3rem);
+  max-width: 1500px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 1.5rem;
-  padding: 2rem clamp(1rem, 4vw, 3rem) 3rem;
+  padding: 0 clamp(1rem, 4vw, 3rem) 3rem;
   max-width: 1500px;
   margin: 0 auto;
 }
@@ -46,23 +83,7 @@ body {
   gap: 1.75rem;
 }
 
-.brand h1 {
-  margin: 0.2rem 0 0;
-  font-size: 1.75rem;
-}
-
-.brand-kicker {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.brand-copy {
-  margin-top: 0.3rem;
-  color: var(--text-muted);
-}
+/* Brand styles moved to app-header */
 
 .panel-section {
   display: flex;
@@ -291,10 +312,19 @@ body {
 }
 
 .project-note {
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1rem;
   background: rgba(2, 6, 23, 0.5);
+  transition: border-style 0.2s ease;
+}
+
+.project-note.editing {
+  border-style: dashed;
+}
+
+.project-note[hidden] {
+  display: none;
 }
 
 .project-note form {
@@ -308,15 +338,29 @@ body {
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 0.75rem;
+  padding: 0.5rem 0.75rem;
   font-family: inherit;
-  resize: vertical;
+  resize: none;
+  min-height: 2.5rem;
+  max-height: 2.5rem;
+  height: 2.5rem;
+  line-height: 1.5;
+  overflow-y: hidden;
+}
+
+.project-note textarea:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .note-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
+}
+
+.note-actions button[hidden] {
+  display: none;
 }
 
 
@@ -651,8 +695,17 @@ body {
 }
 
 @media (max-width: 1100px) {
+  .app-header {
+    padding: 1rem clamp(1rem, 4vw, 2rem) 0.5rem;
+  }
+
+  .top-actions {
+    padding: 0 0 1rem clamp(1rem, 4vw, 2rem);
+  }
+
   .shell {
     grid-template-columns: 1fr;
+    padding: 0 clamp(1rem, 4vw, 2rem) 2rem;
   }
 
   .panel--left {
@@ -667,8 +720,16 @@ body {
 }
 
 @media (max-width: 680px) {
+  .app-header {
+    padding: 1rem 1rem 0.5rem;
+  }
+
+  .top-actions {
+    padding: 0 1rem 1rem;
+  }
+
   .shell {
-    padding: 1rem;
+    padding: 0 1rem 1rem;
     gap: 1rem;
   }
   

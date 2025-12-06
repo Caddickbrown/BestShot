@@ -18,7 +18,12 @@ const mobileProjectName = document.getElementById("mobile-project-name");
 const projectsPanel = document.getElementById("projects-panel");
 const projectsPanelBackdrop = document.getElementById("projects-panel-backdrop");
 const closeProjectsPanelBtn = document.getElementById("close-projects-panel");
-const refreshProjectsMobileBtn = document.getElementById("refresh-projects-mobile");
+
+// Description editing elements
+const projectNoteSection = document.getElementById("project-note-section");
+const noteActions = document.getElementById("note-actions");
+const cancelDescriptionBtn = document.getElementById("cancel-description");
+const editDescriptionBtn = document.getElementById("edit-description-btn");
 
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
@@ -573,6 +578,8 @@ async function loadAllProjectsState() {
   if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
+  // Hide description section for All Albums view
+  projectNoteSection.hidden = true;
   projectDescriptionField.value = "";
   enableWorkspace();
   renderImages();
@@ -607,6 +614,9 @@ async function loadProjectState() {
   if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
+  // Show description section and exit edit mode
+  projectNoteSection.hidden = false;
+  exitDescriptionEditMode(false);
   projectDescriptionField.value = state.description;
   enableWorkspace();
   renderImages();
@@ -1501,7 +1511,7 @@ async function saveOrder() {
 }
 
 async function saveDescription(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   if (!state.currentProject) return;
   const description = projectDescriptionField.value.trim();
   saveDescriptionBtn.disabled = true;
@@ -1517,9 +1527,13 @@ async function saveDescription(event) {
   }
   state.description = description;
   saveDescriptionBtn.disabled = false;
+  exitDescriptionEditMode(true);
   await fetchProjects();
   updateActionStates();
 }
+
+// Save button click handler
+saveDescriptionBtn.addEventListener("click", saveDescription);
 
 async function setMediaFilter(filter) {
   if (state.mediaFilter === filter) return;
@@ -2516,7 +2530,6 @@ newProjectForm.addEventListener("submit", async (event) => {
 projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
-refreshProjectsMobileBtn.addEventListener("click", fetchProjects);
 
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));
@@ -2561,10 +2574,45 @@ browseFilesBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
   if (fileInput.files.length) {
-    uploadFiles(fileInput.files);
+    // Always prompt for album selection
+    openProjectSelectModal(Array.from(fileInput.files));
     fileInput.value = "";
   }
 });
+
+// ============ Description Editing Mode ============
+let isEditingDescription = false;
+let originalDescription = "";
+
+function enterDescriptionEditMode() {
+  if (!state.currentProject) return;
+  isEditingDescription = true;
+  originalDescription = projectDescriptionField.value;
+  projectDescriptionField.readOnly = false;
+  projectDescriptionField.disabled = false;
+  projectDescriptionField.focus();
+  projectNoteSection.classList.add("editing");
+  noteActions.hidden = false;
+  closeAllDropdowns();
+}
+
+function exitDescriptionEditMode(save = false) {
+  isEditingDescription = false;
+  if (!save) {
+    projectDescriptionField.value = originalDescription;
+  }
+  projectDescriptionField.readOnly = true;
+  projectNoteSection.classList.remove("editing");
+  noteActions.hidden = true;
+}
+
+if (editDescriptionBtn) {
+  editDescriptionBtn.addEventListener("click", enterDescriptionEditMode);
+}
+
+if (cancelDescriptionBtn) {
+  cancelDescriptionBtn.addEventListener("click", () => exitDescriptionEditMode(false));
+}
 
 allProjectsOption.addEventListener("click", () => {
   closeMobileProjectsPanel();

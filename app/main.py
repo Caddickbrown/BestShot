@@ -968,6 +968,68 @@ def create_app() -> Flask:
         
         return jsonify({"generated": generated, "count": len(generated)})
 
+    @app.post("/api/projects/<project_name>/move-file")
+    def move_file_between_projects(project_name: str):
+        """Move a file from one project to another."""
+        payload = request.get_json(silent=True) or {}
+        filename = payload.get("filename")
+        target_project = payload.get("targetProject")
+        
+        if not filename or not target_project:
+            abort(400, description="filename and targetProject are required")
+        
+        source_folder = _project_path(project_name)
+        if not source_folder.exists():
+            abort(404, description="Source project not found")
+        
+        target_folder = _project_path(target_project)
+        if not target_folder.exists():
+            abort(404, description="Target project not found")
+        
+        source_file = (source_folder / filename).resolve()
+        if source_folder not in source_file.parents and source_file != source_folder:
+            abort(400, description="Invalid file path")
+        if not source_file.exists():
+            abort(404, description="File not found")
+        
+        # Check if file already exists in target
+        target_file = target_folder / filename
+        if target_file.exists():
+            abort(400, description="File already exists in target project")
+        
+        # Move the file
+        target_file = _next_available_name(target_folder, filename)
+        final_target = target_folder / target_file
+        shutil.move(str(source_file), str(final_target))
+        
+        # Move thumbnail if exists
+        source_thumbs_dir = source_folder / THUMBS_DIR_NAME
+        target_thumbs_dir = target_folder / THUMBS_DIR_NAME
+        thumb_name = f"{source_file.stem}_thumb.webp"
+        source_thumb = source_thumbs_dir / thumb_name
+        if source_thumb.exists():
+            target_thumbs_dir.mkdir(exist_ok=True)
+            target_thumb_name = f"{Path(target_file).stem}_thumb.webp"
+            target_thumb = target_thumbs_dir / target_thumb_name
+            shutil.move(str(source_thumb), str(target_thumb))
+        
+        # Move metadata
+        source_meta = _load_media_meta(source_folder)
+        target_meta = _load_media_meta(target_folder)
+        if filename in source_meta:
+            target_meta[target_file] = source_meta[filename]
+            del source_meta[filename]
+            _save_media_meta(source_folder, source_meta)
+            _save_media_meta(target_folder, target_meta)
+        
+        # Remove from source rankings
+        source_rankings = _load_rankings(source_folder)
+        if filename in source_rankings:
+            source_rankings.remove(filename)
+            _save_rankings(source_folder, source_rankings)
+        
+        return jsonify({"moved": filename, "newName": target_file, "targetProject": target_project})
+
     @app.get("/api/all-media")
     def get_all_media():
         """Get all media from all projects combined."""
@@ -986,7 +1048,10 @@ def create_app() -> Flask:
                 # Update URL to include project name
                 item["url"] = f"/api/projects/{folder.name}/files/{item['name']}"
                 if "thumbUrl" in item:
-                    item["thumbUrl"] = f"/api/projects/{folder.name}/thumbs/{item['name'].rsplit('.', 1)[0]}_thumb.webp"
+                    # thumbUrl already includes the correct path from _serialize_media
+                    # Just ensure it's properly formatted
+                    thumb_name = item["thumbUrl"].split("/")[-1]
+                    item["thumbUrl"] = f"/api/projects/{folder.name}/thumbs/{thumb_name}"
             all_media.extend(items)
         
         return jsonify({

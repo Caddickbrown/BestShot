@@ -152,6 +152,12 @@ body {
   background: rgba(14, 165, 233, 0.12);
 }
 
+.projects li.drop-target {
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.2);
+  border-style: dashed;
+}
+
 .projects li h3 {
   margin: 0;
   font-size: 1rem;
@@ -2350,6 +2356,221 @@ body.light-theme .image-card {
 
 body.light-theme .rank-pill.unranked {
   background: rgba(251, 191, 36, 0.15);
+  color: #92400e;
+  border-color: #fbbf24;
+}
+
+body.light-theme .panel-form input,
+body.light-theme .panel-form textarea {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text);
+}
+
+body.light-theme .panel-form input:focus,
+body.light-theme .panel-form textarea:focus {
+  border-color: var(--accent);
+  background: white;
+}
+
+body.light-theme .projects li {
+  background: rgba(241, 245, 249, 0.6);
+}
+
+body.light-theme .projects li.active {
+  background: rgba(2, 132, 199, 0.1);
+}
+
+body.light-theme .projects li.drop-target {
+  background: rgba(2, 132, 199, 0.2);
+}
+
+body.light-theme .canvas {
+  background: rgba(241, 245, 249, 0.4);
+}
+
+body.light-theme .empty-gallery {
+  color: var(--text-muted);
+}
+
+body.light-theme .search-box input {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text);
+}
+
+body.light-theme .search-box input:focus {
+  background: white;
+  border-color: var(--accent);
+}
+
+body.light-theme .search-clear {
+  background: var(--text-muted);
+  color: white;
+}
+
+body.light-theme .search-clear:hover {
+  background: var(--danger);
+}
+
+body.light-theme .tag {
+  background: rgba(2, 132, 199, 0.15);
+  color: var(--accent);
+}
+
+body.light-theme .add-tag-btn {
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text-muted);
+}
+
+body.light-theme .add-tag-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+body.light-theme .tag-input {
+  background: white;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+body.light-theme .project-note {
+  background: rgba(241, 245, 249, 0.4);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+body.light-theme .project-note.editing {
+  border-color: var(--accent);
+  background: white;
+}
+
+body.light-theme .project-note input[type="text"] {
+  color: var(--text);
+}
+
+body.light-theme .project-note input[type="text"]::placeholder {
+  color: var(--text-muted);
+}
+
+body.light-theme .sort-button,
+body.light-theme .icon-button,
+body.light-theme .theme-toggle {
+  background: rgba(241, 245, 249, 0.6);
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text);
+}
+
+body.light-theme .sort-button:hover,
+body.light-theme .icon-button:hover,
+body.light-theme .theme-toggle:hover {
+  border-color: var(--accent);
+}
+
+body.light-theme .dropdown-menu {
+  background: white;
+  border-color: rgba(15, 23, 42, 0.2);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+body.light-theme .dropdown-menu button:not(.toggle):hover:not(:disabled) {
+  background: rgba(2, 132, 199, 0.1);
+}
+
+body.light-theme .toggle {
+  color: var(--text-muted);
+}
+
+body.light-theme .toggle.active {
+  background: var(--accent);
+  color: white;
+}
+
+body.light-theme .ghost {
+  color: var(--text);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+body.light-theme .ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(2, 132, 199, 0.05);
+}
+
+body.light-theme .primary {
+  background: var(--accent);
+  color: white;
+}
+
+body.light-theme .primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+body.light-theme .primary.danger {
+  background: var(--danger);
+  color: white;
+}
+
+body.light-theme .primary.danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+body.light-theme .comment-input {
+  background: white;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text);
+}
+
+body.light-theme .comment-input:focus {
+  border-color: var(--accent);
+}
+
+body.light-theme .exif-toggle {
+  background: rgba(241, 245, 249, 0.4);
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text-muted);
+}
+
+body.light-theme .exif-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+body.light-theme .exif-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(2, 132, 199, 0.1);
+}
+
+body.light-theme .exif-panel {
+  background: rgba(241, 245, 249, 0.4);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+body.light-theme .all-projects-option {
+  background: rgba(241, 245, 249, 0.6);
+}
+
+body.light-theme .all-projects-option.active {
+  background: rgba(2, 132, 199, 0.1);
+}
+
+body.light-theme .mobile-project-toggle {
+  background: white;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: var(--text);
+}
+
+body.light-theme .mobile-project-toggle:hover {
+  border-color: var(--accent);
+}
+
+body.light-theme .panel-close-btn {
+  background: rgba(15, 23, 42, 0.1);
+  color: var(--text);
+}
+
+body.light-theme .panel-close-btn:hover {
+  background: var(--danger);
+  color: white;
 }
 
 /* ============ Export Button ============ */

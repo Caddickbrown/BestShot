@@ -212,6 +212,7 @@ const state = {
   slideshowDelay: 3000,
   theme: localStorage.getItem("theme") || "dark",
   pendingUploadFiles: null, // For duplicate detection flow
+  pendingUploadProject: null, // Project name for pending upload
   showExif: false, // EXIF panel visibility in media viewer
 };
 
@@ -532,12 +533,82 @@ function renderProjects() {
     desc.textContent = project.description || "No description yet.";
 
     li.append(title, details, desc);
+    li.dataset.projectName = project.name;
 
     if (!state.isAllProjects && state.currentProject === project.name) {
       li.classList.add("active");
     }
 
-    li.addEventListener("click", () => selectProject(project.name));
+    li.addEventListener("click", (e) => {
+      // Don't select if we're dragging a file
+      if (e.dataTransfer && e.dataTransfer.types.includes("application/x-gallery-card")) {
+        return;
+      }
+      selectProject(project.name);
+    });
+    
+    // Enable drop zone for moving files between albums
+    li.addEventListener("dragover", (e) => {
+      const isCardDrag = e.dataTransfer.types.includes("application/x-gallery-card");
+      if (isCardDrag && project.name !== state.currentProject) {
+        e.preventDefault();
+        li.classList.add("drop-target");
+      }
+    });
+    
+    li.addEventListener("dragleave", () => {
+      li.classList.remove("drop-target");
+    });
+    
+    li.addEventListener("drop", async (e) => {
+      li.classList.remove("drop-target");
+      const isCardDrag = e.dataTransfer.types.includes("application/x-gallery-card");
+      if (!isCardDrag) return;
+      
+      e.preventDefault();
+      const draggedIndex = e.dataTransfer.getData("application/x-gallery-card");
+      if (!draggedIndex) return;
+      
+      const draggedCard = document.querySelector(`.image-card[data-index="${draggedIndex}"]`);
+      if (!draggedCard) return;
+      
+      const mediaName = draggedCard.dataset.name;
+      const sourceProject = state.currentProject;
+      
+      if (!sourceProject || !mediaName || project.name === sourceProject) return;
+      
+      // Move the file
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(sourceProject)}/move-file`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: mediaName,
+            targetProject: project.name,
+          }),
+        });
+        
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({}));
+          alert(error.description || "Failed to move file");
+          return;
+        }
+        
+        // Reload both projects
+        if (state.isAllProjects) {
+          await loadAllProjectsState();
+        } else if (sourceProject === state.currentProject) {
+          await loadProjectState();
+        } else if (project.name === state.currentProject) {
+          await loadProjectState();
+        }
+        await fetchProjects();
+      } catch (error) {
+        console.error("Move error:", error);
+        alert("Failed to move file: " + error.message);
+      }
+    });
+    
     projectsList.appendChild(li);
   });
 }
@@ -751,10 +822,17 @@ function renderImages() {
       });
     } else {
       const img = card.querySelector("img");
-      // Use thumbnail if available
-      const imgUrl = media.thumbUrl || media.url;
-      img.src = `${imgUrl}?v=${Date.now()}`;
+      // Always use thumbnail if available for faster loading
+      if (media.thumbUrl) {
+        img.src = `${media.thumbUrl}?v=${Date.now()}`;
+        // Preload full image in background for when user clicks
+        const fullImg = new Image();
+        fullImg.src = `${media.url}?v=${Date.now()}`;
+      } else {
+        img.src = `${media.url}?v=${Date.now()}`;
+      }
       img.alt = media.name;
+      img.loading = "lazy"; // Use native lazy loading
     }
 
     // Click handler
@@ -798,7 +876,8 @@ function renderImages() {
     renderCardTags(card, media);
 
     // Drag-drop for reordering (only when not in selection mode, not searching, and not on mobile)
-    const canDrag = !state.searchQuery && !state.isAllProjects && !state.isSelectionMode && !isTouchDevice;
+    // Also allow dragging to albums when in All Projects view
+    const canDrag = !state.searchQuery && !state.isSelectionMode && !isTouchDevice;
     card.draggable = canDrag;
     
     // Add class for mobile to disable drag styling
@@ -816,37 +895,44 @@ function renderImages() {
 
       card.addEventListener("dragend", () => {
         card.classList.remove("dragging");
+        // Remove drop-target class from all project items
+        document.querySelectorAll(".projects li").forEach((li) => {
+          li.classList.remove("drop-target");
+        });
       });
 
-      card.addEventListener("dragover", (event) => {
-        const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
-        if (isCardDrag) {
+      // Only handle reordering if not in All Projects view
+      if (!state.isAllProjects) {
+        card.addEventListener("dragover", (event) => {
+          const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
+          if (isCardDrag) {
+            event.preventDefault();
+            const dragged = document.querySelector(".image-card.dragging");
+            if (dragged && dragged !== card) {
+              card.classList.add("over");
+            }
+          }
+        });
+
+        card.addEventListener("dragleave", () => card.classList.remove("over"));
+
+        card.addEventListener("drop", (event) => {
+          card.classList.remove("over");
+          
+          const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
+          if (!isCardDrag) {
+            event.preventDefault();
+            return;
+          }
+          
           event.preventDefault();
           const dragged = document.querySelector(".image-card.dragging");
-          if (dragged && dragged !== card) {
-            card.classList.add("over");
-          }
-        }
-      });
-
-      card.addEventListener("dragleave", () => card.classList.remove("over"));
-
-      card.addEventListener("drop", (event) => {
-        card.classList.remove("over");
-        
-        const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
-        if (!isCardDrag) {
-          event.preventDefault();
-          return;
-        }
-        
-        event.preventDefault();
-        const dragged = document.querySelector(".image-card.dragging");
-        if (!dragged) return;
-        const from = Number(dragged.dataset.dragIndex);
-        const to = Number(card.dataset.index);
-        reorderImages(from, to);
-      });
+          if (!dragged) return;
+          const from = Number(dragged.dataset.dragIndex);
+          const to = Number(card.dataset.index);
+          reorderImages(from, to);
+        });
+      }
     }
 
     imagesGrid.appendChild(card);
@@ -1352,8 +1438,9 @@ cancelCreateAlbumBtn.addEventListener("click", closeCreateAlbumModal);
 createAlbumBackdrop.addEventListener("click", closeCreateAlbumModal);
 
 // ============ Upload with Progress & Duplicate Detection ============
-async function uploadFiles(files, skipDuplicateCheck = false) {
-  if (!state.currentProject || !files.length) return;
+async function uploadFiles(files, projectName = null, skipDuplicateCheck = false) {
+  const targetProject = projectName || state.currentProject;
+  if (!targetProject || !files.length) return;
 
   const filesArray = Array.isArray(files) ? files : Array.from(files);
   if (!filesArray.length) return;
@@ -1368,7 +1455,7 @@ async function uploadFiles(files, skipDuplicateCheck = false) {
     });
 
     try {
-      const checkRes = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/check-duplicates`, {
+      const checkRes = await fetch(`/api/projects/${encodeURIComponent(targetProject)}/check-duplicates`, {
         method: "POST",
         body: checkFormData,
       });
@@ -1378,7 +1465,7 @@ async function uploadFiles(files, skipDuplicateCheck = false) {
         if (checkData.duplicates && checkData.duplicates.length > 0) {
           // Store files and show modal
           state.pendingUploadFiles = filesArray;
-          showDuplicateModal(checkData.duplicates);
+          showDuplicateModal(checkData.duplicates, targetProject);
           return;
         }
       }
@@ -1389,10 +1476,13 @@ async function uploadFiles(files, skipDuplicateCheck = false) {
   }
 
   // Proceed with upload
-  await performUpload(filesArray);
+  await performUpload(filesArray, targetProject);
 }
 
-async function performUpload(filesArray) {
+async function performUpload(filesArray, projectName = null) {
+  const targetProject = projectName || state.currentProject;
+  if (!targetProject) return;
+  
   const formData = new FormData();
   filesArray.forEach((file) => {
     if (file instanceof File) {
@@ -1428,7 +1518,7 @@ async function performUpload(filesArray) {
 
       xhr.addEventListener("error", () => reject(new Error("Upload failed")));
 
-      xhr.open("POST", `/api/projects/${encodeURIComponent(state.currentProject)}/upload`);
+      xhr.open("POST", `/api/projects/${encodeURIComponent(targetProject)}/upload`);
       xhr.send(formData);
     });
 
@@ -1439,7 +1529,12 @@ async function performUpload(filesArray) {
       uploadProgress.hidden = true;
     }, 1500);
 
-    await loadProjectState();
+    // Reload appropriate state based on current view
+    if (state.isAllProjects) {
+      await loadAllProjectsState();
+    } else if (targetProject === state.currentProject) {
+      await loadProjectState();
+    }
     await fetchProjects();
   } catch (error) {
     console.error("Upload error:", error);
@@ -1448,7 +1543,7 @@ async function performUpload(filesArray) {
   }
 }
 
-function showDuplicateModal(duplicates) {
+function showDuplicateModal(duplicates, projectName) {
   duplicateList.innerHTML = "";
   duplicates.forEach((dup) => {
     const item = document.createElement("div");
@@ -1459,6 +1554,7 @@ function showDuplicateModal(duplicates) {
     `;
     duplicateList.appendChild(item);
   });
+  state.pendingUploadProject = projectName;
   duplicateModal.hidden = false;
   document.body.style.overflow = "hidden";
 }
@@ -1467,10 +1563,12 @@ function closeDuplicateModal() {
   duplicateModal.hidden = true;
   document.body.style.overflow = "";
   state.pendingUploadFiles = null;
+  state.pendingUploadProject = null;
 }
 
 uploadSkipDuplicatesBtn.addEventListener("click", async () => {
-  if (!state.pendingUploadFiles) return;
+  if (!state.pendingUploadFiles || !state.pendingUploadProject) return;
+  const targetProject = state.pendingUploadProject;
   closeDuplicateModal();
   // Upload with duplicate check enabled (server will skip duplicates)
   const formData = new FormData();
@@ -1485,7 +1583,7 @@ uploadSkipDuplicatesBtn.addEventListener("click", async () => {
   uploadProgressFill.style.width = "0%";
   
   try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/upload`, {
+    const res = await fetch(`/api/projects/${encodeURIComponent(targetProject)}/upload`, {
       method: "POST",
       body: formData,
     });
@@ -1501,7 +1599,11 @@ uploadSkipDuplicatesBtn.addEventListener("click", async () => {
       throw new Error("Upload failed");
     }
     
-    await loadProjectState();
+    if (state.isAllProjects) {
+      await loadAllProjectsState();
+    } else if (targetProject === state.currentProject) {
+      await loadProjectState();
+    }
     await fetchProjects();
   } catch (error) {
     uploadProgress.hidden = true;
@@ -1510,10 +1612,11 @@ uploadSkipDuplicatesBtn.addEventListener("click", async () => {
 });
 
 uploadAllAnywayBtn.addEventListener("click", async () => {
-  if (!state.pendingUploadFiles) return;
+  if (!state.pendingUploadFiles || !state.pendingUploadProject) return;
   const files = state.pendingUploadFiles;
+  const targetProject = state.pendingUploadProject;
   closeDuplicateModal();
-  await performUpload(files);
+  await performUpload(files, targetProject);
 });
 
 cancelUploadBtn.addEventListener("click", closeDuplicateModal);
@@ -1728,31 +1831,8 @@ async function selectProjectForUpload(projectName) {
   const filesArray = Array.isArray(files) ? files : Array.from(files);
   if (!filesArray.length) return;
   
-  const formData = new FormData();
-  filesArray.forEach((file) => {
-    if (file instanceof File) {
-      formData.append("files", file);
-    }
-  });
-  
-  try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/upload`, {
-      method: "POST",
-      body: formData,
-    });
-    
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "Unknown error");
-      alert(`Upload failed: ${errorText || "Make sure the files are supported images/videos."}`);
-      return;
-    }
-    
-    await loadAllProjectsState();
-    await fetchProjects();
-  } catch (error) {
-    console.error("Upload error:", error);
-    alert(`Upload failed: ${error.message || "Network error. Please try again."}`);
-  }
+  // Use the uploadFiles function which handles duplicate detection
+  await uploadFiles(filesArray, projectName);
 }
 
 async function createProjectAndUpload() {
@@ -1794,6 +1874,24 @@ projectSelectNewName.addEventListener("keydown", (e) => {
 });
 
 // ============ Media Viewer Functions ============
+// Preload images in the background for faster navigation
+function preloadAdjacentImages(filteredImages, currentIndex) {
+  const preloadCount = 3; // Preload 3 images ahead and behind
+  const imagesToPreload = [];
+  
+  for (let i = Math.max(0, currentIndex - preloadCount); i <= Math.min(filteredImages.length - 1, currentIndex + preloadCount); i++) {
+    if (i !== currentIndex && filteredImages[i].type === "image") {
+      imagesToPreload.push(filteredImages[i]);
+    }
+  }
+  
+  // Preload images in background
+  imagesToPreload.forEach((media) => {
+    const img = new Image();
+    img.src = media.url;
+  });
+}
+
 function openMediaViewer(index) {
   const filteredImages = getFilteredImages();
   if (index < 0 || index >= filteredImages.length) return;
@@ -1815,6 +1913,9 @@ function openMediaViewer(index) {
     viewerImage.alt = media.name;
     slideshowControls.hidden = false;
   }
+  
+  // Preload adjacent images in the background for faster navigation
+  preloadAdjacentImages(filteredImages, index);
   
   renderViewerTags(media);
   loadViewerComment(media);
@@ -2600,7 +2701,7 @@ browseFilesBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
   if (fileInput.files.length) {
-    // Always prompt for album selection
+    // Always prompt for album selection, regardless of current view
     openProjectSelectModal(Array.from(fileInput.files));
     fileInput.value = "";
   }
@@ -2717,11 +2818,8 @@ galleryDropZone.addEventListener("drop", (event) => {
   
   if (event.dataTransfer.files.length > 0) {
     const files = Array.from(event.dataTransfer.files);
-    if (state.isAllProjects) {
-      openProjectSelectModal(files);
-    } else if (state.currentProject) {
-      uploadFiles(files);
-    }
+    // Always prompt for album selection
+    openProjectSelectModal(files);
   }
 });
 

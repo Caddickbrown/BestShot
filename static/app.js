@@ -26,7 +26,6 @@ const imageTemplate = document.getElementById("image-card-template");
 const videoTemplate = document.getElementById("video-card-template");
 const projectDescriptionForm = document.getElementById("project-description-form");
 const projectDescriptionField = document.getElementById("project-description");
-const projectDescriptionStatus = document.getElementById("project-description-status");
 const saveDescriptionBtn = document.getElementById("save-description");
 const startCompareBtn = document.getElementById("start-compare");
 const mediaFilterButtons = document.querySelectorAll("[data-media-filter]");
@@ -391,7 +390,8 @@ function updateGridSize() {
 }
 
 gridSizeButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
     state.gridSize = btn.dataset.gridSize;
     localStorage.setItem("gridSize", state.gridSize);
     updateGridSize();
@@ -497,7 +497,7 @@ function renderProjects() {
   
   if (!state.projects.length) {
     const empty = document.createElement("li");
-    empty.textContent = "No projects yet";
+    empty.textContent = "No albums yet";
     empty.style.textAlign = "center";
     empty.style.opacity = "0.6";
     projectsList.appendChild(empty);
@@ -564,7 +564,7 @@ async function loadAllProjectsState() {
   const data = await res.json();
   state.images = data.images;
   state.description = "";
-  workspaceTitle.textContent = "All Projects";
+  workspaceTitle.textContent = "All Albums";
   
   const imageCount = state.images.filter((m) => m.type === "image").length;
   const videoCount = state.images.filter((m) => m.type === "video").length;
@@ -574,7 +574,6 @@ async function loadAllProjectsState() {
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
   projectDescriptionField.value = "";
-  projectDescriptionStatus.textContent = "All projects view";
   enableWorkspace();
   renderImages();
 }
@@ -593,7 +592,7 @@ async function loadProjectState() {
   const res = await fetch(url);
   showGalleryLoading(false);
   if (!res.ok) {
-    alert("Unable to load project");
+    alert("Unable to load album");
     return;
   }
   const data = await res.json();
@@ -609,7 +608,6 @@ async function loadProjectState() {
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
   projectDescriptionField.value = state.description;
-  projectDescriptionStatus.textContent = state.description ? "Saved" : "No note";
   enableWorkspace();
   renderImages();
 }
@@ -714,7 +712,7 @@ function renderImages() {
       const projectBadge = document.createElement("span");
       projectBadge.className = "project-badge";
       projectBadge.textContent = media.project;
-      projectBadge.title = `Project: ${media.project}`;
+      projectBadge.title = `Album: ${media.project}`;
       card.querySelector(".image-card__head").insertBefore(
         projectBadge,
         card.querySelector(".filename")
@@ -1266,12 +1264,11 @@ function handleTouchEnd(event) {
 // ============ Workspace State ============
 function disableWorkspace() {
   galleryDropZone.classList.add("disabled");
-  workspaceTitle.textContent = "Select a project";
+  workspaceTitle.textContent = "Select an album";
   workspaceMeta.textContent = "";
   projectDescriptionField.value = "";
   projectDescriptionField.disabled = true;
   saveDescriptionBtn.disabled = true;
-  projectDescriptionStatus.textContent = "Idle";
   state.images = [];
   state.description = "";
   updateActionStates();
@@ -1310,7 +1307,7 @@ async function createProject(name, description) {
   });
   if (!res.ok) {
     const error = await res.text();
-    alert(error || "Failed to create project");
+    alert(error || "Failed to create album");
     return;
   }
   const created = await res.json();
@@ -1507,7 +1504,6 @@ async function saveDescription(event) {
   event.preventDefault();
   if (!state.currentProject) return;
   const description = projectDescriptionField.value.trim();
-  projectDescriptionStatus.textContent = "Saving...";
   saveDescriptionBtn.disabled = true;
   const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}`, {
     method: "PUT",
@@ -1515,13 +1511,11 @@ async function saveDescription(event) {
     body: JSON.stringify({ description }),
   });
   if (!res.ok) {
-    projectDescriptionStatus.textContent = "Error";
     saveDescriptionBtn.disabled = false;
     alert("Could not save description");
     return;
   }
   state.description = description;
-  projectDescriptionStatus.textContent = description ? "Saved" : "No note";
   saveDescriptionBtn.disabled = false;
   await fetchProjects();
   updateActionStates();
@@ -1575,7 +1569,7 @@ async function deleteProject() {
     method: "DELETE",
   });
   if (!res.ok) {
-    alert("Failed to delete project");
+    alert("Failed to delete album");
     return;
   }
   closeDeleteModal();
@@ -1617,7 +1611,7 @@ async function renameProject() {
   
   const newName = renameProjectInput.value.trim();
   if (!newName) {
-    alert("Project name cannot be empty");
+    alert("Album name cannot be empty");
     return;
   }
   
@@ -1634,7 +1628,7 @@ async function renameProject() {
   
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert(error.description || "Failed to rename project");
+    alert(error.description || "Failed to rename album");
     return;
   }
   
@@ -1726,7 +1720,7 @@ async function selectProjectForUpload(projectName) {
 async function createProjectAndUpload() {
   const name = projectSelectNewName.value.trim();
   if (!name) {
-    alert("Please enter a project name");
+    alert("Please enter an album name");
     return;
   }
   
@@ -1740,7 +1734,7 @@ async function createProjectAndUpload() {
   
   if (!createRes.ok) {
     const error = await createRes.text();
-    alert(error || "Failed to create project");
+    alert(error || "Failed to create album");
     return;
   }
   
@@ -2531,7 +2525,8 @@ cancelComparisonSelectionBtn.addEventListener("click", closeComparisonSelection)
 comparisonSelectionBackdrop.addEventListener("click", closeComparisonSelection);
 
 mediaFilterButtons.forEach((button) => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
     const filter = button.dataset.mediaFilter;
     if (filter) {
       setMediaFilter(filter);
@@ -2593,11 +2588,11 @@ function closeMobileProjectsPanel() {
 
 function updateMobileProjectName() {
   if (state.isAllProjects) {
-    mobileProjectName.textContent = "All Projects";
+    mobileProjectName.textContent = "All Albums";
   } else if (state.currentProject) {
     mobileProjectName.textContent = state.currentProject;
   } else {
-    mobileProjectName.textContent = "Select project";
+    mobileProjectName.textContent = "Select album";
   }
 }
 
@@ -2624,7 +2619,7 @@ galleryDropZone.addEventListener("dragover", (event) => {
   if (!isCardDrag && event.dataTransfer.types.includes("Files")) {
     if (state.isAllProjects) {
       dropOverlayText.textContent = "Drop files to add";
-      dropOverlaySubtext.textContent = "You'll choose which project to add them to";
+      dropOverlaySubtext.textContent = "You'll choose which album to add them to";
     } else {
       dropOverlayText.textContent = "Drop files to add to gallery";
       dropOverlaySubtext.textContent = 'New items will be marked as "Unranked"';

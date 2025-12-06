@@ -326,6 +326,8 @@ def create_app() -> Flask:
         if not folder.exists():
             abort(404, description="Project not found")
         file_path = (folder / filename).resolve()
+        if folder not in file_path.parents and file_path != folder:
+            abort(400, description="Invalid file path")
         if not file_path.exists():
             abort(404, description="File not found")
         payload = request.get_json(silent=True) or {}
@@ -368,7 +370,7 @@ def create_app() -> Flask:
         if not folder.exists():
             abort(404, description="Project not found")
         file_path = (folder / filename).resolve()
-        if folder not in file_path.parents and file_path.parent != folder:
+        if folder not in file_path.parents and file_path != folder:
             abort(400, description="Invalid file path")
         if not file_path.exists():
             abort(404, description="File not found")

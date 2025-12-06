@@ -1,0 +1,12 @@
+services:
+  bestshot:
+    build: .
+    container_name: bestshot
+    ports:
+      - "18473:18473"
+    volumes:
+      - ./data:/project
+    environment:
+      - PROJECT_ROOT=/project
+      - PORT=18473
+    restart: unless-stopped

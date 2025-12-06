@@ -11,7 +11,15 @@ const dropOverlay = document.getElementById("drop-overlay");
 const browseFilesBtn = document.getElementById("browse-files");
 const fileInput = document.getElementById("file-input");
 const deleteProjectBtn = document.getElementById("delete-project");
-const editProjectNameBtn = document.getElementById("edit-project-name");
+
+// Mobile project panel elements
+const mobileProjectToggle = document.getElementById("mobile-project-toggle");
+const mobileProjectName = document.getElementById("mobile-project-name");
+const projectsPanel = document.getElementById("projects-panel");
+const projectsPanelBackdrop = document.getElementById("projects-panel-backdrop");
+const closeProjectsPanelBtn = document.getElementById("close-projects-panel");
+const refreshProjectsMobileBtn = document.getElementById("refresh-projects-mobile");
+
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
 const imageTemplate = document.getElementById("image-card-template");
@@ -47,15 +55,29 @@ const bulkCancelBtn = document.getElementById("bulk-cancel-btn");
 const exportBtn = document.getElementById("export-btn");
 const exportDropdown = document.getElementById("export-dropdown");
 const exportOptions = exportDropdown.querySelectorAll("[data-export]");
+const exportBackBtn = document.getElementById("export-back-btn");
 
-// Theme toggle
-const themeToggle = document.getElementById("theme-toggle");
+// Settings dropdown
+const settingsBtn = document.getElementById("settings-btn");
+const settingsDropdown = document.getElementById("settings-dropdown");
+const themeToggleBtn = document.getElementById("theme-toggle-btn");
+const themeIcon = document.getElementById("theme-icon");
+const themeLabel = document.getElementById("theme-label");
+const shortcutsBtn = document.getElementById("shortcuts-btn");
 
-// Help button
-const helpBtn = document.getElementById("help-btn");
+// Project settings dropdown
+const projectSettingsControl = document.getElementById("project-settings-control");
+const projectSettingsBtn = document.getElementById("project-settings-btn");
+const projectSettingsDropdown = document.getElementById("project-settings-dropdown");
+const renameProjectMenuBtn = document.getElementById("rename-project-menu-btn");
+
+// Help/shortcuts
 const shortcutsModal = document.getElementById("shortcuts-modal");
 const closeShortcutsBtn = document.getElementById("close-shortcuts");
 const shortcutsBackdrop = shortcutsModal.querySelector(".shortcuts-modal__backdrop");
+
+// Check if on mobile/touch device
+const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
 
 // Upload progress
 const uploadProgress = document.getElementById("upload-progress");
@@ -182,10 +204,12 @@ let touchDragState = null;
 function initTheme() {
   if (state.theme === "light") {
     document.body.classList.add("light-theme");
-    themeToggle.textContent = "☀️";
+    themeIcon.textContent = "☀️";
+    themeLabel.textContent = "Light mode";
   } else {
     document.body.classList.remove("light-theme");
-    themeToggle.textContent = "🌙";
+    themeIcon.textContent = "🌙";
+    themeLabel.textContent = "Dark mode";
   }
 }
 
@@ -195,7 +219,10 @@ function toggleTheme() {
   initTheme();
 }
 
-themeToggle.addEventListener("click", toggleTheme);
+themeToggleBtn.addEventListener("click", () => {
+  toggleTheme();
+  settingsDropdown.hidden = true;
+});
 initTheme();
 
 // ============ URL State Persistence ============
@@ -261,6 +288,7 @@ function updateSortUI() {
 
 sortButton.addEventListener("click", (e) => {
   e.stopPropagation();
+  closeAllDropdowns();
   sortDropdown.hidden = !sortDropdown.hidden;
 });
 
@@ -274,9 +302,45 @@ sortOptions.forEach((btn) => {
   });
 });
 
-document.addEventListener("click", () => {
+// Close all dropdowns
+function closeAllDropdowns() {
   sortDropdown.hidden = true;
   exportDropdown.hidden = true;
+  settingsDropdown.hidden = true;
+  projectSettingsDropdown.hidden = true;
+}
+
+document.addEventListener("click", (e) => {
+  // Don't close if clicking inside a dropdown
+  if (!e.target.closest(".dropdown-control") && !e.target.closest(".sort-control")) {
+    closeAllDropdowns();
+  }
+});
+
+// Settings dropdown
+settingsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  closeAllDropdowns();
+  settingsDropdown.hidden = !settingsDropdown.hidden;
+});
+
+// Shortcuts button in settings
+shortcutsBtn.addEventListener("click", () => {
+  settingsDropdown.hidden = true;
+  openShortcutsModal();
+});
+
+// Project settings dropdown
+projectSettingsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  closeAllDropdowns();
+  projectSettingsDropdown.hidden = !projectSettingsDropdown.hidden;
+});
+
+// Rename from project settings menu
+renameProjectMenuBtn.addEventListener("click", () => {
+  projectSettingsDropdown.hidden = true;
+  openRenameModal();
 });
 
 // ============ Grid Size Controls ============
@@ -305,6 +369,7 @@ if (savedGridSize) {
 // ============ Export Controls ============
 exportBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  projectSettingsDropdown.hidden = true;
   exportDropdown.hidden = !exportDropdown.hidden;
 });
 
@@ -319,6 +384,11 @@ exportOptions.forEach((btn) => {
   });
 });
 
+exportBackBtn.addEventListener("click", () => {
+  exportDropdown.hidden = true;
+  projectSettingsDropdown.hidden = false;
+});
+
 // ============ Keyboard Shortcuts Modal ============
 function openShortcutsModal() {
   shortcutsModal.hidden = false;
@@ -330,7 +400,6 @@ function closeShortcutsModal() {
   document.body.style.overflow = "";
 }
 
-helpBtn.addEventListener("click", openShortcutsModal);
 closeShortcutsBtn.addEventListener("click", closeShortcutsModal);
 shortcutsBackdrop.addEventListener("click", closeShortcutsModal);
 
@@ -424,6 +493,8 @@ async function selectProject(name) {
   exitSelectionMode();
   renderProjects();
   updateURL();
+  updateMobileProjectName();
+  closeMobileProjectsPanel();
   await loadProjectState();
 }
 
@@ -433,6 +504,7 @@ async function selectAllProjects() {
   exitSelectionMode();
   renderProjects();
   updateURL();
+  updateMobileProjectName();
   await loadAllProjectsState();
 }
 
@@ -667,9 +739,15 @@ function renderImages() {
     // Render tags
     renderCardTags(card, media);
 
-    // Drag-drop for reordering (only when not in selection mode and not searching)
-    const canDrag = !state.searchQuery && !state.isAllProjects && !state.isSelectionMode;
+    // Drag-drop for reordering (only when not in selection mode, not searching, and not on mobile)
+    const canDrag = !state.searchQuery && !state.isAllProjects && !state.isSelectionMode && !isTouchDevice;
     card.draggable = canDrag;
+    
+    // Add class for mobile to disable drag styling
+    if (isTouchDevice) {
+      card.classList.add("no-drag");
+    }
+    
     if (canDrag) {
       card.addEventListener("dragstart", (event) => {
         event.dataTransfer.effectAllowed = "move";
@@ -711,11 +789,6 @@ function renderImages() {
         const to = Number(card.dataset.index);
         reorderImages(from, to);
       });
-
-      // Touch drag-and-drop
-      card.addEventListener("touchstart", handleTouchStart, { passive: false });
-      card.addEventListener("touchmove", handleTouchMove, { passive: false });
-      card.addEventListener("touchend", handleTouchEnd, { passive: false });
     }
 
     imagesGrid.appendChild(card);
@@ -1174,12 +1247,15 @@ function updateActionStates() {
   browseFilesBtn.disabled = !hasProject;
   saveDescriptionBtn.disabled = !hasProject;
   projectDescriptionField.disabled = !hasProject;
+  
+  // Project settings dropdown visibility and button states
+  projectSettingsControl.hidden = !hasProject;
   deleteProjectBtn.disabled = !hasProject;
-  editProjectNameBtn.hidden = !hasProject; // Show edit button only when a project is selected
   downloadAllBtn.disabled = !hasProject || !hasMedia;
+  exportBtn.disabled = !hasProject;
+  
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
   selectModeBtn.disabled = !hasProject || !hasMedia;
-  exportBtn.disabled = !hasProject;
 }
 
 async function createProject(name, description) {
@@ -1463,7 +1539,10 @@ async function deleteProject() {
   await fetchProjects();
 }
 
-deleteProjectBtn.addEventListener("click", openDeleteModal);
+deleteProjectBtn.addEventListener("click", () => {
+  projectSettingsDropdown.hidden = true;
+  openDeleteModal();
+});
 confirmDeleteBtn.addEventListener("click", deleteProject);
 cancelDeleteBtn.addEventListener("click", closeDeleteModal);
 deleteBackdrop.addEventListener("click", closeDeleteModal);
@@ -1524,7 +1603,6 @@ async function renameProject() {
   await loadProjectState();
 }
 
-editProjectNameBtn.addEventListener("click", openRenameModal);
 confirmRenameBtn.addEventListener("click", renameProject);
 cancelRenameBtn.addEventListener("click", closeRenameModal);
 renameBackdrop.addEventListener("click", closeRenameModal);
@@ -1895,6 +1973,7 @@ viewerDownloadBtn.addEventListener("click", () => {
 });
 
 downloadAllBtn.addEventListener("click", () => {
+  projectSettingsDropdown.hidden = true;
   if (state.currentProject) {
     downloadProject(state.currentProject);
   }
@@ -2366,6 +2445,7 @@ newProjectForm.addEventListener("submit", async (event) => {
 projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
+refreshProjectsMobileBtn.addEventListener("click", fetchProjects);
 
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));
@@ -2414,7 +2494,46 @@ fileInput.addEventListener("change", () => {
   }
 });
 
-allProjectsOption.addEventListener("click", selectAllProjects);
+allProjectsOption.addEventListener("click", () => {
+  closeMobileProjectsPanel();
+  selectAllProjects();
+});
+
+// ============ Mobile Projects Panel ============
+function openMobileProjectsPanel() {
+  projectsPanel.classList.add("open");
+  projectsPanelBackdrop.hidden = false;
+  mobileProjectToggle.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeMobileProjectsPanel() {
+  projectsPanel.classList.remove("open");
+  projectsPanelBackdrop.hidden = true;
+  mobileProjectToggle.classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+function updateMobileProjectName() {
+  if (state.isAllProjects) {
+    mobileProjectName.textContent = "All Projects";
+  } else if (state.currentProject) {
+    mobileProjectName.textContent = state.currentProject;
+  } else {
+    mobileProjectName.textContent = "Select project";
+  }
+}
+
+mobileProjectToggle.addEventListener("click", () => {
+  if (projectsPanel.classList.contains("open")) {
+    closeMobileProjectsPanel();
+  } else {
+    openMobileProjectsPanel();
+  }
+});
+
+closeProjectsPanelBtn.addEventListener("click", closeMobileProjectsPanel);
+projectsPanelBackdrop.addEventListener("click", closeMobileProjectsPanel);
 
 // Drop overlay text elements
 const dropOverlayText = document.getElementById("drop-overlay-text");
@@ -2465,6 +2584,7 @@ const initialProject = restoreStateFromURL();
 disableWorkspace();
 updateActionStates();
 updateSortUI();
+updateMobileProjectName();
 fetchProjects(initialProject);
 
 // Handle browser back/forward navigation

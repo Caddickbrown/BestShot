@@ -1942,27 +1942,55 @@ function preloadAdjacentImages(filteredImages, currentIndex) {
   const preloadCount = 5; // Preload 5 images ahead and behind for smoother slideshow
   const imagesToPreload = [];
   
-  for (let i = Math.max(0, currentIndex - preloadCount); i <= Math.min(filteredImages.length - 1, currentIndex + preloadCount); i++) {
-    if (i !== currentIndex && filteredImages[i].type === "image") {
-      imagesToPreload.push(filteredImages[i]);
+  // Calculate range with priority: immediate neighbors first, then further out
+  const start = Math.max(0, currentIndex - preloadCount);
+  const end = Math.min(filteredImages.length - 1, currentIndex + preloadCount);
+  
+  // Build list with priority order: immediate neighbors first
+  for (let offset = 1; offset <= preloadCount; offset++) {
+    // Next images (higher priority)
+    if (currentIndex + offset <= end) {
+      const media = filteredImages[currentIndex + offset];
+      if (media && media.type === "image") {
+        imagesToPreload.push(media);
+      }
+    }
+    // Previous images
+    if (currentIndex - offset >= start) {
+      const media = filteredImages[currentIndex - offset];
+      if (media && media.type === "image") {
+        imagesToPreload.push(media);
+      }
     }
   }
   
-  // Preload images in background with priority
-  imagesToPreload.forEach((media, idx) => {
+  // Preload images with fetch for better control and priority
+  imagesToPreload.forEach((media) => {
+    const cacheKey = media.url;
     // Skip if already preloaded
-    if (preloadedImages.has(media.url)) return;
+    if (preloadedImages.has(cacheKey)) return;
     
+    // Mark as preloading to avoid duplicate requests
+    preloadedImages.set(cacheKey, { status: 'loading' });
+    
+    // Use fetch for better control, then create Image object
     const img = new Image();
-    img.loading = "eager"; // Force eager loading for preload
+    img.loading = "eager";
+    
+    // Preload full image
+    img.onload = () => {
+      preloadedImages.set(cacheKey, { img, status: 'loaded' });
+    };
+    img.onerror = () => {
+      preloadedImages.delete(cacheKey);
+    };
     img.src = media.url;
-    preloadedImages.set(media.url, img);
     
     // Also preload thumbnail for faster initial display
     if (media.thumbUrl && !preloadedImages.has(media.thumbUrl)) {
       const thumb = new Image();
       thumb.src = media.thumbUrl;
-      preloadedImages.set(media.thumbUrl, thumb);
+      preloadedImages.set(media.thumbUrl, { img: thumb, status: 'loaded' });
     }
   });
 }
@@ -1988,13 +2016,16 @@ function openMediaViewer(index) {
     // Use preloaded image if available, otherwise load
     if (preloadedImages.has(media.url)) {
       const preloaded = preloadedImages.get(media.url);
-      if (preloaded.complete) {
+      if (preloaded.status === 'loaded' && preloaded.img && preloaded.img.complete) {
         viewerImage.src = media.url;
       } else {
-        preloaded.onload = () => {
-          viewerImage.src = media.url;
-        };
-        viewerImage.src = media.thumbUrl || media.url; // Show thumbnail while loading
+        // Show thumbnail while waiting for preload
+        viewerImage.src = media.thumbUrl || media.url;
+        if (preloaded.img) {
+          preloaded.img.onload = () => {
+            viewerImage.src = media.url;
+          };
+        }
       }
     } else {
       // Show thumbnail first for instant feedback
@@ -2447,6 +2478,8 @@ function startComparisonMode(scope = "all") {
   comparisonMode.hidden = false;
   document.body.style.overflow = "hidden";
   
+  // Start preloading pairs immediately in the background
+  preloadComparisonPairs();
   showCurrentPair();
 }
 
@@ -2529,6 +2562,71 @@ function findNextUnknownPair() {
   return null;
 }
 
+// Preload upcoming comparison pairs for faster navigation
+function preloadComparisonPairs() {
+  if (!state.comparison) return;
+  const { allPairs, currentPairIndex } = state.comparison;
+  const preloadCount = 10; // Preload next 10 pairs
+  
+  let preloaded = 0;
+  for (let i = currentPairIndex; i < allPairs.length && preloaded < preloadCount; i++) {
+    const [left, right] = allPairs[i];
+    
+    // Skip if relationship is already known (won't be shown)
+    if (isRelationshipKnown(left, right)) continue;
+    
+    // Preload left image
+    if (left.type === "image") {
+      const cacheKey = `compare:${left.url}`;
+      if (!preloadedImages.has(cacheKey)) {
+        preloadedImages.set(cacheKey, { status: 'loading' });
+        const img = new Image();
+        img.loading = "eager";
+        img.onload = () => {
+          preloadedImages.set(cacheKey, { img, status: 'loaded' });
+        };
+        img.onerror = () => {
+          preloadedImages.delete(cacheKey);
+        };
+        img.src = left.url;
+        
+        // Also preload thumbnail if available
+        if (left.thumbUrl && !preloadedImages.has(`compare:${left.thumbUrl}`)) {
+          const thumb = new Image();
+          thumb.src = left.thumbUrl;
+          preloadedImages.set(`compare:${left.thumbUrl}`, { img: thumb, status: 'loaded' });
+        }
+      }
+    }
+    
+    // Preload right image
+    if (right.type === "image") {
+      const cacheKey = `compare:${right.url}`;
+      if (!preloadedImages.has(cacheKey)) {
+        preloadedImages.set(cacheKey, { status: 'loading' });
+        const img = new Image();
+        img.loading = "eager";
+        img.onload = () => {
+          preloadedImages.set(cacheKey, { img, status: 'loaded' });
+        };
+        img.onerror = () => {
+          preloadedImages.delete(cacheKey);
+        };
+        img.src = right.url;
+        
+        // Also preload thumbnail if available
+        if (right.thumbUrl && !preloadedImages.has(`compare:${right.thumbUrl}`)) {
+          const thumb = new Image();
+          thumb.src = right.thumbUrl;
+          preloadedImages.set(`compare:${right.thumbUrl}`, { img: thumb, status: 'loaded' });
+        }
+      }
+    }
+    
+    preloaded++;
+  }
+}
+
 function showCurrentPair() {
   if (!state.comparison) return;
   
@@ -2559,7 +2657,35 @@ function showCurrentPair() {
   } else {
     leftVideo.hidden = true;
     leftImg.hidden = false;
-    leftImg.src = left.url;
+    
+    // Use preloaded image if available, otherwise show thumbnail first
+    const cacheKey = `compare:${left.url}`;
+    if (preloadedImages.has(cacheKey)) {
+      const preloaded = preloadedImages.get(cacheKey);
+      if (preloaded.status === 'loaded' && preloaded.img.complete) {
+        leftImg.src = left.url;
+      } else {
+        // Show thumbnail while waiting for preload
+        leftImg.src = left.thumbUrl || left.url;
+        if (preloaded.img) {
+          preloaded.img.onload = () => {
+            leftImg.src = left.url;
+          };
+        }
+      }
+    } else {
+      // Show thumbnail first for instant feedback
+      if (left.thumbUrl) {
+        leftImg.src = left.thumbUrl;
+        const fullImg = new Image();
+        fullImg.onload = () => {
+          leftImg.src = left.url;
+        };
+        fullImg.src = left.url;
+      } else {
+        leftImg.src = left.url;
+      }
+    }
     leftImg.alt = left.name;
   }
   leftName.textContent = left.name;
@@ -2576,7 +2702,35 @@ function showCurrentPair() {
   } else {
     rightVideo.hidden = true;
     rightImg.hidden = false;
-    rightImg.src = right.url;
+    
+    // Use preloaded image if available, otherwise show thumbnail first
+    const cacheKey = `compare:${right.url}`;
+    if (preloadedImages.has(cacheKey)) {
+      const preloaded = preloadedImages.get(cacheKey);
+      if (preloaded.status === 'loaded' && preloaded.img.complete) {
+        rightImg.src = right.url;
+      } else {
+        // Show thumbnail while waiting for preload
+        rightImg.src = right.thumbUrl || right.url;
+        if (preloaded.img) {
+          preloaded.img.onload = () => {
+            rightImg.src = right.url;
+          };
+        }
+      }
+    } else {
+      // Show thumbnail first for instant feedback
+      if (right.thumbUrl) {
+        rightImg.src = right.thumbUrl;
+        const fullImg = new Image();
+        fullImg.onload = () => {
+          rightImg.src = right.url;
+        };
+        fullImg.src = right.url;
+      } else {
+        rightImg.src = right.url;
+      }
+    }
     rightImg.alt = right.name;
   }
   rightName.textContent = right.name;
@@ -2601,6 +2755,9 @@ function selectWinner(side) {
   
   state.comparison.comparisonsAsked++;
   state.comparison.currentPairIndex++;
+  
+  // Preload upcoming pairs before showing next
+  preloadComparisonPairs();
   showCurrentPair();
 }
 

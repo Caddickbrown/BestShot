@@ -154,6 +154,9 @@ const viewerNextBtn = mediaViewerModal.querySelector(".media-viewer-modal__next"
 const viewerDownloadBtn = document.getElementById("viewer-download-btn");
 const viewerCommentInput = document.getElementById("viewer-comment-input");
 const viewerExifPanel = document.getElementById("viewer-exif");
+const viewerExifSection = document.getElementById("viewer-exif-section");
+const viewerExifToggle = document.getElementById("viewer-exif-toggle");
+const exifToggleLabel = document.getElementById("exif-toggle-label");
 const exifGrid = document.getElementById("exif-grid");
 const downloadAllBtn = document.getElementById("download-all");
 
@@ -199,6 +202,7 @@ const state = {
   slideshowDelay: 3000,
   theme: localStorage.getItem("theme") || "dark",
   pendingUploadFiles: null, // For duplicate detection flow
+  showExif: false, // EXIF panel visibility in media viewer
 };
 
 // Touch drag-and-drop state
@@ -1864,17 +1868,27 @@ async function loadViewerExif(media) {
   viewerExifPanel.hidden = true;
   exifGrid.innerHTML = "";
   
-  if (media.type !== "image") return;
+  // Hide entire section for videos
+  if (media.type !== "image") {
+    viewerExifSection.hidden = true;
+    return;
+  }
   
   const projectName = media.project || state.currentProject;
-  if (!projectName) return;
+  if (!projectName) {
+    viewerExifSection.hidden = true;
+    return;
+  }
   
   try {
     const res = await fetch(
       `/api/projects/${encodeURIComponent(projectName)}/files/${encodeURIComponent(media.name)}/exif`
     );
     
-    if (!res.ok) return;
+    if (!res.ok) {
+      viewerExifSection.hidden = true;
+      return;
+    }
     
     const data = await res.json();
     const exif = data.exif || {};
@@ -1900,11 +1914,16 @@ async function loadViewerExif(media) {
     if (exif.FocalLength) addExifItem("Focal", `${exif.FocalLength}mm`);
     if (exif.LensModel) addExifItem("Lens", exif.LensModel);
     
+    // Show section with toggle if we have EXIF data
     if (exifGrid.children.length > 0) {
-      viewerExifPanel.hidden = false;
+      viewerExifSection.hidden = false;
+      updateExifVisibility();
+    } else {
+      viewerExifSection.hidden = true;
     }
   } catch (e) {
     console.error("Failed to load EXIF:", e);
+    viewerExifSection.hidden = true;
   }
 }
 
@@ -2025,6 +2044,24 @@ viewerContent.addEventListener("click", (event) => {
     closeMediaViewer();
   }
 });
+
+// EXIF toggle handler
+viewerExifToggle.addEventListener("click", () => {
+  state.showExif = !state.showExif;
+  updateExifVisibility();
+});
+
+function updateExifVisibility() {
+  if (state.showExif && exifGrid.children.length > 0) {
+    viewerExifPanel.hidden = false;
+    viewerExifToggle.classList.add("active");
+    exifToggleLabel.textContent = "Hide camera info";
+  } else {
+    viewerExifPanel.hidden = true;
+    viewerExifToggle.classList.remove("active");
+    exifToggleLabel.textContent = "Show camera info";
+  }
+}
 
 viewerAddTagBtn.addEventListener("click", (e) => {
   e.stopPropagation();

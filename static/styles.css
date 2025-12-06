@@ -1987,21 +1987,47 @@ body {
 
 /* ============ EXIF Info Panel ============ */
 
+.exif-section {
+  margin-top: 0.75rem;
+  max-width: 400px;
+}
+
+.exif-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.4);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.exif-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.exif-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.exif-toggle__icon {
+  font-size: 1rem;
+}
+
 .exif-panel {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
   padding: 1rem;
   background: rgba(2, 6, 23, 0.6);
   border: 1px solid var(--border);
   border-radius: 12px;
-  max-width: 400px;
-}
-
-.exif-panel__title {
-  margin: 0 0 0.75rem;
-  font-size: 0.9rem;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
 }
 
 .exif-panel__grid {

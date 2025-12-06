@@ -291,9 +291,14 @@
           <div id="viewer-comment" class="comment-field">
             <textarea id="viewer-comment-input" class="comment-input" placeholder="Add a note about this image..."></textarea>
           </div>
-          <div id="viewer-exif" class="exif-panel" hidden>
-            <h4 class="exif-panel__title">Camera Info</h4>
-            <div id="exif-grid" class="exif-panel__grid"></div>
+          <div id="viewer-exif-section" class="exif-section">
+            <button id="viewer-exif-toggle" class="exif-toggle">
+              <span class="exif-toggle__icon">📷</span>
+              <span id="exif-toggle-label">Show camera info</span>
+            </button>
+            <div id="viewer-exif" class="exif-panel" hidden>
+              <div id="exif-grid" class="exif-panel__grid"></div>
+            </div>
           </div>
         </div>
       </div>

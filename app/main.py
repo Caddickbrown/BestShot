@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+import shutil
+
 from flask import (
     Flask,
     abort,
@@ -356,7 +358,6 @@ def create_app() -> Flask:
     @app.delete("/api/projects/<project_name>")
     def delete_project(project_name: str):
         """Delete a project and all its contents."""
-        import shutil
         folder = _project_path(project_name)
         if not folder.exists():
             abort(404, description="Project not found")

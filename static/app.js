@@ -566,26 +566,32 @@ function escapeHtml(text) {
 }
 
 async function addTag(filename, tag) {
-  if (!state.currentProject) return;
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
+  
+  // Use media's project property (in All Projects view) or current project
+  const projectName = media.project || state.currentProject;
+  if (!projectName) return;
 
   const currentTags = media.tags || [];
   const normalizedTag = tag.trim().toLowerCase();
   if (currentTags.includes(normalizedTag)) return;
 
   const newTags = [...currentTags, normalizedTag];
-  await updateMediaTags(filename, newTags);
+  await updateMediaTags(projectName, filename, newTags);
 }
 
 async function removeTag(filename, tag) {
-  if (!state.currentProject) return;
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
+  
+  // Use media's project property (in All Projects view) or current project
+  const projectName = media.project || state.currentProject;
+  if (!projectName) return;
 
   const currentTags = media.tags || [];
   const newTags = currentTags.filter((t) => t !== tag);
-  await updateMediaTags(filename, newTags);
+  await updateMediaTags(projectName, filename, newTags);
 }
 
 async function deleteMediaFile(projectName, filename) {
@@ -615,11 +621,11 @@ async function deleteMediaFile(projectName, filename) {
   }
 }
 
-async function updateMediaTags(filename, tags) {
-  if (!state.currentProject) return;
+async function updateMediaTags(projectName, filename, tags) {
+  if (!projectName) return;
 
   const res = await fetch(
-    `/api/projects/${encodeURIComponent(state.currentProject)}/media/${encodeURIComponent(filename)}/tags`,
+    `/api/projects/${encodeURIComponent(projectName)}/media/${encodeURIComponent(filename)}/tags`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -643,6 +649,10 @@ async function updateMediaTags(filename, tags) {
 
 async function reorderImages(from, to) {
   if (Number.isNaN(from) || Number.isNaN(to) || from === to) {
+    return;
+  }
+  // Bounds check to prevent unexpected behavior
+  if (from < 0 || from >= state.images.length || to < 0 || to >= state.images.length) {
     return;
   }
   // Don't allow reordering in All Projects view
@@ -1134,16 +1144,19 @@ function renderViewerTags(media) {
 }
 
 async function addViewerTag(filename, tag) {
-  if (!state.currentProject) return;
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
+  
+  // Use media's project property (in All Projects view) or current project
+  const projectName = media.project || state.currentProject;
+  if (!projectName) return;
   
   const currentTags = media.tags || [];
   const normalizedTag = tag.trim().toLowerCase();
   if (currentTags.includes(normalizedTag)) return;
   
   const newTags = [...currentTags, normalizedTag];
-  await updateMediaTags(filename, newTags);
+  await updateMediaTags(projectName, filename, newTags);
   
   // Re-render viewer tags
   const updatedMedia = state.images.find((m) => m.name === filename);
@@ -1151,13 +1164,16 @@ async function addViewerTag(filename, tag) {
 }
 
 async function removeViewerTag(filename, tag) {
-  if (!state.currentProject) return;
   const media = state.images.find((m) => m.name === filename);
   if (!media) return;
   
+  // Use media's project property (in All Projects view) or current project
+  const projectName = media.project || state.currentProject;
+  if (!projectName) return;
+  
   const currentTags = media.tags || [];
   const newTags = currentTags.filter((t) => t !== tag);
-  await updateMediaTags(filename, newTags);
+  await updateMediaTags(projectName, filename, newTags);
   
   // Re-render viewer tags
   const updatedMedia = state.images.find((m) => m.name === filename);

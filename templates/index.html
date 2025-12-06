@@ -56,10 +56,7 @@
         <header class="workspace-header">
           <div>
             <p class="eyebrow">project</p>
-            <div class="workspace-title-row">
-              <h2 id="workspace-title">Select a project</h2>
-              <button id="edit-project-name" class="edit-name-btn" title="Rename project" hidden>✎</button>
-            </div>
+            <h2 id="workspace-title">Select a project</h2>
             <p id="workspace-meta" class="muted"></p>
           </div>
           <div class="workspace-actions">
@@ -83,30 +80,78 @@
                 <button data-sort="size">Size (Smallest)</button>
               </div>
             </div>
-            <div class="media-filter" role="group" aria-label="Media filter">
-              <button class="toggle active" data-media-filter="all">Both</button>
-              <button class="toggle" data-media-filter="photos">Photos</button>
-              <button class="toggle" data-media-filter="videos">Videos</button>
-            </div>
-            <div class="grid-size-control" role="group" aria-label="Grid size">
-              <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
-              <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
-              <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
-            </div>
             <div class="upload-actions">
               <input type="file" id="file-input" multiple hidden accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/heic,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/x-m4v,video/x-ms-wmv,video/x-flv,video/3gpp,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.webp,.heic,.mp4,.mov,.avi,.mkv,.webm,.m4v,.wmv,.flv,.3gp" />
               <button id="browse-files" class="ghost" disabled>Browse</button>
               <button id="select-mode-btn" class="ghost" disabled title="Toggle selection mode">Select</button>
-              <button id="export-btn" class="ghost" disabled>Export</button>
-              <div id="export-dropdown" class="export-dropdown" hidden>
-                <button data-export="json">Export JSON</button>
-                <button data-export="csv">Export CSV</button>
-              </div>
-              <button id="download-all" class="ghost" disabled>Download</button>
-              <button id="delete-project" class="ghost danger" disabled>Delete</button>
             </div>
-            <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark theme">🌙</button>
-            <button id="help-btn" class="help-button" title="Keyboard shortcuts">?</button>
+            
+            <!-- Project Settings Dropdown -->
+            <div class="dropdown-control" id="project-settings-control" hidden>
+              <button id="project-settings-btn" class="icon-button" title="Project settings">
+                <span class="icon-dots">⋮</span>
+              </button>
+              <div id="project-settings-dropdown" class="dropdown-menu" hidden>
+                <div class="dropdown-header">Project</div>
+                <button id="rename-project-menu-btn">
+                  <span class="dropdown-icon">✎</span>
+                  Rename project
+                </button>
+                <button id="download-all" disabled>
+                  <span class="dropdown-icon">↓</span>
+                  Download all files
+                </button>
+                <button id="export-btn" disabled>
+                  <span class="dropdown-icon">📋</span>
+                  Export metadata...
+                </button>
+                <div class="dropdown-divider"></div>
+                <button id="delete-project" class="dropdown-danger" disabled>
+                  <span class="dropdown-icon">🗑</span>
+                  Delete project
+                </button>
+              </div>
+              <div id="export-dropdown" class="dropdown-menu dropdown-submenu" hidden>
+                <button data-export="json">Export as JSON</button>
+                <button data-export="csv">Export as CSV</button>
+                <button id="export-back-btn" class="dropdown-back">← Back</button>
+              </div>
+            </div>
+
+            <!-- App Settings Dropdown -->
+            <div class="dropdown-control">
+              <button id="settings-btn" class="icon-button" title="Settings">
+                <span class="icon-gear">⚙</span>
+              </button>
+              <div id="settings-dropdown" class="dropdown-menu dropdown-menu--right" hidden>
+                <div class="dropdown-header">Display</div>
+                <div class="dropdown-section">
+                  <label class="dropdown-label">Show</label>
+                  <div class="media-filter" role="group" aria-label="Media filter">
+                    <button class="toggle active" data-media-filter="all">All</button>
+                    <button class="toggle" data-media-filter="photos">Photos</button>
+                    <button class="toggle" data-media-filter="videos">Videos</button>
+                  </div>
+                </div>
+                <div class="dropdown-section">
+                  <label class="dropdown-label">Grid size</label>
+                  <div class="grid-size-control" role="group" aria-label="Grid size">
+                    <button class="toggle" data-grid-size="small" title="Small thumbnails">S</button>
+                    <button class="toggle active" data-grid-size="medium" title="Medium thumbnails">M</button>
+                    <button class="toggle" data-grid-size="large" title="Large thumbnails">L</button>
+                  </div>
+                </div>
+                <div class="dropdown-divider"></div>
+                <button id="theme-toggle-btn">
+                  <span class="dropdown-icon" id="theme-icon">🌙</span>
+                  <span id="theme-label">Dark mode</span>
+                </button>
+                <button id="shortcuts-btn">
+                  <span class="dropdown-icon">⌨</span>
+                  Keyboard shortcuts
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 

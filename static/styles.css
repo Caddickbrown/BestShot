@@ -36,11 +36,8 @@ body {
 }
 
 .app-title {
-  margin-right: auto;
-}
-
-.app-title {
   margin: 0;
+  margin-right: auto;
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--text);

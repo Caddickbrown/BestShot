@@ -1896,9 +1896,12 @@ projectSelectNewName.addEventListener("keydown", (e) => {
 });
 
 // ============ Media Viewer Functions ============
+// Cache for preloaded images
+const preloadedImages = new Map();
+
 // Preload images in the background for faster navigation
 function preloadAdjacentImages(filteredImages, currentIndex) {
-  const preloadCount = 3; // Preload 3 images ahead and behind
+  const preloadCount = 5; // Preload 5 images ahead and behind for smoother slideshow
   const imagesToPreload = [];
   
   for (let i = Math.max(0, currentIndex - preloadCount); i <= Math.min(filteredImages.length - 1, currentIndex + preloadCount); i++) {
@@ -1907,10 +1910,22 @@ function preloadAdjacentImages(filteredImages, currentIndex) {
     }
   }
   
-  // Preload images in background
-  imagesToPreload.forEach((media) => {
+  // Preload images in background with priority
+  imagesToPreload.forEach((media, idx) => {
+    // Skip if already preloaded
+    if (preloadedImages.has(media.url)) return;
+    
     const img = new Image();
+    img.loading = "eager"; // Force eager loading for preload
     img.src = media.url;
+    preloadedImages.set(media.url, img);
+    
+    // Also preload thumbnail for faster initial display
+    if (media.thumbUrl && !preloadedImages.has(media.thumbUrl)) {
+      const thumb = new Image();
+      thumb.src = media.thumbUrl;
+      preloadedImages.set(media.thumbUrl, thumb);
+    }
   });
 }
 

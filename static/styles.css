@@ -1601,3 +1601,101 @@ body {
   justify-content: flex-end;
   margin-top: 1.5rem;
 }
+
+/* ============ Workspace Title Row ============ */
+
+.workspace-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.edit-name-btn {
+  border: none;
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.edit-name-btn:hover {
+  background: var(--accent);
+  color: #020617;
+}
+
+.edit-name-btn[hidden] {
+  display: none;
+}
+
+/* ============ Rename Modal Styles ============ */
+
+.rename-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rename-modal[hidden] {
+  display: none;
+}
+
+.rename-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.rename-modal__content {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+}
+
+.rename-modal__content h3 {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+}
+
+.rename-modal__content p {
+  margin: 0 0 1.25rem;
+  color: var(--text-muted);
+}
+
+.rename-modal__content input {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(2, 6, 23, 0.5);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.rename-modal__content input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rename-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}

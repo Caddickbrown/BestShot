@@ -4,6 +4,10 @@ const newProjectForm = document.getElementById("new-project-form");
 const projectNameInput = document.getElementById("project-name");
 const projectDescriptionInput = document.getElementById("project-description-input");
 const refreshProjectsBtn = document.getElementById("refresh-projects");
+const newProjectBtn = document.getElementById("new-project-btn");
+const createAlbumModal = document.getElementById("create-album-modal");
+const cancelCreateAlbumBtn = document.getElementById("cancel-create-album");
+const createAlbumBackdrop = createAlbumModal?.querySelector(".create-album-modal__backdrop");
 const workspaceTitle = document.getElementById("workspace-title");
 const workspaceMeta = document.getElementById("workspace-meta");
 const galleryDropZone = document.getElementById("gallery-drop-zone");
@@ -18,7 +22,6 @@ const mobileProjectName = document.getElementById("mobile-project-name");
 const projectsPanel = document.getElementById("projects-panel");
 const projectsPanelBackdrop = document.getElementById("projects-panel-backdrop");
 const closeProjectsPanelBtn = document.getElementById("close-projects-panel");
-const refreshProjectsMobileBtn = document.getElementById("refresh-projects-mobile");
 
 const allProjectsOption = document.getElementById("all-projects-option");
 const imagesGrid = document.getElementById("images-grid");
@@ -1353,8 +1356,25 @@ async function createProject(name, description) {
   const created = await res.json();
   projectNameInput.value = "";
   projectDescriptionInput.value = "";
+  closeCreateAlbumModal();
   await fetchProjects();
   await selectProject(created.name);
+}
+
+// ============ Create Album Modal Functions ============
+function openCreateAlbumModal() {
+  createAlbumModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  setTimeout(() => {
+    projectNameInput.focus();
+  }, 50);
+}
+
+function closeCreateAlbumModal() {
+  createAlbumModal.hidden = true;
+  document.body.style.overflow = "";
+  projectNameInput.value = "";
+  projectDescriptionInput.value = "";
 }
 
 // ============ Upload with Progress & Duplicate Detection ============
@@ -2494,6 +2514,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (!shortcutsModal.hidden) {
       closeShortcutsModal();
+    } else if (!createAlbumModal.hidden) {
+      closeCreateAlbumModal();
     } else if (!videoModal.hidden) {
       closeVideoModal();
     } else if (!deleteModal.hidden) {
@@ -2557,7 +2579,11 @@ newProjectForm.addEventListener("submit", async (event) => {
 projectDescriptionForm.addEventListener("submit", saveDescription);
 
 refreshProjectsBtn.addEventListener("click", fetchProjects);
-refreshProjectsMobileBtn.addEventListener("click", fetchProjects);
+newProjectBtn.addEventListener("click", openCreateAlbumModal);
+cancelCreateAlbumBtn.addEventListener("click", closeCreateAlbumModal);
+if (createAlbumBackdrop) {
+  createAlbumBackdrop.addEventListener("click", closeCreateAlbumModal);
+}
 
 startCompareBtn.addEventListener("click", openComparisonSelection);
 compareAllBtn.addEventListener("click", () => startComparisonMode("all"));

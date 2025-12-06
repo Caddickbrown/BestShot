@@ -69,6 +69,10 @@ const projectSettingsControl = document.getElementById("project-settings-control
 const projectSettingsBtn = document.getElementById("project-settings-btn");
 const projectSettingsDropdown = document.getElementById("project-settings-dropdown");
 const renameProjectMenuBtn = document.getElementById("rename-project-menu-btn");
+const editDescriptionMenuBtn = document.getElementById("edit-description-menu-btn");
+const projectNoteSection = document.getElementById("project-note-section");
+const noteActions = document.getElementById("note-actions");
+const cancelDescriptionBtn = document.getElementById("cancel-description");
 
 // Help/shortcuts
 const shortcutsModal = document.getElementById("shortcuts-modal");
@@ -201,6 +205,7 @@ const state = {
   slideshowDelay: 3000,
   theme: localStorage.getItem("theme") || "dark",
   pendingUploadFiles: null, // For duplicate detection flow
+  pendingUploadProject: null, // Project for pending upload
   showExif: false, // EXIF panel visibility in media viewer
 };
 
@@ -378,6 +383,12 @@ projectSettingsBtn.addEventListener("click", (e) => {
 renameProjectMenuBtn.addEventListener("click", () => {
   closeAllDropdowns();
   openRenameModal();
+});
+
+// Edit description from project settings menu
+editDescriptionMenuBtn.addEventListener("click", () => {
+  closeAllDropdowns();
+  enterDescriptionEditMode();
 });
 
 // ============ Grid Size Controls ============
@@ -574,8 +585,10 @@ async function loadAllProjectsState() {
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
   projectDescriptionField.value = "";
+  exitDescriptionEditMode();
   enableWorkspace();
   renderImages();
+  updateActionStates();
 }
 
 async function loadProjectState() {
@@ -608,8 +621,10 @@ async function loadProjectState() {
   workspaceMeta.textContent = parts.length ? parts.join(", ") : "No media";
   
   projectDescriptionField.value = state.description;
+  exitDescriptionEditMode();
   enableWorkspace();
   renderImages();
+  updateActionStates();
 }
 
 function showGalleryLoading(show) {
@@ -1267,8 +1282,7 @@ function disableWorkspace() {
   workspaceTitle.textContent = "Select an album";
   workspaceMeta.textContent = "";
   projectDescriptionField.value = "";
-  projectDescriptionField.disabled = true;
-  saveDescriptionBtn.disabled = true;
+  exitDescriptionEditMode();
   state.images = [];
   state.description = "";
   updateActionStates();
@@ -1276,8 +1290,6 @@ function disableWorkspace() {
 
 function enableWorkspace() {
   galleryDropZone.classList.remove("disabled");
-  projectDescriptionField.disabled = false;
-  saveDescriptionBtn.disabled = false;
   updateActionStates();
 }
 
@@ -1285,9 +1297,8 @@ function updateActionStates() {
   const hasProject = Boolean(state.currentProject);
   const hasSelection = hasProject || state.isAllProjects;
   const hasMedia = state.images.length > 0;
-  browseFilesBtn.disabled = !hasProject;
-  saveDescriptionBtn.disabled = !hasProject;
-  projectDescriptionField.disabled = !hasProject;
+  // Upload is always enabled (will ask for album if needed)
+  browseFilesBtn.disabled = false;
   
   // Project settings dropdown visibility and button states
   projectSettingsControl.hidden = !hasProject;
@@ -1297,6 +1308,15 @@ function updateActionStates() {
   
   startCompareBtn.disabled = !hasSelection || state.images.length < 2;
   selectModeBtn.disabled = !hasProject || !hasMedia;
+  
+  // Update description visibility
+  if (state.isAllProjects) {
+    projectNoteSection.hidden = true;
+  } else if (hasProject) {
+    projectNoteSection.hidden = false;
+  } else {
+    projectNoteSection.hidden = true;
+  }
 }
 
 async function createProject(name, description) {
@@ -1318,11 +1338,20 @@ async function createProject(name, description) {
 }
 
 // ============ Upload with Progress & Duplicate Detection ============
-async function uploadFiles(files, skipDuplicateCheck = false) {
-  if (!state.currentProject || !files.length) return;
+async function uploadFiles(files, skipDuplicateCheck = false, targetProject = null) {
+  if (!files.length) return;
 
   const filesArray = Array.isArray(files) ? files : Array.from(files);
   if (!filesArray.length) return;
+  
+  // If no target project specified, ask user to select one
+  if (!targetProject && (!state.currentProject || state.isAllProjects)) {
+    openProjectSelectModal(filesArray);
+    return;
+  }
+  
+  const projectToUse = targetProject || state.currentProject;
+  if (!projectToUse) return;
 
   // Check for duplicates first if not skipping
   if (!skipDuplicateCheck) {
@@ -1334,7 +1363,7 @@ async function uploadFiles(files, skipDuplicateCheck = false) {
     });
 
     try {
-      const checkRes = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/check-duplicates`, {
+      const checkRes = await fetch(`/api/projects/${encodeURIComponent(projectToUse)}/check-duplicates`, {
         method: "POST",
         body: checkFormData,
       });
@@ -1342,8 +1371,9 @@ async function uploadFiles(files, skipDuplicateCheck = false) {
       if (checkRes.ok) {
         const checkData = await checkRes.json();
         if (checkData.duplicates && checkData.duplicates.length > 0) {
-          // Store files and show modal
+          // Store files and project, then show modal
           state.pendingUploadFiles = filesArray;
+          state.pendingUploadProject = projectToUse;
           showDuplicateModal(checkData.duplicates);
           return;
         }
@@ -1355,10 +1385,13 @@ async function uploadFiles(files, skipDuplicateCheck = false) {
   }
 
   // Proceed with upload
-  await performUpload(filesArray);
+  await performUpload(filesArray, projectToUse);
 }
 
-async function performUpload(filesArray) {
+async function performUpload(filesArray, targetProject = null) {
+  const projectToUse = targetProject || state.currentProject;
+  if (!projectToUse) return;
+  
   const formData = new FormData();
   filesArray.forEach((file) => {
     if (file instanceof File) {
@@ -1394,7 +1427,7 @@ async function performUpload(filesArray) {
 
       xhr.addEventListener("error", () => reject(new Error("Upload failed")));
 
-      xhr.open("POST", `/api/projects/${encodeURIComponent(state.currentProject)}/upload`);
+      xhr.open("POST", `/api/projects/${encodeURIComponent(projectToUse)}/upload`);
       xhr.send(formData);
     });
 
@@ -1405,7 +1438,12 @@ async function performUpload(filesArray) {
       uploadProgress.hidden = true;
     }, 1500);
 
-    await loadProjectState();
+    // Reload appropriate state
+    if (state.isAllProjects) {
+      await loadAllProjectsState();
+    } else {
+      await loadProjectState();
+    }
     await fetchProjects();
   } catch (error) {
     console.error("Upload error:", error);
@@ -1433,14 +1471,22 @@ function closeDuplicateModal() {
   duplicateModal.hidden = true;
   document.body.style.overflow = "";
   state.pendingUploadFiles = null;
+  state.pendingUploadProject = null;
 }
 
 uploadSkipDuplicatesBtn.addEventListener("click", async () => {
   if (!state.pendingUploadFiles) return;
+  const projectToUse = state.pendingUploadProject || state.currentProject;
+  if (!projectToUse) {
+    closeDuplicateModal();
+    openProjectSelectModal(state.pendingUploadFiles);
+    return;
+  }
+  const files = state.pendingUploadFiles;
   closeDuplicateModal();
   // Upload with duplicate check enabled (server will skip duplicates)
   const formData = new FormData();
-  state.pendingUploadFiles.forEach((file) => {
+  files.forEach((file) => {
     if (file instanceof File) {
       formData.append("files", file);
     }
@@ -1451,7 +1497,7 @@ uploadSkipDuplicatesBtn.addEventListener("click", async () => {
   uploadProgressFill.style.width = "0%";
   
   try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(state.currentProject)}/upload`, {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectToUse)}/upload`, {
       method: "POST",
       body: formData,
     });
@@ -1467,7 +1513,11 @@ uploadSkipDuplicatesBtn.addEventListener("click", async () => {
       throw new Error("Upload failed");
     }
     
-    await loadProjectState();
+    if (state.isAllProjects) {
+      await loadAllProjectsState();
+    } else {
+      await loadProjectState();
+    }
     await fetchProjects();
   } catch (error) {
     uploadProgress.hidden = true;
@@ -1477,9 +1527,15 @@ uploadSkipDuplicatesBtn.addEventListener("click", async () => {
 
 uploadAllAnywayBtn.addEventListener("click", async () => {
   if (!state.pendingUploadFiles) return;
+  const projectToUse = state.pendingUploadProject || state.currentProject;
+  if (!projectToUse) {
+    closeDuplicateModal();
+    openProjectSelectModal(state.pendingUploadFiles);
+    return;
+  }
   const files = state.pendingUploadFiles;
   closeDuplicateModal();
-  await performUpload(files);
+  await performUpload(files, projectToUse);
 });
 
 cancelUploadBtn.addEventListener("click", closeDuplicateModal);
@@ -1500,6 +1556,20 @@ async function saveOrder() {
   }
 }
 
+function enterDescriptionEditMode() {
+  if (!state.currentProject) return;
+  projectDescriptionField.disabled = false;
+  noteActions.hidden = false;
+  projectNoteSection.classList.add("editing");
+  projectDescriptionField.focus();
+}
+
+function exitDescriptionEditMode() {
+  projectDescriptionField.disabled = true;
+  noteActions.hidden = true;
+  projectNoteSection.classList.remove("editing");
+}
+
 async function saveDescription(event) {
   event.preventDefault();
   if (!state.currentProject) return;
@@ -1517,9 +1587,15 @@ async function saveDescription(event) {
   }
   state.description = description;
   saveDescriptionBtn.disabled = false;
+  exitDescriptionEditMode();
   await fetchProjects();
   updateActionStates();
 }
+
+cancelDescriptionBtn.addEventListener("click", () => {
+  projectDescriptionField.value = state.description;
+  exitDescriptionEditMode();
+});
 
 async function setMediaFilter(filter) {
   if (state.mediaFilter === filter) return;
@@ -1690,31 +1766,8 @@ async function selectProjectForUpload(projectName) {
   const filesArray = Array.isArray(files) ? files : Array.from(files);
   if (!filesArray.length) return;
   
-  const formData = new FormData();
-  filesArray.forEach((file) => {
-    if (file instanceof File) {
-      formData.append("files", file);
-    }
-  });
-  
-  try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/upload`, {
-      method: "POST",
-      body: formData,
-    });
-    
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "Unknown error");
-      alert(`Upload failed: ${errorText || "Make sure the files are supported images/videos."}`);
-      return;
-    }
-    
-    await loadAllProjectsState();
-    await fetchProjects();
-  } catch (error) {
-    console.error("Upload error:", error);
-    alert(`Upload failed: ${error.message || "Network error. Please try again."}`);
-  }
+  // Use the uploadFiles function which handles duplicate checking
+  await uploadFiles(filesArray, false, projectName);
 }
 
 async function createProjectAndUpload() {
@@ -2561,7 +2614,8 @@ browseFilesBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
   if (fileInput.files.length) {
-    uploadFiles(fileInput.files);
+    // Always ask for album selection
+    openProjectSelectModal(Array.from(fileInput.files));
     fileInput.value = "";
   }
 });
@@ -2643,11 +2697,8 @@ galleryDropZone.addEventListener("drop", (event) => {
   
   if (event.dataTransfer.files.length > 0) {
     const files = Array.from(event.dataTransfer.files);
-    if (state.isAllProjects) {
-      openProjectSelectModal(files);
-    } else if (state.currentProject) {
-      uploadFiles(files);
-    }
+    // Always ask for album selection
+    openProjectSelectModal(files);
   }
 });
 

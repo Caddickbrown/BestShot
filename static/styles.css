@@ -901,10 +901,6 @@ body {
   .projects li {
     padding: 1rem;
   }
-
-  .image-card {
-    touch-action: none;
-  }
 }
 
 /* Touch drag clone styling */
@@ -3023,16 +3019,8 @@ body.light-theme .project-select-modal__new input:focus {
 }
 
 
-/* Mobile-specific: disable drag */
+/* Mobile/touch-specific: disable drag handles and improve touch targets */
 @media (pointer: coarse) {
-  .image-card {
-    touch-action: auto;
-  }
-  
-  .image-card.no-drag {
-    touch-action: auto;
-  }
-  
   .drag-handle {
     display: none;
   }

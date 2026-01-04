@@ -901,10 +901,6 @@ body {
   .projects li {
     padding: 1rem;
   }
-
-  .image-card {
-    touch-action: none;
-  }
 }
 
 /* Touch drag clone styling */

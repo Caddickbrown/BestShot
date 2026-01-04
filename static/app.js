@@ -3210,10 +3210,18 @@ const dropOverlaySubtext = document.getElementById("drop-overlay-subtext");
 
 // Gallery drop zone for file uploads
 galleryDropZone.addEventListener("dragover", (event) => {
-  event.preventDefault();
   if (galleryDropZone.classList.contains("disabled")) return;
+  
+  // Only prevent default if we're actually dragging something (files or cards)
+  // This prevents interference with normal scroll events on Mac trackpads
   const isCardDrag = event.dataTransfer.types.includes("application/x-gallery-card");
-  if (!isCardDrag && event.dataTransfer.types.includes("Files")) {
+  const isFileDrag = event.dataTransfer.types.includes("Files");
+  
+  if (!isCardDrag && !isFileDrag) return;
+  
+  event.preventDefault();
+  
+  if (isFileDrag && !isCardDrag) {
     if (state.isAllProjects) {
       dropOverlayText.textContent = "Drop files to add";
       dropOverlaySubtext.textContent = "You'll choose which album to add them to";

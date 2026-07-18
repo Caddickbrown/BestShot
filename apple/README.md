@@ -1,9 +1,22 @@
 # BestShot — Native (SwiftUI)
 
-A native, **fully on-device** port of the BestShot media-ranking darkroom for
-**iPhone, iPad, and Mac**. No server, no network: media and rankings are stored
-locally (SwiftData + the app's Application Support container). This is a
-feature-parity rewrite of the Flask + vanilla-JS web app in the repository root.
+A native photo-management app for **iPhone, iPad, and Mac**, fully on-device (no
+server, no network). It has three modes:
+
+- **Triage** — blast through your **Photos library** keeping/deleting fast.
+  Swipe right = Keep, left = Delete (batched, one confirmation at the end →
+  Recently Deleted). Buttons for Favourite, Skip, Undo. **Pinch out** on a photo
+  to zoom to the whole session gallery (colour-coded by decision) for context,
+  then tap any tile to jump back in.
+- **Organise** — step through photos and file each into **Photos albums** (pick
+  existing or create new on the fly).
+- **Compare** — the original BestShot ranking darkroom (import media into
+  projects, then rank by drag or guided A/B comparison with transitive
+  inference). This is the feature-parity port of the Flask + vanilla-JS web app.
+
+Triage/Organise operate directly on your real Photos library via **PhotoKit**;
+Compare works on media imported into local projects (SwiftData + the app's
+Application Support container).
 
 ## Requirements
 

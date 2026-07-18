@@ -12,7 +12,7 @@ struct BestShotApp: App {
 
     init() {
         do {
-            container = try ModelContainer(for: Project.self, MediaItem.self)
+            container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }

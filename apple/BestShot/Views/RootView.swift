@@ -9,12 +9,14 @@ struct RootView: View {
     @Query(sort: [SortDescriptor(\Project.sortIndex), SortDescriptor(\Project.createdAt)])
     private var projects: [Project]
 
-    @State private var selection: SidebarSelection? = .allMedia
+    @State private var selection: SidebarSelection? = .triage
     @State private var showingNewProject = false
     @State private var showingSettings = false
     @State private var showingShortcuts = false
 
     enum SidebarSelection: Hashable {
+        case triage
+        case organise
         case allMedia
         case project(UUID)
     }
@@ -22,6 +24,12 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
+                Section("Review") {
+                    Label("Triage", systemImage: "rectangle.stack.badge.person.crop")
+                        .tag(SidebarSelection.triage)
+                    Label("Organise", systemImage: "folder.badge.plus")
+                        .tag(SidebarSelection.organise)
+                }
                 Section {
                     Label("All Media", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.allMedia)
@@ -77,6 +85,10 @@ struct RootView: View {
     @ViewBuilder
     private var detailView: some View {
         switch selection {
+        case .triage:
+            TriageHomeView()
+        case .organise:
+            OrganiseHomeView()
         case .allMedia:
             AllMediaView()
         case .project(let id):

@@ -68,7 +68,7 @@
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  background: #16181b;
+  background: var(--tile-bg, #16181b);
   cursor: grab;
 }
 

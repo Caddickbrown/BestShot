@@ -804,9 +804,11 @@ function renderImages() {
     const rank = card.querySelector(".rank-pill");
     if (media.isRanked) {
       rank.textContent = `#${media.rank}`;
+      rank.dataset.rank = media.rank;
       rank.classList.remove("unranked");
     } else {
       rank.textContent = "New";
+      delete rank.dataset.rank;
       rank.classList.add("unranked");
     }
     card.querySelector(".filename").textContent = media.name;

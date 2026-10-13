@@ -1,7 +1,11 @@
-const CACHE_NAME = 'bestshot-v1.1.0';
+const CACHE_NAME = 'bestshot-v1.2.0';
 const STATIC_ASSETS = [
   '/',
   '/static/styles.css',
+  '/static/theme.css',
+  '/static/fonts/Archivo.woff2',
+  '/static/fonts/IBMPlexMono-Regular.woff2',
+  '/static/fonts/IBMPlexMono-Medium.woff2',
   '/static/app.js',
   '/manifest.json'
 ];

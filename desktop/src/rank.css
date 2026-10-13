@@ -1,4 +1,4 @@
-/* Rank mode: a flat contact sheet in rank order, and the side-by-side Compare. */
+/* Rank mode: prints laid out in rank order, and the side-by-side Compare. */
 
 #rank-view {
   display: flex;
@@ -17,17 +17,14 @@
 .rank-actions {
   margin-left: auto;
   display: flex;
-  gap: 0.4rem;
-}
-
-.rank-actions .btn.primary {
-  border-radius: 999px;
+  align-items: center;
+  gap: 18px;
 }
 
 .rank-sheet {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 4px 2rem;
+  padding: 22px 24px 2rem;
   background: var(--sheet, var(--stage));
 }
 
@@ -35,7 +32,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   grid-auto-rows: max-content;
-  gap: 4px;
+  gap: 22px 18px;
   min-height: 120px;
 }
 
@@ -55,7 +52,9 @@
 }
 
 .rank-divider {
-  margin: 1.6rem 0.5rem 0.6rem;
+  margin: 2rem 0 0.9rem;
+  padding-top: 0.6rem;
+  border-top: 2px solid var(--rule, var(--border));
   font-family: var(--mono);
   font-size: 0.72rem;
   font-weight: 500;
@@ -67,18 +66,19 @@
 .rank-tile {
   position: relative;
   aspect-ratio: 1;
-  overflow: hidden;
-  background: var(--tile-bg, #16181b);
+  background: var(--paper, var(--tile-bg, #16181b));
+  box-shadow: 0 1px 0 rgba(20, 20, 20, 0.18);
   cursor: grab;
 }
 
 .rank-tile img {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: 10px 10px 34px;
+  width: calc(100% - 20px);
+  height: calc(100% - 44px);
   object-fit: cover;
   display: block;
+  background: var(--tile-bg, #16181b);
 }
 
 .rank-tile:hover img {
@@ -87,19 +87,26 @@
 
 .rank-no {
   position: absolute;
-  top: 6px;
-  left: 8px;
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #fff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  left: 10px;
+  bottom: 4px;
+  font-family: var(--display, var(--mono));
+  font-stretch: 62%;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
   pointer-events: none;
 }
 
 .rank-tile.podium .rank-no {
   color: var(--accent);
-  font-size: 1.05rem;
+}
+
+/* #1 gets the grease-pencil circle. */
+.rank-tile.podium:first-child .rank-no {
+  padding: 4px 8px;
+  margin: 0 0 -4px -8px;
+  background: var(--mark-circle, none) center / 100% 100% no-repeat;
 }
 
 .rank-tile.dragging {
@@ -107,11 +114,11 @@
 }
 
 .rank-tile.drop-before {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: -11px 0 0 -8px var(--accent);
 }
 
 .rank-tile.drop-after {
-  box-shadow: inset -3px 0 0 var(--accent);
+  box-shadow: 11px 0 0 -8px var(--accent);
 }
 
 .rank-ghost {
@@ -145,9 +152,10 @@ body.rank-dragging * {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.55rem 0.9rem;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
+  padding: 10px 24px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -156,8 +164,8 @@ body.rank-dragging * {
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
+  gap: 2px;
+  padding: 0;
 }
 
 .compare-side {
@@ -191,11 +199,11 @@ body.rank-dragging * {
 
 .compare-side figcaption {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: baseline;
   gap: 1rem;
-  padding: 0.6rem 0 0.5rem;
-  font-size: 0.85rem;
+  padding: 10px 24px 14px;
+  font-size: 12px;
 }
 
 .compare-side .name {
@@ -235,8 +243,13 @@ body.rank-dragging * {
 }
 
 .compare-results h2 {
-  margin: 0 0 0.5rem;
-  font-weight: 600;
+  margin: 0 0 0.8rem;
+  font-family: var(--display, inherit);
+  font-stretch: 62%;
+  font-weight: 900;
+  font-size: 72px;
+  line-height: 0.9;
+  text-transform: uppercase;
 }
 
 .compare-results p {
@@ -246,6 +259,4 @@ body.rank-dragging * {
   line-height: 1.5;
 }
 
-.compare-results .btn.primary {
-  border-radius: 999px;
-}
+

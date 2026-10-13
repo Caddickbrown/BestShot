@@ -1,0 +1,925 @@
+/*
+ * BestShot web: light table to sort, viewfinder to judge.
+ *
+ * Loaded after styles.css and layered over it. Every rule is prefixed with
+ * `:root :is(body, .light-theme)` so it outranks the older
+ * `body.light-theme …` overrides whichever theme a visitor had saved.
+ * The media viewer and Compare mode are the black viewfinder.
+ */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/Archivo.woff2") format("woff2");
+  font-weight: 400 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500 700;
+  font-display: swap;
+}
+
+:root,
+:root :is(body, .light-theme) {
+  color-scheme: light;
+  --display: "Archivo", "Arial Narrow", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+  --bg: #efebe1;
+  --paper: #fbfaf6;
+  --tile-bg: #ddd8cc;
+  --panel: #efebe1;
+  --panel-muted: #efebe1;
+  --text: #141414;
+  --text-muted: #5c5850;
+  --text-dim: #8a857a;
+  --border: rgba(20, 20, 20, 0.16);
+  --rule: #141414;
+  --accent: #c8261d;
+  --accent-strong: #a61f17;
+  --danger: #c8261d;
+  --mark-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200' preserveAspectRatio='none'%3E%3Cpath d='M26 104 C18 44 80 12 118 14 C172 18 192 62 184 110 C176 158 122 188 84 184 C40 180 14 146 18 100 C20 74 40 52 64 40' fill='none' stroke='%23c8261d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E");
+  --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M2 6 C30 2 70 9 98 4' fill='none' stroke='%23c8261d' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* The viewfinder palette. */
+:root :is(body, .light-theme) :is(.media-viewer-modal, .comparison-mode, .video-modal) {
+  color-scheme: dark;
+  --bg: #000;
+  --paper: #111;
+  --text: #e8e6e1;
+  --text-muted: rgba(232, 230, 225, 0.66);
+  --text-dim: rgba(232, 230, 225, 0.42);
+  --border: rgba(232, 230, 225, 0.16);
+  --rule: rgba(232, 230, 225, 0.5);
+  --accent: #ff5a4e;
+  color: var(--text);
+}
+
+:root :is(body, .light-theme) {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+:root :is(body, .light-theme) :is(h1, h2, h3) {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+:root :is(body, .light-theme) :is(button, input, textarea, select) {
+  font-family: var(--mono);
+}
+
+/* The old theme toggle has no meaning now: there is one look. */
+:root :is(body, .light-theme) #theme-toggle-btn {
+  display: none;
+}
+
+/* ============ Buttons ============ */
+
+:root :is(body, .light-theme) :is(.ghost, .toggle, .text-button) {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+  padding: 0.35rem 0.15rem;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) :is(.ghost, .text-button):hover:not(:disabled) {
+  background: none;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .primary {
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.2rem 0;
+  color: var(--accent);
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+:root :is(body, .light-theme) .primary:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+  transform: none;
+}
+
+:root :is(body, .light-theme) :is(.danger, .primary.danger, .dropdown-danger) {
+  color: var(--accent);
+  background: none;
+  border: none;
+}
+
+:root :is(body, .light-theme) .toggle {
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .toggle.active {
+  color: var(--text);
+  background: var(--underline) bottom 2px left / 100% 6px no-repeat;
+}
+
+:root :is(body, .light-theme) .icon-button {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) .icon-button:hover {
+  color: var(--accent);
+  background: none;
+}
+
+:root :is(body, .light-theme) :is(.kbd, kbd) {
+  font-family: var(--mono);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) :is(input[type="text"], input[type="search"], input:not([type]), textarea) {
+  background: none;
+  border: none;
+  border-bottom: 2px solid var(--rule);
+  border-radius: 0;
+  color: var(--text);
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) :is(input, textarea):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) :is(input, textarea)::placeholder {
+  color: var(--text-dim);
+}
+
+/* ============ Header ============ */
+
+:root :is(body, .light-theme) .app-header {
+  max-width: none;
+  padding: 18px clamp(16px, 3vw, 40px);
+  border-bottom: 2px solid var(--rule);
+}
+
+:root :is(body, .light-theme) .app-title {
+  font-family: var(--mono);
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+:root :is(body, .light-theme) .app-title::after {
+  content: " / rank";
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .search-box input,
+:root :is(body, .light-theme) .app-toolbar .search-box input {
+  border-radius: 0;
+  padding: 0.4rem 0.2rem;
+  min-width: 240px;
+}
+
+:root :is(body, .light-theme) .search-clear {
+  background: none;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .search-clear[hidden] {
+  display: none;
+}
+
+:root :is(body, .light-theme) #start-compare {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 22px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) #start-compare::after {
+  content: " →";
+}
+
+:root :is(body, .light-theme) .sort-button {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+/* ============ Shell: no panels, just a contents column and the table ============ */
+
+:root :is(body, .light-theme) .shell {
+  max-width: none;
+  padding: 0 clamp(16px, 3vw, 40px) 48px;
+  gap: 40px;
+}
+
+@media (min-width: 1101px) {
+  :root :is(body, .light-theme) .shell {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  :root :is(body, .light-theme) .shell.panel-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  :root :is(body, .light-theme) .shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+:root :is(body, .light-theme) .panel {
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+  box-shadow: none;
+  padding: 24px 0;
+}
+
+:root :is(body, .light-theme) .panel--left {
+  gap: 18px;
+}
+
+:root :is(body, .light-theme) .panel-head h2 {
+  font-family: var(--mono);
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .projects {
+  gap: 0;
+  max-height: 62vh;
+}
+
+:root :is(body, .light-theme) :is(.projects li, .all-projects-option) {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  padding: 10px 0 8px;
+  margin: 0;
+}
+
+:root :is(body, .light-theme) :is(.projects li h3, .all-projects-option h3) {
+  font-size: 30px;
+  line-height: 0.95;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root :is(body, .light-theme) :is(.projects li, .all-projects-option):hover h3 {
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) :is(.projects li.active, .all-projects-option.active) {
+  border-color: var(--rule);
+  background: none;
+}
+
+:root :is(body, .light-theme) :is(.projects li.active h3, .all-projects-option.active h3) {
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .projects li.drop-target {
+  background: none;
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+:root :is(body, .light-theme) .projects li small,
+:root :is(body, .light-theme) .all-projects-option small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .projects li p {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+:root :is(body, .light-theme) .create-album-btn {
+  align-self: flex-start;
+  font-size: 26px;
+}
+
+/* ============ Workspace ============ */
+
+:root :is(body, .light-theme) .workspace-header {
+  border-bottom: 2px solid var(--rule);
+  padding-bottom: 12px;
+  margin-bottom: 22px;
+  align-items: flex-end;
+}
+
+:root :is(body, .light-theme) .eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .workspace-header h2 {
+  font-size: clamp(56px, 7vw, 104px);
+  font-weight: 900;
+  line-height: 0.86;
+  margin: 2px 0 6px;
+}
+
+:root :is(body, .light-theme) .workspace-header .muted {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .project-note {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 18px;
+}
+
+:root :is(body, .light-theme) .project-note input[type="text"],
+:root :is(body, .light-theme) .project-note input[type="text"]:read-only {
+  font-size: 13px;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  opacity: 1;
+}
+
+:root :is(body, .light-theme) .canvas {
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+}
+
+:root :is(body, .light-theme) .drop-overlay {
+  background: rgba(239, 235, 225, 0.94);
+  border: 3px dashed var(--accent);
+  border-radius: 0;
+  color: var(--text);
+}
+
+:root :is(body, .light-theme) .drop-overlay p {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 48px;
+  text-transform: uppercase;
+}
+
+:root :is(body, .light-theme) .empty-gallery {
+  color: var(--text-muted);
+}
+
+/* ============ Prints on the table ============ */
+
+:root :is(body, .light-theme) .images-grid {
+  gap: 26px 18px;
+}
+
+:root :is(body, .light-theme) .image-card {
+  position: relative;
+  border: none;
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: 0 1px 0 rgba(20, 20, 20, 0.18);
+  padding: 10px 10px 8px;
+  gap: 6px;
+}
+
+:root :is(body, .light-theme) .image-card:hover {
+  box-shadow: 0 4px 14px rgba(20, 20, 20, 0.2);
+}
+
+:root :is(body, .light-theme) .image-card.over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+}
+
+:root :is(body, .light-theme) .image-card img,
+:root :is(body, .light-theme) .video-card .video-thumbnail {
+  border-radius: 0;
+  background: var(--tile-bg);
+}
+
+/* The head row moves under the print: rank numeral, then the file name. */
+:root :is(body, .light-theme) .image-card__head {
+  order: 2;
+  gap: 8px;
+  align-items: baseline;
+}
+
+:root :is(body, .light-theme) .image-card > img,
+:root :is(body, .light-theme) .image-card > .video-thumbnail {
+  order: 1;
+}
+
+:root :is(body, .light-theme) .image-card__tags {
+  order: 3;
+}
+
+:root :is(body, .light-theme) .rank-pill {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--text);
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1;
+}
+
+:root :is(body, .light-theme) .rank-pill.unranked {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+/* The top three are red, number one is circled. */
+:root :is(body, .light-theme) .rank-pill:is([data-rank="1"], [data-rank="2"], [data-rank="3"]) {
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .rank-pill[data-rank="1"] {
+  padding: 4px 10px;
+  margin: -4px -6px -4px -10px;
+  background: var(--mark-circle) center / 100% 100% no-repeat;
+}
+
+:root :is(body, .light-theme) .image-card .filename,
+:root :is(body, .light-theme) .filename {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .drag-handle {
+  color: var(--text-dim);
+}
+
+:root :is(body, .light-theme) :is(.delete-media-btn, .download-media-btn) {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) :is(.delete-media-btn, .download-media-btn):hover {
+  background: none;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .tag {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+:root :is(body, .light-theme) .add-tag-btn {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+:root :is(body, .light-theme) .add-tag-btn:hover {
+  background: none;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .video-card::before {
+  background: #141414;
+  color: var(--paper);
+  border-radius: 0;
+}
+
+:root :is(body, .light-theme) .video-card .play-button {
+  background: rgba(20, 20, 20, 0.7);
+  color: var(--paper);
+}
+
+:root :is(body, .light-theme) .project-badge {
+  background: var(--paper);
+  color: var(--text);
+  border-radius: 0;
+  border: none;
+}
+
+:root :is(body, .light-theme) .selection-checkbox {
+  border-radius: 0;
+  border: 2px solid var(--rule);
+  background: var(--paper);
+}
+
+:root :is(body, .light-theme) .image-card.selected .selection-checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+
+:root :is(body, .light-theme) .image-card.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+/* ============ Menus, dialogs, bars ============ */
+
+:root :is(body, .light-theme) :is(.dropdown-menu, .sort-dropdown, .export-dropdown) {
+  background: var(--paper);
+  border: none;
+  border-radius: 0;
+  box-shadow: 0 2px 0 rgba(20, 20, 20, 0.2), 0 18px 40px rgba(20, 20, 20, 0.25);
+}
+
+:root :is(body, .light-theme) :is(.dropdown-menu button:not(.toggle), .sort-dropdown button, .export-dropdown button) {
+  border-radius: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+:root :is(body, .light-theme) :is(.dropdown-menu button:not(.toggle), .sort-dropdown button, .export-dropdown button):hover:not(:disabled) {
+  background: none;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .sort-dropdown button.active {
+  background: none;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) :is(.dropdown-header, .dropdown-label) {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+:root :is(body, .light-theme) .dropdown-divider {
+  background: var(--border);
+}
+
+:root :is(body, .light-theme) :is(
+    .delete-modal__content,
+    .comparison-selection__content,
+    .comparison-results__content,
+    .create-album-modal__content,
+    .rename-modal__content,
+    .project-select-modal__content,
+    .shortcuts-modal__content,
+    .duplicate-modal__content
+  ) {
+  background: var(--paper);
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+  box-shadow: 0 2px 0 rgba(20, 20, 20, 0.2), 0 24px 60px rgba(20, 20, 20, 0.35);
+}
+
+:root :is(body, .light-theme) :is(
+    .delete-modal__content,
+    .comparison-selection__content,
+    .comparison-results__content,
+    .create-album-modal__content,
+    .rename-modal__content,
+    .project-select-modal__content,
+    .shortcuts-modal__content,
+    .duplicate-modal__content
+  ) :is(h2, h3) {
+  font-size: 48px;
+  line-height: 0.9;
+  margin-bottom: 12px;
+}
+
+:root :is(body, .light-theme) :is(
+    .delete-modal__backdrop,
+    .comparison-selection__backdrop,
+    .comparison-results__backdrop,
+    .create-album-modal__backdrop,
+    .rename-modal__backdrop,
+    .project-select-modal__backdrop,
+    .shortcuts-modal__backdrop,
+    .duplicate-modal__backdrop
+  ) {
+  background: rgba(20, 20, 20, 0.55);
+  backdrop-filter: none;
+}
+
+:root :is(body, .light-theme) :is(.comparison-option, .project-select-modal__item, .duplicate-list__item, .comparison-results__item) {
+  background: none;
+  border: none;
+  border-top: 2px solid var(--rule);
+  border-radius: 0;
+  color: var(--text);
+  text-align: left;
+}
+
+:root :is(body, .light-theme) .comparison-option:hover:not(:disabled),
+:root :is(body, .light-theme) .project-select-modal__item:hover {
+  background: none;
+  border-color: var(--rule);
+}
+
+:root :is(body, .light-theme) .comparison-option__title {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 34px;
+  text-transform: uppercase;
+}
+
+:root :is(body, .light-theme) .comparison-option:hover:not(:disabled) .comparison-option__title {
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) :is(.comparison-option__count, .comparison-results__score) {
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .comparison-results__rank {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--text);
+  background: none;
+}
+
+:root :is(body, .light-theme) .comparison-results__thumb {
+  border-radius: 0;
+}
+
+:root :is(body, .light-theme) :is(.bulk-actions-bar, .upload-progress) {
+  background: #141414;
+  color: var(--paper);
+  border: none;
+  border-radius: 0;
+  box-shadow: 0 10px 30px rgba(20, 20, 20, 0.35);
+}
+
+:root :is(body, .light-theme) .bulk-actions-bar .ghost {
+  color: var(--paper);
+}
+
+:root :is(body, .light-theme) .bulk-actions-bar .ghost.danger {
+  color: #ff5a4e;
+}
+
+:root :is(body, .light-theme) .upload-progress__bar {
+  background: rgba(239, 235, 225, 0.2);
+  border-radius: 0;
+}
+
+:root :is(body, .light-theme) .upload-progress__fill {
+  background: #ff5a4e;
+  border-radius: 0;
+}
+
+:root :is(body, .light-theme) .loading-overlay {
+  background: rgba(239, 235, 225, 0.85);
+}
+
+:root :is(body, .light-theme) .spinner {
+  border-color: var(--border);
+  border-top-color: var(--accent);
+}
+
+:root :is(body, .light-theme) .panel-close-btn {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) .panel-close-btn:hover {
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .mobile-project-toggle {
+  background: none;
+  border: none;
+  border-bottom: 2px solid var(--rule);
+  border-radius: 0;
+  color: var(--text);
+}
+
+:root :is(body, .light-theme) .mobile-project-toggle {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 24px;
+  text-transform: uppercase;
+}
+
+/* ============ Viewfinder: the media viewer ============ */
+
+:root :is(body, .light-theme) .media-viewer-modal__backdrop,
+:root :is(body, .light-theme) .video-modal__backdrop {
+  background: #000;
+  backdrop-filter: none;
+}
+
+:root :is(body, .light-theme) :is(.media-viewer-modal__content, .video-modal__content) {
+  background: #000;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) :is(.media-viewer-modal__close, .video-modal__close, .media-viewer-modal__nav) {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+  box-shadow: none;
+  font-family: var(--mono);
+}
+
+:root :is(body, .light-theme) :is(.media-viewer-modal__close, .video-modal__close, .media-viewer-modal__nav):hover {
+  background: none;
+  color: var(--accent);
+}
+
+:root :is(body, .light-theme) .media-viewer-modal__media img,
+:root :is(body, .light-theme) .media-viewer-modal__media video {
+  border-radius: 0;
+}
+
+:root :is(body, .light-theme) .media-viewer-modal__info {
+  background: #000;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+}
+
+:root :is(body, .light-theme) .media-viewer-modal__name {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 26px;
+  text-transform: uppercase;
+}
+
+:root :is(body, .light-theme) :is(.exif-toggle, .exif-panel, .comment-input) {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .comment-input {
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+:root :is(body, .light-theme) .exif-panel__label {
+  color: var(--text-muted);
+}
+
+:root :is(body, .light-theme) .exif-panel__value {
+  color: var(--text);
+}
+
+/* ============ Viewfinder: Compare ============ */
+
+:root :is(body, .light-theme) .comparison-mode {
+  background: #000;
+  padding: 18px 0 0;
+}
+
+:root :is(body, .light-theme) .comparison-mode__header {
+  width: 100%;
+  justify-content: space-between;
+  padding: 0 28px;
+  margin-bottom: 10px;
+}
+
+:root :is(body, .light-theme) .comparison-mode__progress {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+:root :is(body, .light-theme) .comparison-mode__instruction {
+  font-family: var(--display);
+  font-stretch: 62%;
+  font-weight: 800;
+  font-size: 34px;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+
+:root :is(body, .light-theme) .comparison-mode__arena {
+  max-width: none;
+  gap: 2px;
+  align-items: stretch;
+}
+
+:root :is(body, .light-theme) .comparison-card {
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+:root :is(body, .light-theme) .comparison-card:hover {
+  transform: none;
+  border: none;
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+:root :is(body, .light-theme) .comparison-card img,
+:root :is(body, .light-theme) .comparison-card video {
+  border-radius: 0;
+  background: #000;
+}
+
+:root :is(body, .light-theme) .comparison-card__name {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 20px;
+}
+
+:root :is(body, .light-theme) .comparison-vs {
+  display: none;
+}
+
+:root :is(body, .light-theme) .comparison-mode__actions {
+  margin: 14px 0;
+  gap: 28px;
+}
+
+:root :is(body, .light-theme) .comparison-mode .ghost {
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+:root :is(body, .light-theme) .comparison-mode__shortcuts {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+}
+
+/* The drawer's own close button only belongs on phones. */
+@media (min-width: 681px) {
+  :root :is(body, .light-theme) .panel--left__header.mobile-only {
+    display: none;
+  }
+}

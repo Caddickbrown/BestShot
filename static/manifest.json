@@ -4,8 +4,8 @@
   "description": "Drop, rank, and file your selects in a dockerized studio",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#05070d",
-  "theme_color": "#05070d",
+  "background_color": "#efebe1",
+  "theme_color": "#efebe1",
   "orientation": "any",
   "icons": [
     {

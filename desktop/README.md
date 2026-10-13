@@ -83,7 +83,7 @@ cargo tauri build --bundles deb    # -> target/release/bundle/deb/BestShot_*.deb
 cargo tauri build --bundles appimage
 ```
 
-Install the `.deb` with `sudo apt install ./target/release/bundle/deb/BestShot_0.1.0_amd64.deb`
+Install the `.deb` with `sudo apt install ./target/release/bundle/deb/BestShot_0.2.0_amd64.deb`
 and BestShot will show up in your app launcher.
 
 ## Layout

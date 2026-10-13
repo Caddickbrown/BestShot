@@ -17,6 +17,7 @@ const S = {
   name: "",
   items: [],
   decisions: new Map(), // rel -> "keep" | "reject"
+  ranking: [], // rels, best first (see rank.js)
   index: 0,
   undo: [], // { index, prev }
   view: "loupe", // "loupe" | "grid"
@@ -148,6 +149,7 @@ async function openFolder(path, { message = "Scanning folder…" } = {}) {
       name: info.name || info.root,
       items: info.items,
       decisions: new Map(Object.entries(info.decisions)),
+      ranking: info.ranking,
       undo: [],
       filter: "all",
     });
@@ -530,18 +532,22 @@ async function renderInfo() {
 
 function setView(view) {
   S.view = view;
-  const grid = view === "grid";
-  $("review").classList.toggle("grid-mode", grid);
-  $("loupe").hidden = grid;
-  $("controls").hidden = grid;
-  $("grid-view").hidden = !grid;
-  $("grid-btn").classList.toggle("active", grid);
-  if (grid) {
-    $("video").pause();
-    renderGrid();
-  } else {
+  const loupe = view === "loupe";
+  $("review").classList.toggle("grid-mode", !loupe);
+  $("loupe").hidden = !loupe;
+  $("controls").hidden = !loupe;
+  $("grid-view").hidden = view !== "grid";
+  $("rank-view").hidden = view !== "rank";
+  $("grid-btn").classList.toggle("active", view === "grid");
+  $("rank-btn").classList.toggle("active", view === "rank");
+  if (loupe) {
     show(S.index);
+    return;
   }
+  setZoom(false);
+  $("video").pause();
+  if (view === "grid") renderGrid();
+  else renderRank();
 }
 
 function matchesFilter(i) {
@@ -685,6 +691,7 @@ const DECISION_KEYS = new Set(["ArrowRight", "ArrowLeft", "p", "P", "x", "X", "D
 function onKey(e) {
   if ($("review").hidden || document.querySelector("dialog[open]")) return;
   if (e.target instanceof HTMLInputElement) return;
+  if (S.view === "rank") return rankKey(e);
   const k = e.key;
 
   if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === "z") {
@@ -698,6 +705,9 @@ function onKey(e) {
     if (["g", "G", "Escape"].includes(k)) {
       e.preventDefault();
       setView("loupe");
+    } else if (k === "r" || k === "R") {
+      e.preventDefault();
+      setView("rank");
     } else if (k === "Backspace") {
       e.preventDefault();
       undo();
@@ -752,6 +762,10 @@ function onKey(e) {
     case "G":
       setView("grid");
       break;
+    case "r":
+    case "R":
+      setView("rank");
+      break;
     case "i":
     case "I":
       toggleInfo();
@@ -792,6 +806,7 @@ function init() {
   $("help-btn").addEventListener("click", () => $("help-dialog").showModal());
   $("help-close").addEventListener("click", () => $("help-dialog").close());
   $("finish-btn").addEventListener("click", openFinish);
+  $("rank-btn").addEventListener("click", () => setView(S.view === "rank" ? "loupe" : "rank"));
 
   $("keep-btn").addEventListener("click", () => decide("keep"));
   $("reject-btn").addEventListener("click", () => decide("reject"));

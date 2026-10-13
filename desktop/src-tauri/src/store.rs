@@ -22,6 +22,9 @@ pub struct Store {
     /// Relative path -> decision. Unreviewed files have no entry.
     #[serde(default)]
     pub decisions: BTreeMap<String, Decision>,
+    /// Relative paths in rank order, best first. Unranked files are absent.
+    #[serde(default)]
+    pub ranking: Vec<String>,
 }
 
 fn current_version() -> u32 {
@@ -82,10 +85,17 @@ mod tests {
 
         store.decisions.insert("a.jpg".into(), Decision::Keep);
         store.decisions.insert("sub/b.jpg".into(), Decision::Reject);
+        store.ranking = vec!["sub/b.jpg".into(), "a.jpg".into()];
         save(root, &store).unwrap();
 
         let (loaded, _) = load(root);
         assert_eq!(loaded.decisions, store.decisions);
+        assert_eq!(loaded.ranking, store.ranking);
+
+        // Files written before ranking existed still load.
+        fs::write(root.join(STORE_FILE), r#"{"version":1,"decisions":{"a.jpg":"keep"}}"#).unwrap();
+        let (old, warn) = load(root);
+        assert!(warn.is_none() && old.ranking.is_empty() && old.decisions.len() == 1);
 
         fs::write(root.join(STORE_FILE), "{ nope").unwrap();
         let (fresh, warn) = load(root);

@@ -43,6 +43,7 @@ struct SessionInfo {
     name: String,
     items: Vec<Item>,
     decisions: BTreeMap<String, Decision>,
+    ranking: Vec<String>,
     warning: Option<String>,
 }
 
@@ -76,9 +77,10 @@ async fn open_folder(
         let items = library::scan(&root, recursive, include_videos).map_err(|e| e.to_string())?;
         let (mut store, warning) = store::load(&root);
         // Forget decisions for files that have since been moved or deleted.
-        let before = store.decisions.len();
+        let before = (store.decisions.len(), store.ranking.len());
         store.decisions.retain(|rel, _| root.join(rel).exists());
-        if store.decisions.len() != before {
+        store.ranking.retain(|rel| root.join(rel).exists());
+        if (store.decisions.len(), store.ranking.len()) != before {
             let _ = store::save(&root, &store);
         }
         Ok((items, store, warning))
@@ -93,6 +95,7 @@ async fn open_folder(
         name: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
         items: items.clone(),
         decisions: store.decisions.clone(),
+        ranking: store.ranking.clone(),
         warning,
     };
     *state.session.lock().unwrap() = Some(Session { gen, root, items, store });
@@ -113,6 +116,15 @@ async fn set_decision(
         None => session.store.decisions.remove(&rel),
     };
     store::save(&session.root, &session.store).map_err(|e| format!("Couldn't save decisions: {e}"))
+}
+
+/// Replaces the saved rank order (best first).
+#[tauri::command]
+async fn set_ranking(state: State<'_, AppState>, gen: u64, ranking: Vec<String>) -> Result<(), String> {
+    let mut guard = state.session.lock().unwrap();
+    let session = guard.as_mut().filter(|s| s.gen == gen).ok_or("That folder is no longer open")?;
+    session.store.ranking = ranking;
+    store::save(&session.root, &session.store).map_err(|e| format!("Couldn't save ranking: {e}"))
 }
 
 #[tauri::command]
@@ -145,6 +157,7 @@ async fn apply_cull(state: State<'_, AppState>, gen: u64, mode: cull::Mode) -> R
         for rel in &outcome.culled {
             session.store.decisions.remove(rel);
         }
+        session.store.ranking.retain(|rel| !outcome.culled.contains(rel));
         store::save(&session.root, &session.store).map_err(|e| format!("Couldn't save decisions: {e}"))?;
     }
     Ok(outcome)
@@ -233,6 +246,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_folder,
             set_decision,
+            set_ranking,
             photo_info,
             apply_cull,
             reveal,

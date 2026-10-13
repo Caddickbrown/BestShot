@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>BestShot</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="rank.css" />
   </head>
   <body>
     <!-- ============ Home: pick a folder ============ -->
@@ -47,6 +48,7 @@
         </div>
         <div class="tools">
           <button id="grid-btn" class="btn ghost" title="Grid view (G)">Grid</button>
+          <button id="rank-btn" class="btn ghost" title="Rank your keepers, best first (R)">Rank</button>
           <button id="info-btn" class="btn ghost" title="Photo details (I)">Info</button>
           <button id="help-btn" class="btn ghost" title="Keyboard shortcuts (?)">?</button>
           <button id="finish-btn" class="btn primary" title="Apply your decisions">Finish…</button>
@@ -97,6 +99,22 @@
         <div id="grid"></div>
       </section>
 
+      <section id="rank-view" hidden>
+        <div class="rank-toolbar">
+          <div id="rank-pool" class="segmented" role="tablist">
+            <button data-pool="keep" class="active">Kept <span></span></button>
+            <button data-pool="all">Not rejected <span></span></button>
+          </div>
+          <span id="rank-status" class="muted small-text"></span>
+          <div class="rank-actions">
+            <button id="rank-clear" class="btn ghost">Clear ranking</button>
+            <button id="rank-compare-all" class="btn">Compare all</button>
+            <button id="rank-compare-new" class="btn primary">Compare new</button>
+          </div>
+        </div>
+        <div id="rank-sheet" class="rank-sheet"></div>
+      </section>
+
       <footer id="controls" class="controls">
         <div class="actions">
           <button id="reject-btn" class="act reject" title="Reject (← or X)">✕ Reject <kbd>←</kbd></button>
@@ -106,6 +124,36 @@
         </div>
         <div id="filmstrip" class="filmstrip"></div>
       </footer>
+    </section>
+
+    <!-- ============ Compare (ranking) ============ -->
+    <section id="compare" class="compare" hidden>
+      <header class="compare-bar">
+        <span id="compare-progress" class="mono"></span>
+        <div class="row">
+          <button id="compare-undo" class="btn ghost">Undo <kbd>⌫</kbd></button>
+          <button id="compare-skip" class="btn ghost">Skip / tie <kbd>Space</kbd></button>
+          <button id="compare-exit" class="btn">Save &amp; exit <kbd>Esc</kbd></button>
+        </div>
+      </header>
+      <div id="compare-pair" class="compare-pair">
+        <figure id="compare-left" class="compare-side">
+          <div class="compare-media"><img alt="" draggable="false" /><video muted loop playsinline hidden></video></div>
+          <figcaption><span class="name"></span><span class="hint"><kbd>←</kbd> or <kbd>1</kbd></span></figcaption>
+        </figure>
+        <figure id="compare-right" class="compare-side">
+          <div class="compare-media"><img alt="" draggable="false" /><video muted loop playsinline hidden></video></div>
+          <figcaption><span class="name"></span><span class="hint"><kbd>→</kbd> or <kbd>2</kbd></span></figcaption>
+        </figure>
+      </div>
+      <div id="compare-results" class="compare-results" hidden>
+        <h2>Ranking ready</h2>
+        <p id="compare-summary"></p>
+        <div class="row">
+          <button id="compare-discard" class="btn ghost">Discard</button>
+          <button id="compare-apply" class="btn primary">Save ranking</button>
+        </div>
+      </div>
     </section>
 
     <!-- ============ Dialogs ============ -->
@@ -127,6 +175,7 @@
         <tr><td><kbd>N</kbd></td><td>Jump to next unreviewed</td></tr>
         <tr><td><kbd>Z</kbd> or click</td><td>Zoom to 100% (move mouse to pan)</td></tr>
         <tr><td><kbd>G</kbd></td><td>Grid view</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Rank keepers (compare side by side, drag to reorder)</td></tr>
         <tr><td><kbd>I</kbd></td><td>Photo details</td></tr>
         <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>First / last photo</td></tr>
         <tr><td>Swipe → / ←</td><td>Keep / reject (touchscreen)</td></tr>
@@ -138,5 +187,6 @@
     <div id="scanning" class="scanning" hidden><div class="spinner"></div><span id="scanning-text">Scanning folder…</span></div>
 
     <script src="app.js"></script>
+    <script src="rank.js"></script>
   </body>
 </html>

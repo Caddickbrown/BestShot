@@ -2,6 +2,8 @@
 
 A desktop app for culling a folder of photos quickly: flick through every shot,
 mark it **Keep** or **Reject**, then send the rejects to the Trash in one go.
+Then **Rank** the keepers best-first, with the same side-by-side Compare as the
+BestShot web app.
 
 Built with [Tauri 2](https://tauri.app): a Rust backend and a plain
 HTML/CSS/JS frontend (no npm or bundler needed).
@@ -30,8 +32,24 @@ HTML/CSS/JS frontend (no npm or bundler needed).
 3. **Finish…** moves the rejects either to the **Trash** (recoverable from your
    file manager) or into a **`_Rejected`** folder inside the one you're reviewing.
    Kept and unreviewed photos are never touched.
+4. **Rank** (`R`): your keepers in order, best first. Drag photos to reorder,
+   or press **Compare all** / **Compare new** to pick the better of two photos
+   at a time:
 
-Decisions are saved as you go in a hidden `.bestshot-cull.json` file in the
+   | Key | Action |
+   |-----|--------|
+   | `←` / `1` | Left is better |
+   | `→` / `2` | Right is better |
+   | `Space` / `S` | Skip (tie) |
+   | `Backspace` | Undo |
+   | `Esc` | Save progress and exit |
+
+   Answers are applied transitively (if A beat B and B beat C, A vs C is never
+   asked), so a full ranking needs far fewer than every pair. **Compare new**
+   only asks about photos that aren't ranked yet and slots them into your
+   existing order. Switch to **Not rejected** to rank everything you didn't reject.
+
+Decisions and the ranking are saved as you go in a hidden `.bestshot-cull.json` file in the
 folder, so you can close the app and pick up where you left off.
 
 ### iPhone photos
@@ -75,14 +93,17 @@ desktop/
 ├── src/                 # Frontend (served as-is)
 │   ├── index.html
 │   ├── styles.css
-│   └── app.js
+│   ├── app.js       # Cull: loupe, grid, finish
+│   ├── rank.js      # Rank: ranked sheet, drag-reorder, Compare engine
+│   └── rank.css
 └── src-tauri/
     ├── tauri.conf.json
     └── src/
         ├── lib.rs       # Commands, app state, bestshot:// protocol
         ├── library.rs   # Folder scanning, Live Photo / sidecar grouping
-        ├── store.rs     # .bestshot-cull.json persistence
-        ├── media.rs     # Thumbnails, HEIC/TIFF previews, ranged video, EXIF
+        ├── store.rs     # .bestshot-cull.json persistence (decisions + ranking)
+        ├── media.rs     # Thumbnails, HEIC/TIFF previews, EXIF
+        ├── video.rs     # Loopback HTTP server for video (WebKitGTK can't stream custom schemes)
         └── cull.rs      # Moving rejects to Trash / _Rejected
 ```
 

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BestShot</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- ============ Home: pick a folder ============ -->
+    <section id="home" class="screen">
+      <div class="home-card">
+        <img class="home-logo" src="icon.png" alt="" />
+        <h1>BestShot</h1>
+        <p class="tagline">Cull a folder of photos fast. Keep the good ones, bin the rest.</p>
+
+        <button id="open-btn" class="btn primary large">Open folder…</button>
+        <p class="hint">or drop a folder onto this window</p>
+
+        <div class="options">
+          <label><input type="checkbox" id="opt-recursive" checked /> Include subfolders</label>
+          <label><input type="checkbox" id="opt-videos" checked /> Include videos</label>
+        </div>
+
+        <div id="recents" hidden>
+          <h2>Recent folders</h2>
+          <ul id="recent-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Review ============ -->
+    <section id="review" class="screen" hidden>
+      <header class="topbar">
+        <button id="home-btn" class="btn ghost" title="Back to folders">‹ Folders</button>
+        <div class="title">
+          <span id="folder-name"></span>
+          <span id="position" class="mono muted"></span>
+        </div>
+        <div class="progress" title="Kept / rejected / left to review">
+          <div class="bar"><span class="seg keep"></span><span class="seg reject"></span></div>
+          <div class="counts mono">
+            <span class="c-keep">✓ <b id="n-keep">0</b></span>
+            <span class="c-reject">✕ <b id="n-reject">0</b></span>
+            <span class="c-left">○ <b id="n-left">0</b></span>
+          </div>
+        </div>
+        <div class="tools">
+          <button id="grid-btn" class="btn ghost" title="Grid view (G)">Grid</button>
+          <button id="info-btn" class="btn ghost" title="Photo details (I)">Info</button>
+          <button id="help-btn" class="btn ghost" title="Keyboard shortcuts (?)">?</button>
+          <button id="finish-btn" class="btn primary" title="Apply your decisions">Finish…</button>
+        </div>
+      </header>
+
+      <main id="loupe">
+        <div id="stage">
+          <img id="placeholder" alt="" draggable="false" />
+          <img id="photo" alt="" draggable="false" />
+          <video id="video" controls loop playsinline hidden></video>
+          <div id="badge" class="badge"></div>
+          <div id="flash" class="flash"></div>
+          <div id="media-error" class="media-error" hidden>
+            <p id="media-error-text"></p>
+            <button id="media-error-open" class="btn">Open in default app</button>
+          </div>
+          <div id="done-card" class="done-card" hidden>
+            <h2>All reviewed</h2>
+            <p id="done-summary"></p>
+            <div class="row">
+              <button id="done-rejects" class="btn">Check rejects</button>
+              <button id="done-finish" class="btn primary">Finish…</button>
+            </div>
+          </div>
+        </div>
+        <aside id="info-panel" class="info-panel" hidden>
+          <h3 id="info-name"></h3>
+          <p id="info-dir" class="muted mono"></p>
+          <dl id="info-list"></dl>
+          <div class="row">
+            <button id="reveal-btn" class="btn small">Show in folder</button>
+            <button id="external-btn" class="btn small">Open externally</button>
+          </div>
+        </aside>
+      </main>
+
+      <section id="grid-view" hidden>
+        <div class="grid-toolbar">
+          <div id="filters" class="segmented" role="tablist">
+            <button data-filter="all" class="active">All <span></span></button>
+            <button data-filter="unreviewed">Unreviewed <span></span></button>
+            <button data-filter="keep">Kept <span></span></button>
+            <button data-filter="reject">Rejected <span></span></button>
+          </div>
+          <span class="muted small-text">Click a photo to review it · G or Esc to go back</span>
+        </div>
+        <div id="grid"></div>
+      </section>
+
+      <footer id="controls" class="controls">
+        <div class="actions">
+          <button id="reject-btn" class="act reject" title="Reject (← or X)">✕ Reject <kbd>←</kbd></button>
+          <button id="undo-btn" class="act" title="Undo (Backspace or Ctrl+Z)">Undo <kbd>⌫</kbd></button>
+          <button id="skip-btn" class="act" title="Next without deciding (↓ or Space)">Skip <kbd>↓</kbd></button>
+          <button id="keep-btn" class="act keep" title="Keep (→ or P)">✓ Keep <kbd>→</kbd></button>
+        </div>
+        <div id="filmstrip" class="filmstrip"></div>
+      </footer>
+    </section>
+
+    <!-- ============ Dialogs ============ -->
+    <dialog id="finish-dialog">
+      <h2>Finish culling</h2>
+      <div id="finish-body"></div>
+      <div id="finish-actions" class="dialog-actions"></div>
+    </dialog>
+
+    <dialog id="help-dialog">
+      <h2>Keyboard shortcuts</h2>
+      <table class="keys">
+        <tr><td><kbd>→</kbd> <kbd>P</kbd></td><td>Keep and move on</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>X</kbd></td><td>Reject and move on</td></tr>
+        <tr><td><kbd>↓</kbd> <kbd>Space</kbd></td><td>Next photo (no decision)</td></tr>
+        <tr><td><kbd>↑</kbd></td><td>Previous photo</td></tr>
+        <tr><td><kbd>⌫</kbd> <kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo last decision</td></tr>
+        <tr><td><kbd>U</kbd></td><td>Clear decision on this photo</td></tr>
+        <tr><td><kbd>N</kbd></td><td>Jump to next unreviewed</td></tr>
+        <tr><td><kbd>Z</kbd> or click</td><td>Zoom to 100% (move mouse to pan)</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Grid view</td></tr>
+        <tr><td><kbd>I</kbd></td><td>Photo details</td></tr>
+        <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>First / last photo</td></tr>
+        <tr><td>Swipe → / ←</td><td>Keep / reject (touchscreen)</td></tr>
+      </table>
+      <div class="dialog-actions"><button id="help-close" class="btn primary">Got it</button></div>
+    </dialog>
+
+    <div id="toast" class="toast" hidden></div>
+    <div id="scanning" class="scanning" hidden><div class="spinner"></div><span id="scanning-text">Scanning folder…</span></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

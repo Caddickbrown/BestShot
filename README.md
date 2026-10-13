@@ -2,6 +2,10 @@
 
 A web-based media ranking tool that helps you compare and sort photos and videos by preference. Built with Flask and vanilla JavaScript, BestShot runs in any modern web browser and works seamlessly across devices.
 
+> **Desktop app (Linux):** [`desktop/`](desktop/) is a native Tauri app for culling a folder of photos at speed: keep/reject with the arrow keys, then send the rejects to the Trash. See [desktop/README.md](desktop/README.md).
+>
+> **Apple:** [`apple/`](apple/) is a SwiftUI app for iPhone, iPad and Mac.
+
 ## Features
 
 ### Core Features

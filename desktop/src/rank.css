@@ -28,7 +28,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 4px 4px 2rem;
-  background: var(--stage);
+  background: var(--sheet, var(--stage));
 }
 
 .rank-grid {

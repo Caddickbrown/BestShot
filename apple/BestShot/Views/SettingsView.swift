@@ -1,27 +1,17 @@
 import SwiftUI
 
-/// App preferences: theme selection (System / Light / Dark), mirroring the web
-/// app's theme toggle. Persisted via `@AppStorage`.
+/// App information. The look is fixed (light table + viewfinder), shared with
+/// the Linux and web apps, so there's no theme setting.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(ThemePreference.storageKey) private var themeRaw = ThemePreference.system.rawValue
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Appearance") {
-                    Picker("Theme", selection: $themeRaw) {
-                        ForEach(ThemePreference.allCases) { pref in
-                            Text(pref.title).tag(pref.rawValue)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                }
-
                 Section("About") {
                     LabeledContent("App", value: "BestShot")
                     LabeledContent("Version", value: appVersion)
-                    Text("A native, on-device port of the BestShot media-ranking darkroom. All media and rankings stay on your device.")
+                    Text("Cull and rank your photos on-device. Folder decisions are saved in .bestshot-cull.json, shared with BestShot for Linux.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

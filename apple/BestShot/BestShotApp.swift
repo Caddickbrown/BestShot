@@ -8,9 +8,8 @@ struct BestShotApp: App {
     /// only holds lightweight metadata + relative file paths.
     let container: ModelContainer
 
-    @AppStorage(ThemePreference.storageKey) private var themeRaw = ThemePreference.system.rawValue
-
     init() {
+        BrandFonts.register()
         do {
             container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self)
         } catch {
@@ -18,14 +17,11 @@ struct BestShotApp: App {
         }
     }
 
-    private var theme: ThemePreference {
-        ThemePreference(rawValue: themeRaw) ?? .system
-    }
-
     var body: some Scene {
         WindowGroup {
             RootView()
-                .preferredColorScheme(theme.colorScheme)
+                // Light table by default; judging screens switch to the viewfinder.
+                .preferredColorScheme(.light)
                 .tint(Theme.accent)
         }
         .modelContainer(container)

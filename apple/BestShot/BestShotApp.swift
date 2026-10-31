@@ -11,7 +11,7 @@ struct BestShotApp: App {
     init() {
         BrandFonts.register()
         do {
-            container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self)
+            container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self, RankedOrder.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }

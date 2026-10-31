@@ -1,95 +1,73 @@
-# BestShot — Native (SwiftUI)
+# BestShot for iPhone, iPad and Mac (SwiftUI + Rust core)
 
-A native photo-management app for **iPhone, iPad, and Mac**, fully on-device (no
-server, no network). It has three modes:
+A native photo culling and ranking app, fully on-device. It shares its look
+(light table to sort, black viewfinder to judge) and its core logic with
+[BestShot for Linux](../desktop):
 
-- **Triage** — blast through your **Photos library** keeping/deleting fast.
-  Swipe right = Keep, left = Delete (batched, one confirmation at the end →
-  Recently Deleted). Buttons for Favourite, Skip, Undo. **Pinch out** on a photo
-  to zoom to the whole session gallery (colour-coded by decision) for context,
-  then tap any tile to jump back in.
-- **Organise** — step through photos and file each into **Photos albums** (pick
-  existing or create new on the fly).
-- **Compare** — the original BestShot ranking darkroom (import media into
-  projects, then rank by drag or guided A/B comparison with transitive
-  inference). This is the feature-parity port of the Flask + vanilla-JS web app.
-
-Triage/Organise operate directly on your real Photos library via **PhotoKit**;
-Compare works on media imported into local projects (SwiftData + the app's
-Application Support container).
+- **Triage**: blast through your **Photos library**. Swipe right to keep, left
+  to delete (batched into one system confirmation, then Recently Deleted).
+- **Rank**: put your Triage keepers in order, best first. Use **Compare**
+  (two photos side by side; pick the better one) or drag photos into place.
+  **Save as album** writes the order to a "BestShot · Ranked" album in Photos.
+- **Folders** (Mac): cull a folder of files exactly like the Linux app, with
+  the same keys, then send rejects to the Trash or a `_Rejected` folder and
+  rank the keepers. Decisions and ranking are saved in the folder's
+  `.bestshot-cull.json`, **the same file the Linux app uses**, so a folder can
+  be culled on either machine.
+- **Organise**: file photos into Photos albums.
+- **Projects / Compare**: the original web-app ranking over imported copies.
 
 ## Requirements
 
-- **macOS with Xcode 15+** (iOS 17 / macOS 14 SDKs). *This project cannot be
-  built on Linux — it requires Apple's toolchain.*
-- [XcodeGen](https://github.com/yonatanmn/XcodeGen) to generate the Xcode
-  project from `project.yml`:
-  ```bash
-  brew install xcodegen
-  ```
+- macOS with **Xcode 15+** (iOS 17 / macOS 14 SDKs).
+- **Rust** (https://rustup.rs). The build script adds the Apple targets it needs.
+- [XcodeGen](https://github.com/yonatanm/XcodeGen): `brew install xcodegen`
 
-## Build & Run
+## Build & run
 
 ```bash
 cd apple
-xcodegen generate          # creates BestShot.xcodeproj from project.yml
+./scripts/build-core.sh     # Rust core -> Frameworks/BestShotCore.xcframework + Swift bindings
+xcodegen generate           # BestShot.xcodeproj from project.yml
 open BestShot.xcodeproj
 ```
 
-Then in Xcode pick the **BestShot_iOS** scheme (iPhone/iPad Simulator) or
-**BestShot_macOS** (My Mac) and press ⌘R.
+Pick the **BestShot_macOS** scheme (My Mac) or **BestShot_iOS** (an iPhone /
+iPad or the Simulator) and press ⌘R. Re-run `build-core.sh` whenever `core/`
+changes.
 
-> No XcodeGen? Create a new multiplatform **App** in Xcode (SwiftData enabled),
-> then drag the `BestShot/` source folder and `BestShotTests/` into it, set the
-> deployment targets to iOS 17 / macOS 14, and add the entitlements file.
-
-## Run the tests
-
-The ranking engine is the one component fully verifiable without a GUI. Run:
+## Tests
 
 ```bash
-xcodebuild test -scheme BestShot \
-  -destination 'platform=iOS Simulator,name=iPhone 15'
+(cd ../core && cargo test)    # the shared logic: scanning, store, culling, ranking
+xcodebuild test -project BestShot.xcodeproj -scheme BestShot_macOS -destination 'platform=macOS'
 ```
 
-or press ⌘U in Xcode. `ComparisonEngineTests` proves the transitive-inference
-port matches the web app's behaviour (A>B, B>C ⇒ A>C inferred; inferred pairs
-are never asked; unranked-scope seeding).
+`CoreBridgeTests` call the Rust core through the generated bindings
+(including reading a `.bestshot-cull.json` exactly as the Linux app writes it);
+`ComparisonEngineTests` cover the projects' Compare.
+
+GitHub Actions (`.github/workflows/apple.yml`) runs all of this on a macOS
+runner for every push touching `apple/` or `core/`.
 
 ## Architecture
 
-| Layer | Files |
+| Layer | Where |
 |---|---|
-| App entry / container | `BestShot/BestShotApp.swift` |
-| Models (SwiftData) | `Models/Project.swift`, `Models/MediaItem.swift`, `Models/ExifData.swift`, `Models/Enums.swift` |
-| Ranking engine (pure, tested) | `Services/ComparisonEngine.swift` |
-| Disk / import / export | `Services/MediaStore.swift`, `ImportService.swift`, `ThumbnailService.swift`, `ExifExtractor.swift`, `ExportService.swift`, `RankingService.swift` |
-| Comparison session | `ViewModels/ComparisonSession.swift` |
-| UI | `Views/*` (gallery, viewer, comparison, bulk, all-media, settings, help) |
-| Utilities | `Utilities/*` (image loading + cache, flow layout, platform shims) |
+| Shared logic (Rust) | `../core/bestshot-core`: folder scanning with Live Photo grouping, `.bestshot-cull.json`, culling, the ranking engine |
+| Swift bindings | `../core/bestshot-ffi` (UniFFI) → `BestShot/Generated/BestShotCore.swift` + `Frameworks/BestShotCore.xcframework` (both generated, not committed) |
+| Swift glue | `BestShot/Core/CoreBridge.swift`: the Trash for the sandbox (`FileManager.trashItem`), conveniences |
+| Rank | `ViewModels/RankBoard.swift` (pools, saved order, Compare runs), `Views/Rank/*` |
+| Folders (Mac) | `ViewModels/FolderCullSession.swift`, `Views/Folder/*` (ImageIO thumbnails, HEIC native) |
+| Look | `Utilities/Theme.swift` (tokens shared with `desktop/src/styles.css`), `Views/Design/*` (grease-pencil marks, buttons, contact sheet), `Resources/Fonts` (Archivo, IBM Plex Mono; OFL) |
+| Photos library | `Services/PhotoLibraryService.swift`, Triage / Organise |
+| Projects | SwiftData models + `Services/*`, the original port of the web app |
 
-**Storage model** mirrors the web app's "files + JSON sidecar" split: SwiftData
-holds lightweight metadata + relative paths; the actual bytes and generated
-thumbnails live under `Application Support/BestShotMedia/<projectUUID>/…` and
-`…/BestShotThumbs/…`.
+### Keys (Mac and iPad keyboards)
 
-## Feature parity map
+Folders: `→`/`P` keep · `←`/`X` reject · `↓`/`Space` next · `↑` previous ·
+`⌫`/`⌘Z` undo · `U` clear · `N` next unreviewed · `Z` zoom · `G` grid ·
+`I` info · `R` rank.
 
-Projects & descriptions · import from Photos/Files with SHA-256 duplicate
-detection · auto thumbnails (image + video) · gallery with S/M/L grid, media
-filter, search, and sort · **drag-to-rank** · **comparison mode with transitive
-inference** + results/apply · fullscreen viewer (paging, zoom, EXIF, tags,
-notes, slideshow, keyboard) · bulk select → tag / ZIP download / delete ·
-export JSON & CSV · download project/selected as ZIP · all-media view ·
-light/dark theme · keyboard-shortcut help.
-
-**Intentionally dropped** (was server-specific): URL-based cross-device sync —
-replaced by local persistence. All formats the OS can decode preview natively;
-exotic web formats (AVI/WMV/FLV/MKV) still import and rank but may show a
-placeholder if AVFoundation can't play them.
-
-## Notes / follow-ups
-
-- ZIP uses `NSFileCoordinator(.forUploading)` — no third-party dependency.
-- Reorder-by-drag uses a live hover reorder; fine for typical project sizes.
-- Video thumbnails grab the first playable frame via `AVAssetImageGenerator`.
+Compare: `←`/`1` left · `→`/`2` right · `Space` skip · `⌫` undo · `Esc` save
+and exit.

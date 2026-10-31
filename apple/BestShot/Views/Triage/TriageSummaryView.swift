@@ -4,6 +4,7 @@ import SwiftUI
 /// deletion, a single button that triggers the one system delete confirmation.
 struct TriageSummaryView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.showRank) private var showRank
     @Bindable var session: TriageSession
     /// Called when the session should end (after committing / nothing to do).
     let onCommit: () -> Void
@@ -49,6 +50,16 @@ struct TriageSummaryView: View {
                         .foregroundStyle(.secondary)
                     Button("Finish") { onCommit(); dismiss() }
                         .buttonStyle(.borderedProminent)
+                }
+
+                if session.keptCount > 1 {
+                    // Keepers are saved as you go; pending deletions stay pending.
+                    Button("Rank your keepers") {
+                        onKeepGoing()
+                        dismiss()
+                        showRank()
+                    }
+                    .buttonStyle(.text)
                 }
 
                 if !session.isComplete {

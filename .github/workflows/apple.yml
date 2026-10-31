@@ -20,6 +20,9 @@ jobs:
         working-directory: core
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
       - name: Test the shared Rust core
         run: cargo test
 
@@ -33,6 +36,11 @@ jobs:
       SIGNING: CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
     steps:
       - uses: actions/checkout@v4
+
+      # Cross-compiling the core for five Apple targets dominates the run.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
 
       - name: Build the Rust core (XCFramework + Swift bindings)
         run: ./scripts/build-core.sh

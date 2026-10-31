@@ -17,6 +17,8 @@ struct RootView: View {
     enum SidebarSelection: Hashable {
         case triage
         case organise
+        case rank
+        case folders
         case allMedia
         case project(UUID)
     }
@@ -29,7 +31,15 @@ struct RootView: View {
                         .tag(SidebarSelection.triage)
                     Label("Organise", systemImage: "folder.badge.plus")
                         .tag(SidebarSelection.organise)
+                    Label("Rank", systemImage: "list.number")
+                        .tag(SidebarSelection.rank)
                 }
+                #if os(macOS)
+                Section("Folders") {
+                    Label("Cull a folder", systemImage: "folder")
+                        .tag(SidebarSelection.folders)
+                }
+                #endif
                 Section {
                     Label("All Media", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.allMedia)
@@ -72,6 +82,7 @@ struct RootView: View {
             }
         } detail: {
             detailView
+                .environment(\.showRank, ShowRankAction { selection = .rank })
         }
         .sheet(isPresented: $showingNewProject) {
             NewProjectSheet { name, description in
@@ -89,6 +100,14 @@ struct RootView: View {
             TriageHomeView()
         case .organise:
             OrganiseHomeView()
+        case .rank:
+            PhotosRankView()
+        case .folders:
+            #if os(macOS)
+            FolderHomeView()
+            #else
+            EmptyView()
+            #endif
         case .allMedia:
             AllMediaView()
         case .project(let id):
@@ -176,5 +195,23 @@ struct NewProjectSheet: View {
             }
         }
         .frame(minWidth: 360, minHeight: 220)
+    }
+}
+
+/// Lets screens deep inside a mode (e.g. the Triage summary) jump to Rank.
+struct ShowRankAction {
+    var action: () -> Void = {}
+    func callAsFunction() { action() }
+    init(_ action: @escaping () -> Void = {}) { self.action = action }
+}
+
+private struct ShowRankKey: EnvironmentKey {
+    static let defaultValue = ShowRankAction()
+}
+
+extension EnvironmentValues {
+    var showRank: ShowRankAction {
+        get { self[ShowRankKey.self] }
+        set { self[ShowRankKey.self] = newValue }
     }
 }

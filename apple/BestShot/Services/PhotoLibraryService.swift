@@ -155,6 +155,26 @@ final class PhotoLibraryService: @unchecked Sendable {
         return result.firstObject
     }
 
+    /// Makes the album titled `title` (created if needed) contain exactly
+    /// `assets`, in that order, so Photos shows a ranking best-first.
+    func replaceAlbumContents(titled title: String, with assets: [PHAsset]) async -> Bool {
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "title == %@", title)
+        var album = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: options).firstObject
+        if album == nil {
+            album = await createAlbum(named: title)
+        }
+        guard let album else { return false }
+        let existing = PHAsset.fetchAssets(in: album, options: nil)
+        return await performChanges {
+            guard let request = PHAssetCollectionChangeRequest(for: album, assets: existing) else { return }
+            if existing.count > 0 {
+                request.removeAssets(existing)
+            }
+            request.insertAssets(assets as NSArray, at: IndexSet(integersIn: 0..<assets.count))
+        }
+    }
+
     // MARK: - Helper
 
     private func performChanges(_ changes: @escaping () -> Void) async -> Bool {

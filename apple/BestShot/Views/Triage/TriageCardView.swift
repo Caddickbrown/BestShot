@@ -1,8 +1,8 @@
 import SwiftUI
 import Photos
 
-/// A single swipeable photo card. Swipe right = Keep, left = Delete. Shows a
-/// coloured KEEP / DELETE stamp as you drag past the threshold.
+/// A single swipeable photo card. Swipe right = Keep, left = Delete. A
+/// grease-pencil ring (keep) or cross (delete) draws in as you drag.
 struct TriageCardView: View {
     let asset: PHAsset
     var isFavourited: Bool
@@ -19,14 +19,13 @@ struct TriageCardView: View {
                             contentMode: .fit)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .background(Color.black)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(alignment: .topLeading) { stamp("KEEP", .green, visible: offset.width > 40) }
-                .overlay(alignment: .topTrailing) { stamp("DELETE", .red, visible: offset.width < -40) }
+                .overlay { mark(.stageCircle, visible: offset.width > 20) }
+                .overlay { mark(.stageCross, visible: offset.width < -20) }
                 .overlay(alignment: .bottomTrailing) {
                     if isFavourited {
                         Image(systemName: "heart.fill")
-                            .font(.title2)
-                            .foregroundStyle(.pink)
+                            .font(.title3)
+                            .foregroundStyle(Theme.viewfinder.accent)
                             .padding(12)
                     }
                 }
@@ -48,14 +47,13 @@ struct TriageCardView: View {
         }
     }
 
-    private func stamp(_ text: String, _ color: Color, visible: Bool) -> some View {
-        Text(text)
-            .font(.system(size: 34, weight: .heavy))
-            .foregroundStyle(color)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(color, lineWidth: 4))
-            .rotationEffect(.degrees(text == "KEEP" ? -18 : 18))
-            .padding(28)
-            .opacity(visible ? min(1, abs(offset.width) / threshold) : 0)
+    /// Draws in proportionally to how far the card has been dragged.
+    private func mark(_ shape: GreasePencilShape, visible: Bool) -> some View {
+        let progress = visible ? min(1, abs(offset.width) / threshold) : 0
+        return shape
+            .trim(from: 0, to: progress)
+            .stroke(Theme.viewfinder.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+            .padding(24)
+            .allowsHitTesting(false)
     }
 }

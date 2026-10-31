@@ -104,6 +104,13 @@ extension View {
             .environment(\.colorScheme, .light)
     }
 
+    /// The light table behind a system Form or List.
+    func lightTableList() -> some View {
+        self
+            .scrollContentBackground(.hidden)
+            .lightTable()
+    }
+
     /// The black viewfinder: nothing competes with the photo.
     func viewfinder() -> some View {
         self

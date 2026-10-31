@@ -30,9 +30,7 @@ struct ComparisonView: View {
 
             footer
         }
-        #if os(iOS)
-        .background(Color.black.ignoresSafeArea())
-        #endif
+        .viewfinder()
         .onChange(of: session.isFinished) { _, finished in
             if finished { onFinish() }
         }

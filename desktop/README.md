@@ -78,7 +78,7 @@ Then from `desktop/src-tauri`:
 
 ```bash
 cargo tauri dev                    # run it
-cargo test                         # backend unit tests
+cargo test                         # backend unit tests (plus `cargo test` in ../../core)
 cargo tauri build --bundles deb    # -> target/release/bundle/deb/BestShot_*.deb
 cargo tauri build --bundles appimage
 ```
@@ -100,12 +100,20 @@ desktop/
     ├── tauri.conf.json
     └── src/
         ├── lib.rs       # Commands, app state, bestshot:// protocol
+        ├── media.rs     # Thumbnails, HEIC/TIFF previews, EXIF
+        └── video.rs     # Loopback HTTP server for video (WebKitGTK can't stream custom schemes)
+
+core/bestshot-core/      # Shared with the iPhone/Mac app (see ../apple)
+    └── src/
         ├── library.rs   # Folder scanning, Live Photo / sidecar grouping
         ├── store.rs     # .bestshot-cull.json persistence (decisions + ranking)
-        ├── media.rs     # Thumbnails, HEIC/TIFF previews, EXIF
-        ├── video.rs     # Loopback HTTP server for video (WebKitGTK can't stream custom schemes)
-        └── cull.rs      # Moving rejects to Trash / _Rejected
+        ├── cull.rs      # Moving rejects to Trash / _Rejected
+        └── rank.rs      # Compare engine (transitive inference, undo)
 ```
+
+Folder scanning, the `.bestshot-cull.json` format and culling live in the
+shared Rust crate `core/bestshot-core`, which the Apple app also uses (via
+UniFFI), so a folder culled here opens with the same decisions on a Mac.
 
 Images reach the webview through a custom `bestshot://` protocol rather than
 raw file access: `bestshot://localhost/{thumb|full}/{session}/{index}`.

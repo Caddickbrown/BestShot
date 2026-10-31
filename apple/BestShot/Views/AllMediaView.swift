@@ -51,6 +51,7 @@ struct AllMediaView: View {
                 }
             }
         }
+        .lightTableList()
         .navigationTitle("All Media")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

@@ -26,6 +26,7 @@ struct TriageHomeView: View {
                 startScreen
             }
         }
+        .lightTableList()
         .navigationTitle("Triage")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

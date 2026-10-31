@@ -19,8 +19,8 @@ struct TriageView: View {
             content
             if !showGallery { controls }
         }
+        .viewfinder()
         #if os(iOS)
-        .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         #endif
         .sheet(isPresented: $showSummary) {
@@ -75,15 +75,21 @@ struct TriageView: View {
             Button { onFinish() } label: { Image(systemName: "xmark") }
 
             VStack(spacing: 4) {
-                ProgressView(value: session.progress)
+                GeometryReader { geo in
+                    Rectangle().fill(Theme.viewfinder.rule)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(Theme.viewfinder.ink).frame(width: geo.size.width * session.progress)
+                        }
+                }
+                .frame(height: 2)
                 HStack(spacing: 12) {
-                    tally("checkmark", session.keptCount, .green)
-                    tally("trash", session.deleteCount, .red)
-                    tally("heart.fill", session.favouriteCount, .pink)
+                    tally("✓ \(session.keptCount)", Theme.viewfinder.ink)
+                    tally("✕ \(session.deleteCount)", Theme.viewfinder.accent)
+                    tally("♥ \(session.favouriteCount)", Theme.viewfinder.muted)
                     Spacer()
-                    Text("\(min(session.index + 1, session.assets.count))/\(session.assets.count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
+                        .font(.mono(11))
+                        .foregroundStyle(Theme.viewfinder.muted)
                 }
             }
 
@@ -94,54 +100,51 @@ struct TriageView: View {
             }
 
             Button("Done") { showSummary = true }
-                .fontWeight(.semibold)
+                .buttonStyle(.viewfinderText)
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
-        #if os(iOS)
-        .foregroundStyle(.white)
-        #endif
-        .background(.ultraThinMaterial)
+        .foregroundStyle(Theme.viewfinder.ink)
+        .background(Color.black)
+        .overlay(alignment: .bottom) { HairlineRule(palette: Theme.viewfinder) }
     }
 
-    private func tally(_ symbol: String, _ count: Int, _ color: Color) -> some View {
-        Label("\(count)", systemImage: symbol)
-            .font(.caption.bold())
+    private func tally(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.mono(12))
             .foregroundStyle(color)
-            .labelStyle(.titleAndIcon)
     }
 
     // MARK: - Controls
 
     private var controls: some View {
-        HStack(spacing: 22) {
-            controlButton("arrow.uturn.backward", "Undo", .gray) { session.undo() }
-                .disabled(!session.canUndo)
-            controlButton("trash", "Delete", .red) {
+        HStack(spacing: 10) {
+            Button("← Bin") {
                 withAnimation(.spring(response: 0.3)) { session.delete() }
             }
-            controlButton("forward.end", "Skip", .orange) { session.skip() }
-            controlButton("heart", "Favourite", .pink) { session.toggleFavourite() }
-            controlButton("checkmark", "Keep", .green) {
+            .buttonStyle(.viewfinderText)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .overlay(Capsule().stroke(Theme.viewfinder.rule, lineWidth: 1))
+            Spacer(minLength: 0)
+            Button("Undo") { session.undo() }
+                .buttonStyle(.viewfinderText)
+                .disabled(!session.canUndo)
+            Button("Skip") { session.skip() }
+                .buttonStyle(.viewfinderText)
+            Button(session.current.map(session.isFavourited) == true ? "♥ Fav" : "♡ Fav") { session.toggleFavourite() }
+                .buttonStyle(.viewfinderText)
+            Spacer(minLength: 0)
+            Button("Keep →") {
                 withAnimation(.spring(response: 0.3)) { session.keep() }
             }
+            .buttonStyle(.viewfinderPill)
+            .frame(minHeight: 44)
         }
+        .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
-    }
-
-    private func controlButton(_ symbol: String, _ label: String, _ color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.title2)
-                    .frame(width: 52, height: 52)
-                    .background(Circle().fill(color.opacity(0.18)))
-                    .foregroundStyle(color)
-                Text(label).font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
+        .background(Color.black)
+        .overlay(alignment: .top) { HairlineRule(palette: Theme.viewfinder) }
     }
 }

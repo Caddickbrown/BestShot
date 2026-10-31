@@ -16,6 +16,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .lightTableList()
             .navigationTitle("Settings")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

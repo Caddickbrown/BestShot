@@ -24,6 +24,7 @@ struct OrganiseHomeView: View {
                 startScreen
             }
         }
+        .lightTableList()
         .navigationTitle("Organise")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

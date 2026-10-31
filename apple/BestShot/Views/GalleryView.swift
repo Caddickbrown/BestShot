@@ -60,6 +60,7 @@ struct GalleryView: View {
 
     var body: some View {
         content
+            .lightTableList()
             .navigationTitle(project.name)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

@@ -24,6 +24,9 @@ targets:
       macOS: "14.0"
     sources:
       - path: BestShot
+    scheme:
+      testTargets:
+        - BestShotTests_${platform}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bestshot.app
@@ -41,17 +44,7 @@ targets:
     sources:
       - path: BestShotTests
     dependencies:
-      - target: BestShot
+      - target: BestShot_${platform}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bestshot.app.tests
-
-schemes:
-  BestShot:
-    build:
-      targets:
-        BestShot_iOS: all
-        BestShot_macOS: all
-    test:
-      targets:
-        - BestShotTests_iOS

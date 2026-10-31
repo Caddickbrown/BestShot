@@ -1,0 +1,42 @@
+name: Apple app
+
+on:
+  push:
+    paths:
+      - "apple/**"
+      - ".github/workflows/apple.yml"
+  pull_request:
+    paths:
+      - "apple/**"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apple
+    env:
+      # Ad-hoc signing: no developer account needed in CI.
+      SIGNING: CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Test (macOS)
+        run: |
+          set -o pipefail
+          xcodebuild test -project BestShot.xcodeproj -scheme BestShot_macOS \
+            -destination 'platform=macOS' $SIGNING | tee macos.log | xcbeautify --quiet || \
+            (grep -E "error:|failed|FAILED" macos.log | head -80; exit 1)
+
+      - name: Build (iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build -project BestShot.xcodeproj -scheme BestShot_iOS \
+            -destination 'generic/platform=iOS Simulator' $SIGNING | tee ios.log | xcbeautify --quiet || \
+            (grep -E "error:|failed|FAILED" ios.log | head -80; exit 1)

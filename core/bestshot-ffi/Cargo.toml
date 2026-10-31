@@ -1,0 +1,24 @@
+[package]
+name = "bestshot-ffi"
+version = "0.2.0"
+description = "Swift (and other) bindings for bestshot-core, via UniFFI"
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "bestshot_ffi"
+# staticlib: linked into the iOS/macOS app via an XCFramework.
+# cdylib: lets uniffi-bindgen read the interface in library mode.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+bestshot-core = { path = "../bestshot-core" }
+uniffi = { version = "0.32", features = ["cli"] }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"

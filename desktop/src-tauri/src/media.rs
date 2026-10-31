@@ -1,7 +1,7 @@
 //! Serving pixels to the webview: on-demand thumbnails, display-ready
 //! previews for formats WebKit can't decode (HEIC, TIFF), and EXIF details.
 
-use crate::library::{Item, Kind};
+use bestshot_core::library::{self, Item, Kind};
 use image::metadata::Orientation;
 use image::{DynamicImage, GrayImage, ImageDecoder, ImageReader, RgbImage};
 use serde::Serialize;
@@ -206,7 +206,7 @@ fn write_jpeg(cache: &Path, img: &DynamicImage, out: &Path, quality: u8) -> Resu
 /// reduced DCT scale when only `min_size` pixels are needed, which is several
 /// times faster for large camera files.
 fn decode_oriented(path: &Path, min_size: u32) -> Result<DynamicImage, String> {
-    let ext = crate::library::ext_of(path);
+    let ext = library::ext_of(path);
     if ext == "jpg" || ext == "jpeg" {
         if let Some(mut img) = decode_jpeg_scaled(path, min_size) {
             if let Some(o) = exif_orientation(path).and_then(|o| Orientation::from_exif(o as u8)) {
@@ -463,7 +463,7 @@ mod tests {
             .unwrap();
         fs::write(root.join("p.jpg"), with_orientation(&jpeg, 6)).unwrap();
 
-        let items = crate::library::scan(&root, false, false).unwrap();
+        let items = library::scan(&root, false, false).unwrap();
         let thumb = thumbnail(&cache, &root.join("p.jpg"), &items[0]).unwrap();
         let (w, h) = image::image_dimensions(&thumb).unwrap();
         assert_eq!((w, h), (THUMB_SIZE / 2, THUMB_SIZE));

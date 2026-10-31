@@ -4,13 +4,25 @@ on:
   push:
     paths:
       - "apple/**"
+      - "core/**"
       - ".github/workflows/apple.yml"
   pull_request:
     paths:
       - "apple/**"
+      - "core/**"
   workflow_dispatch:
 
 jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the shared Rust core
+        run: cargo test
+
   build-and-test:
     runs-on: macos-15
     defaults:
@@ -21,6 +33,9 @@ jobs:
       SIGNING: CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build the Rust core (XCFramework + Swift bindings)
+        run: ./scripts/build-core.sh
 
       - name: Generate Xcode project
         run: |

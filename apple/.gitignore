@@ -1,3 +1,6 @@
 BestShot.xcodeproj/
 DerivedData/
 *.log
+# Built by scripts/build-core.sh
+Frameworks/
+BestShot/Generated/

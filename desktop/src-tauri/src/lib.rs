@@ -1,8 +1,7 @@
-mod cull;
-mod library;
 mod media;
-mod store;
 mod video;
+
+use bestshot_core::{cull, library, store};
 
 use library::{Item, Kind};
 use serde::Serialize;
@@ -149,7 +148,11 @@ async fn apply_cull(state: State<'_, AppState>, gen: u64, mode: cull::Mode) -> R
 
     let outcome = {
         let root = root.clone();
-        blocking(move || cull::apply(&root, &rejects.iter().collect::<Vec<_>>(), mode)).await?
+        blocking(move || {
+            let trash = |p: &std::path::Path| trash::delete(p).map_err(|e| e.to_string());
+            cull::apply(&root, &rejects.iter().collect::<Vec<_>>(), mode, &trash)
+        })
+        .await?
     };
 
     let mut guard = state.session.lock().unwrap();

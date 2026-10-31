@@ -34,7 +34,16 @@ pub struct Outcome {
     pub failed: Vec<Failure>,
 }
 
-pub fn apply(root: &Path, rejects: &[&Item], mode: Mode) -> Outcome {
+/// Moves each reject and its companions out of the way. `trash` sends one
+/// file to the platform's Trash: the `trash` crate on Linux,
+/// `FileManager.trashItem` on Apple platforms (whose sandbox rules out the
+/// crate's macOS method).
+pub fn apply(
+    root: &Path,
+    rejects: &[&Item],
+    mode: Mode,
+    trash: &dyn Fn(&Path) -> Result<(), String>,
+) -> Outcome {
     let mut out = Outcome::default();
     for item in rejects {
         let rels: Vec<&String> = std::iter::once(&item.rel).chain(item.companions.iter()).collect();
@@ -50,7 +59,7 @@ pub fn apply(root: &Path, rejects: &[&Item], mode: Mode) -> Outcome {
             .sum();
 
         let result = match mode {
-            Mode::Trash => trash::delete_all(&paths).map_err(|e| e.to_string()),
+            Mode::Trash => paths.iter().try_for_each(|p| trash(p)),
             Mode::Folder => move_into_reject_dir(root, &rels),
         };
         match result {
@@ -116,7 +125,7 @@ mod tests {
 
         let items = scan(root, true, true).unwrap();
         let reject: Vec<&Item> = items.iter().filter(|i| i.rel == "trip/IMG_1.HEIC").collect();
-        let out = apply(root, &reject, Mode::Folder);
+        let out = apply(root, &reject, Mode::Folder, &|_| unreachable!());
 
         assert_eq!((out.items, out.files, out.bytes), (1, 2, 8));
         assert!(out.failed.is_empty());

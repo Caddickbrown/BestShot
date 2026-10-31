@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["bestshot-core", "bestshot-ffi"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+# Keep symbols: uniffi-bindgen reads its metadata from them. Xcode strips the app.
+strip = "debuginfo"

@@ -1,0 +1,4 @@
+[bindings.swift]
+module_name = "BestShotCore"
+ffi_module_name = "BestShotCoreFFI"
+ffi_module_filename = "BestShotCoreFFI"

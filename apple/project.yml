@@ -24,6 +24,10 @@ targets:
       macOS: "14.0"
     sources:
       - path: BestShot
+    dependencies:
+      # Shared Rust core (../core), built by scripts/build-core.sh.
+      - framework: Frameworks/BestShotCore.xcframework
+        embed: false
     scheme:
       testTargets:
         - BestShotTests_${platform}

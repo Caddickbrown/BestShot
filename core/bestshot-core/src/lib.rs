@@ -9,8 +9,10 @@
 //! - [`embedded`]: XMP inside JPEG, TIFF, DNG and PNG files
 //! - [`labels`]: colour labels and the `xmp:Label` text that maps to them
 //! - [`atomic`]: replacing a file atomically
+//! - [`catalog`]: a folder's metadata: the index, marking, filters, sorting
 
 pub mod atomic;
+pub mod catalog;
 pub mod cull;
 pub mod embedded;
 pub mod labels;

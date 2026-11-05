@@ -73,6 +73,26 @@ final class CoreBridgeTests: XCTestCase {
         XCTAssertEqual(loaded.store.ranking, ["Holiday/DSC00001.jpg"])
     }
 
+    func testColourLabelsThroughTheCatalog() throws {
+        try touch("a.jpg")
+        try touch("b.jpg")
+        let settings = loadLabelSettings(path: root.appendingPathComponent("labels.json").path).settings
+        let catalog = try FolderCatalog.open(root: root.path, recursive: true, includeVideos: true, settings: settings, writeJpeg: false)
+
+        let row = try catalog.toggleColour(rel: "a.jpg", colour: .red).row
+        XCTAssertEqual(row.decision, .reject)
+        XCTAssertTrue(exists("a.xmp"))
+        XCTAssertEqual(catalog.rejects().map(\.rel), ["a.jpg"])
+
+        _ = try catalog.setRating(rel: "b.jpg", stars: 4)
+        let filter = FolderFilter(status: .all, stars: .atLeast(stars: 3), labels: [], keywords: [], anyKeyword: false)
+        XCTAssertEqual(catalog.query(filter: filter, sort: .name), [1])
+
+        let out = catalog.applyCull(mode: .folder, trasher: FileManagerTrasher())
+        XCTAssertEqual(out.files, 2)
+        XCTAssertTrue(exists("_Rejected/a.xmp"))
+    }
+
     func testRankSessionRanksAndUndoes() {
         let truth = ["a", "b", "c", "d", "e"]
         let session = RankSession(ids: truth.reversed(), ranking: [], scope: .all)

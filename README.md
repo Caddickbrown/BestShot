@@ -4,9 +4,9 @@ A web-based media ranking tool that helps you compare and sort photos and videos
 
 > **Desktop app (Linux):** [`desktop/`](desktop/) is a native Tauri app for culling a folder of photos at speed: keep/reject with the arrow keys, then send the rejects to the Trash. See [desktop/README.md](desktop/README.md).
 >
-> **Apple:** [`apple/`](apple/) is a SwiftUI app for iPhone, iPad and Mac: Triage and Rank over your Photos library, plus folder culling on the Mac.
+> **Apple:** [`apple/`](apple/) is a SwiftUI app for iPhone, iPad and Mac: Triage and Rank over your Photos library, plus folder culling on the Mac with stars, colour labels, keywords and filters stored as standard XMP.
 >
-> **Shared core:** [`core/`](core/) is the Rust library both apps use for folder scanning, the per-folder `.bestshot-cull.json`, culling and ranking, so a folder can be culled on Linux or Mac interchangeably.
+> **Shared core:** [`core/`](core/) is the Rust library both apps use for folder scanning, XMP metadata, the per-folder `.bestshot-cull.json`, culling and ranking, so a folder can be culled on Linux or Mac interchangeably.
 
 ## Features
 

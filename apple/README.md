@@ -13,7 +13,8 @@ A native photo culling and ranking app, fully on-device. It shares its look
   the same keys, then send rejects to the Trash or a `_Rejected` folder and
   rank the keepers. Decisions and ranking are saved in the folder's
   `.bestshot-cull.json`, **the same file the Linux app uses**, so a folder can
-  be culled on either machine.
+  be culled on either machine. Stars, colour labels and keywords are standard
+  XMP (see below), with filters across all of them.
 - **Organise**: file photos into Photos albums.
 - **Projects / Compare**: the original web-app ranking over imported copies.
 
@@ -54,7 +55,7 @@ runner for every push touching `apple/` or `core/`.
 
 | Layer | Where |
 |---|---|
-| Shared logic (Rust) | `../core/bestshot-core`: folder scanning with Live Photo grouping, `.bestshot-cull.json`, culling, the ranking engine |
+| Shared logic (Rust) | `../core/bestshot-core`: folder scanning with Live Photo grouping, `.bestshot-cull.json`, culling, the ranking engine, XMP, the folder catalog and index |
 | Swift bindings | `../core/bestshot-ffi` (UniFFI) → `BestShot/Generated/BestShotCore.swift` + `Frameworks/BestShotCore.xcframework` (both generated, not committed) |
 | Swift glue | `BestShot/Core/CoreBridge.swift`: the Trash for the sandbox (`FileManager.trashItem`), conveniences |
 | Rank | `ViewModels/RankBoard.swift` (pools, saved order, Compare runs), `Views/Rank/*` |
@@ -67,7 +68,37 @@ runner for every push touching `apple/` or `core/`.
 
 Folders: `→`/`P` keep · `←`/`X` reject · `↓`/`Space` next · `↑` previous ·
 `⌫`/`⌘Z` undo · `U` clear · `N` next unreviewed · `Z` zoom · `G` grid ·
-`I` info · `R` rank.
+`I` info · `R` rank · `K` keywords · `1`-`5` stars · `0` clear stars ·
+`6` red · `7` yellow · `8` green · `9` blue (again to clear) · `⌘⌫` Trash all
+red. Marks work in the loupe and the grid; in the grid the arrows move and
+`Return` opens the photo. Colour keys stay on the photo, so a second press can
+clear it; `→` and `←` set green and red and move on.
 
 Compare: `←`/`1` left · `→`/`2` right · `Space` skip · `⌫` undo · `Esc` save
 and exit.
+
+### Metadata
+
+Folders metadata is standard XMP, readable by Bridge, Lightroom, darktable and
+exiftool. BestShot reads `xmp:Rating`, `xmp:Label`, `dc:subject` and, as a
+fallback, `photoshop:LabelColor`.
+
+- **Sidecars**: `IMG_1.xmp`, or `IMG_1.jpg.xmp` if that's what exists or if a
+  raw file already owns `IMG_1.xmp`. Edits are splices, so every other byte
+  (Camera Raw settings included) is preserved. If a sidecar exists it wins over
+  embedded XMP; a new one starts with a copy of any embedded fields.
+- **Embedded XMP** is read from JPEG, TIFF, DNG and PNG. Originals are only
+  written if **Settings → Also write into JPEGs** is on.
+- **Failures**: a file that can't be parsed, or a read-only sidecar, isn't
+  written, and the app says so.
+- **Green and red**: green is Keep and red is Reject, written to both the XMP
+  and `.bestshot-cull.json`. A label in the XMP beats a saved decision; a saved
+  decision with no label shows as an implied colour and writes no XMP.
+- **`.bestshot-index.json`** in each folder is a cache of the XMP, keyed on file
+  size and modification time, so reopening parses only what changed. Delete it
+  freely.
+- **Label names**: Settings holds the text written for each colour and the
+  mapping from text found in files, in `labels.json` in Application Support.
+  **Import from Bridge** lists a folder's label values, read-only, to map them.
+  Only the plain colour words are recognised until then, because Bridge's
+  names are configurable and red means bin.

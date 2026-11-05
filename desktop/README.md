@@ -108,7 +108,12 @@ core/bestshot-core/      # Shared with the iPhone/Mac app (see ../apple)
         ├── library.rs   # Folder scanning, Live Photo / sidecar grouping
         ├── store.rs     # .bestshot-cull.json persistence (decisions + ranking)
         ├── cull.rs      # Moving rejects to Trash / _Rejected
-        └── rank.rs      # Compare engine (transitive inference, undo)
+        ├── rank.rs      # Compare engine (transitive inference, undo)
+        ├── xmp.rs       # Reading and minimally editing XMP packets
+        ├── embedded.rs  # XMP inside JPEG, TIFF, DNG, PNG
+        ├── labels.rs    # Colour labels and label-text mapping
+        ├── atomic.rs    # Atomic file replacement
+        └── catalog.rs   # A folder's metadata: index, marking, filters
 ```
 
 Folder scanning, the `.bestshot-cull.json` format and culling live in the

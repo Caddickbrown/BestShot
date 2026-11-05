@@ -13,6 +13,10 @@ struct ShortcutsHelpView: View {
         ("2 or →", "Pick right (comparison mode)"),
         ("Space", "Skip / Tie (comparison mode)"),
         ("Double-tap", "Zoom an image in the viewer"),
+        ("1-5 / 0", "Folders: set stars / clear them"),
+        ("6 7 8 9", "Folders: red, yellow, green, blue; again to clear"),
+        ("K", "Folders: keywords"),
+        ("⌘⌫", "Folders: Trash all red"),
     ]
 
     var body: some View {

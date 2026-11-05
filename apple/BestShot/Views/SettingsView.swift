@@ -4,14 +4,39 @@ import SwiftUI
 /// the Linux and web apps, so there's no theme setting.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var labels = LabelStore.shared
+    @State private var names: [LabelColour: String] = [:]
+    @State private var namesMessage: String?
+    @State private var showingBridgeImport = false
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Colour labels") {
+                    ForEach(LabelColour.allCases) { colour in
+                        TextField(colour.title, text: nameBinding(colour))
+                    }
+                    Button("Save label names", action: saveNames)
+                    if let namesMessage {
+                        Text(namesMessage).font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Text("The text written to xmp:Label for each colour. Files saved under an old name keep their colour.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                #if os(macOS)
+                Section("Folders") {
+                    Toggle("Also write into JPEGs", isOn: $labels.writeJPEG)
+                    Text("Off by default: BestShot writes .xmp sidecars and leaves originals alone. Adobe apps ignore sidecars for JPEGs, so turn this on if they need to see your ratings. Writes are atomic and leave the image data byte-identical.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("Import from Bridge…") { showingBridgeImport = true }
+                }
+                #endif
                 Section("About") {
                     LabeledContent("App", value: "BestShot")
                     LabeledContent("Version", value: appVersion)
-                    Text("Cull and rank your photos on-device. Folder decisions are saved in .bestshot-cull.json, shared with BestShot for Linux.")
+                    Text("Cull and rank your photos on-device. Ratings, labels and keywords are standard XMP. Folder decisions are saved in .bestshot-cull.json, shared with BestShot for Linux.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -27,7 +52,28 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(minWidth: 360, minHeight: 360)
+        .frame(minWidth: 420, minHeight: 560)
+        #if os(macOS)
+        .sheet(isPresented: $showingBridgeImport) { BridgeImportView() }
+        #endif
+        .onChange(of: labels.revision) { names = [:] }
+    }
+
+    private func nameBinding(_ colour: LabelColour) -> Binding<String> {
+        Binding(get: { names[colour] ?? labels.name(colour) }, set: { names[colour] = $0 })
+    }
+
+    private func saveNames() {
+        var settings = labels.settings
+        do {
+            for (colour, name) in names {
+                settings = try renameLabel(settings: settings, colour: colour, name: name)
+            }
+            try labels.save(settings)
+            namesMessage = "Saved."
+        } catch {
+            namesMessage = (error as? CoreError)?.message ?? error.localizedDescription
+        }
     }
 
     private var appVersion: String {

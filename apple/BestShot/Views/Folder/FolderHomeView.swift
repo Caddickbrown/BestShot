@@ -66,6 +66,10 @@ struct FolderHomeView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { open(url) }
         }
+        .onDisappear { session?.flush() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            session?.flush()
+        }
     }
 
     private var home: some View {
@@ -73,7 +77,7 @@ struct FolderHomeView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Folders")
                     .font(.display(44, weight: 800, width: 70))
-                Text("Cull a folder of photos. Decisions are saved inside it, so it picks up where BestShot for Linux left off.")
+                Text("Rate, label and cull a folder of photos. Ratings, labels and keywords are standard XMP sidecars; decisions and ranking are saved in the folder, so it picks up where BestShot for Linux left off.")
                     .font(.mono(13))
                     .foregroundStyle(Theme.table.muted)
                     .frame(maxWidth: 560, alignment: .leading)
@@ -165,7 +169,7 @@ struct FolderHomeView: View {
                     url.stopAccessingSecurityScopedResource()
                 } else {
                     let c = opened.counts
-                    RecentFolders.remember(url, reviewed: c.keep + c.reject, total: opened.items.count)
+                    RecentFolders.remember(url, reviewed: Int(c.keep + c.reject + c.other), total: opened.items.count)
                     session = opened
                 }
             } catch let e as CoreError {
@@ -180,7 +184,8 @@ struct FolderHomeView: View {
     private func close() {
         if let session {
             let c = session.counts
-            RecentFolders.remember(session.root, reviewed: c.keep + c.reject, total: session.items.count)
+            RecentFolders.remember(session.root, reviewed: Int(c.keep + c.reject + c.other), total: session.items.count)
+            session.flush()
             session.root.stopAccessingSecurityScopedResource()
         }
         session = nil

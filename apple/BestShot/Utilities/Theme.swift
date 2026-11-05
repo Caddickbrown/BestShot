@@ -46,6 +46,18 @@ enum Theme {
 
     /// Grease-pencil red, the single accent.
     static let accent = table.accent
+
+    /// Colour labels, the one place colours other than the accent appear.
+    /// Shared with `desktop/src/styles.css`.
+    static func label(_ colour: LabelColour) -> Color {
+        switch colour {
+        case .red: return Color(hex: 0xE0352B)
+        case .yellow: return Color(hex: 0xEDBB12)
+        case .green: return Color(hex: 0x2FA354)
+        case .blue: return Color(hex: 0x2F73E0)
+        case .purple: return Color(hex: 0x8E52D6)
+        }
+    }
 }
 
 extension Color {

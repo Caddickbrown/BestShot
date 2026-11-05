@@ -3,15 +3,18 @@ import SwiftUI
 import AVKit
 
 /// Culling a folder: the loupe (viewfinder), the grid and Rank (light table),
-/// and Clear out. Keys match BestShot for Linux.
+/// and Clear out. Keys match BestShot for Linux; see `FolderKeymap`.
 struct FolderCullView: View {
     @Bindable var session: FolderCullSession
     let onClose: () -> Void
     @FocusState private var focused: Bool
+    private let labels = LabelStore.shared
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
+            if session.mode != .rank { FolderFilterBar(session: session, palette: palette) }
+            notices
             switch session.mode {
             case .loupe: loupe
             case .grid: grid
@@ -24,43 +27,65 @@ struct FolderCullView: View {
         .focusEffectDisabled()
         .onAppear { focused = true }
         .onKeyPress(phases: .down) { press in handle(press) }
+        // Clicks on the filter bar or leaving the keyword field can drop focus.
+        .onChange(of: session.typingKeyword) { _, typing in if !typing { focused = true } }
+        .onChange(of: session.filter) { focused = true }
+        .onChange(of: session.sort) { focused = true }
+        .onChange(of: labels.revision) { session.settingsChanged() }
         .sheet(isPresented: $session.showFinish) {
             FolderFinishView(session: session)
+        }
+        .sheet(isPresented: $session.showProblems) {
+            FolderProblemsView(session: session)
+        }
+    }
+
+    /// Anything that went wrong, where it can't be missed.
+    @ViewBuilder
+    private var notices: some View {
+        if let warning = session.warning {
+            HStack {
+                Text(warning).font(.mono(12)).lineLimit(3).textSelection(.enabled)
+                Spacer()
+                Button("Dismiss") { session.warning = nil }
+                    .buttonStyle(TextButtonStyle(palette: palette))
+            }
+            .foregroundStyle(palette.accent)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 4)
+            .background(palette.background)
+        }
+        if !session.problems.isEmpty {
+            HStack {
+                Text("\(session.problems.count) file\(session.problems.count == 1 ? "" : "s") with unreadable metadata won't be written.")
+                    .font(.mono(12))
+                Spacer()
+                Button("Show") { session.showProblems = true }
+                    .buttonStyle(TextButtonStyle(palette: palette))
+            }
+            .foregroundStyle(palette.accent)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 4)
+            .background(palette.background)
         }
     }
 
     // MARK: - Keys
 
     private func handle(_ press: KeyPress) -> KeyPress.Result {
-        // Rank has its own keys inside Compare.
+        // Typing a keyword is text, and Rank has its own keys inside Compare.
+        if session.typingKeyword { return .ignored }
         if session.mode == .rank, session.rankBoard?.compare != nil { return .ignored }
-        let command = press.modifiers.contains(.command)
-        if command && press.characters == "z" { session.undo(); return .handled }
-        if command { return .ignored }
-
-        switch (session.mode, press.key) {
-        case (.loupe, .rightArrow): session.decide(.keep)
-        case (.loupe, .leftArrow): session.decide(.reject)
-        case (.loupe, .downArrow), (.loupe, .space): session.next()
-        case (.loupe, .upArrow): session.previous()
-        case (_, .delete): session.undo()
-        case (.loupe, .home): session.show(0)
-        case (.loupe, .end): session.show(session.items.count - 1)
-        case (_, .escape):
-            if session.zoomed { session.zoomed = false } else if session.mode != .loupe { session.mode = .loupe } else { session.showDone = false }
-        default:
-            switch (session.mode, press.characters.lowercased()) {
-            case (.loupe, "p"): session.decide(.keep)
-            case (.loupe, "x"): session.decide(.reject)
-            case (.loupe, "u"): session.clearDecision()
-            case (.loupe, "n"): session.jumpToNextUnreviewed()
-            case (.loupe, "z"): session.zoomed.toggle()
-            case (.loupe, "i"): session.showInfo.toggle()
-            case (_, "g"): session.mode = session.mode == .grid ? .loupe : .grid
-            case (_, "r"): session.mode = session.mode == .rank ? .loupe : .rank
-            default: return .ignored
-            }
+        let surface: FolderSurface
+        switch session.mode {
+        case .loupe: surface = .loupe
+        case .grid: surface = .grid
+        case .rank: surface = .rank
         }
+        guard let command = FolderKeymap.command(key: press.key, characters: press.characters, modifiers: press.modifiers, on: surface) else {
+            return .ignored
+        }
+        session.perform(command)
         return .handled
     }
 
@@ -78,7 +103,7 @@ struct FolderCullView: View {
                 Text(session.name)
                     .font(.display(22, weight: 800, width: 70))
                 if let item = session.current {
-                    Text("\(session.index + 1) / \(session.items.count) · \(item.rel)")
+                    Text("\(session.position.map { String($0 + 1) } ?? "–") / \(session.visible.count) · \(item.rel)")
                         .font(.mono(11))
                         .foregroundStyle(palette.muted)
                         .lineLimit(1)
@@ -90,6 +115,7 @@ struct FolderCullView: View {
                 HStack(spacing: 0) {
                     Rectangle().fill(palette.ink).frame(width: geo.size.width * CGFloat(c.keep) / CGFloat(total))
                     Rectangle().fill(palette.accent).frame(width: geo.size.width * CGFloat(c.reject) / CGFloat(total))
+                    Rectangle().fill(palette.muted).frame(width: geo.size.width * CGFloat(c.other) / CGFloat(total))
                     Spacer(minLength: 0)
                 }
                 .background(palette.rule)
@@ -98,6 +124,7 @@ struct FolderCullView: View {
             HStack(spacing: 12) {
                 Text("✓ \(c.keep)")
                 Text("✕ \(c.reject)").foregroundStyle(palette.accent)
+                if c.other > 0 { Text("? \(c.other)").foregroundStyle(palette.muted) }
                 Text("○ \(c.left)").foregroundStyle(palette.muted)
             }
             .font(.mono(12))
@@ -106,8 +133,14 @@ struct FolderCullView: View {
                 modeButton("Rank", .rank)
                 if session.mode == .loupe {
                     Button("Info") { session.showInfo.toggle() }.buttonStyle(TextButtonStyle(palette: palette))
+                    Button("Keywords") { session.toggleKeywords() }.buttonStyle(TextButtonStyle(palette: palette))
                 }
-                Button("Clear out…") { session.showFinish = true }
+                if c.reject > 0 {
+                    Button("Trash all red…") { session.confirmTrashRed() }
+                        .buttonStyle(TextButtonStyle(palette: palette, destructive: true))
+                        .help("⌘⌫")
+                }
+                Button("Clear out…") { session.confirmFinish() }
                     .buttonStyle(PillButtonStyle(palette: palette))
             }
         }
@@ -135,8 +168,12 @@ struct FolderCullView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 stage
+                if session.showKeywords, let item = session.current, let row = session.rows[item.rel] {
+                    FolderKeywordPanel(session: session, row: row)
+                        .frame(width: 280)
+                }
                 if session.showInfo, let item = session.current {
-                    FolderInfoPanel(item: item, url: session.url(for: item))
+                    FolderInfoPanel(item: item, url: session.url(for: item), companions: session.companions(of: item))
                         .frame(width: 280)
                 }
             }
@@ -147,7 +184,12 @@ struct FolderCullView: View {
 
     private var stage: some View {
         ZStack {
-            if let item = session.current {
+            if session.noMatches {
+                VStack(spacing: 12) {
+                    Text("Nothing matches these filters").font(.display(26, weight: 800, width: 70))
+                    Button("Clear filters") { session.filter = .all }.buttonStyle(.viewfinderText)
+                }
+            } else if let item = session.current {
                 let url = session.url(for: item)
                 if item.isVideo {
                     VideoPlayer(player: AVPlayer(url: url))
@@ -162,6 +204,12 @@ struct FolderCullView: View {
                         .onTapGesture { session.zoomed = true }
                 }
                 decisionMark(session.decision(at: session.index))
+                if let row = session.rows[item.rel], hasMeta(row) {
+                    LoupeMetaBadge(row: row)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(.leading, session.zoomed ? 0 : 84)
+                }
             }
             HStack {
                 edge("← BIN", rotate: true) { session.decide(.reject) }
@@ -172,6 +220,10 @@ struct FolderCullView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: session.index) { preloadNeighbours() }
+    }
+
+    private func hasMeta(_ row: MetaRow) -> Bool {
+        row.colour != nil || row.label != nil || row.rating != 0 || !row.keywords.isEmpty || row.problem != nil
     }
 
     @ViewBuilder
@@ -213,7 +265,7 @@ struct FolderCullView: View {
                 .foregroundStyle(Theme.viewfinder.muted)
             HStack(spacing: 18) {
                 Button("Rank keepers") { session.mode = .rank }.buttonStyle(.viewfinderText)
-                Button("Clear out…") { session.showFinish = true }.buttonStyle(.viewfinderPill)
+                Button("Clear out…") { session.confirmFinish() }.buttonStyle(.viewfinderPill)
             }
         }
         .padding(28)
@@ -226,14 +278,16 @@ struct FolderCullView: View {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 4) {
-                        ForEach(session.items.indices, id: \.self) { i in
+                        ForEach(session.visible, id: \.self) { i in
                             Button { session.show(i) } label: {
                                 FolderImage(url: session.url(for: session.items[i]), maxPixel: 160)
                                     .frame(width: 56, height: 56)
                                     .clipped()
                                     .opacity(i == session.index ? 1 : 0.55)
                                     .overlay(alignment: .bottom) {
-                                        if let d = session.decision(at: i) {
+                                        if let colour = session.row(at: i)?.colour {
+                                            Rectangle().fill(Theme.label(colour)).frame(height: 5)
+                                        } else if let d = session.decision(at: i) {
                                             Rectangle().fill(d == .keep ? Theme.viewfinder.ink : Theme.viewfinder.accent).frame(height: 3)
                                         }
                                     }
@@ -256,8 +310,9 @@ struct FolderCullView: View {
     }
 
     private func preloadNeighbours() {
-        let urls = (session.index + 1...session.index + 3)
-            .filter { session.items.indices.contains($0) && !session.items[$0].isVideo }
+        let start = session.position ?? 0
+        let urls = session.visible.dropFirst(start + 1).prefix(3)
+            .filter { !session.items[$0].isVideo }
             .map { session.url(for: session.items[$0]) }
         Task.detached(priority: .utility) { await FolderImageCache.shared.preload(urls, maxPixel: 2400) }
     }
@@ -266,41 +321,46 @@ struct FolderCullView: View {
 
     private var grid: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 22) {
-                ForEach(FolderCullSession.Filter.allCases) { f in
-                    Button { session.filter = f } label: {
-                        Text(f.rawValue)
-                            .font(.mono(13, medium: session.filter == f))
-                            .foregroundStyle(session.filter == f ? Theme.table.ink : Theme.table.muted)
-                    }
-                    .buttonStyle(.plain)
-                }
+            HStack {
                 Spacer()
-                Text("Click a photo to review it · G or Esc to go back")
+                Text("Click a photo to review it · arrows move · 1-5 stars · 6-9 label · G or Esc to go back")
                     .font(.mono(11))
                     .foregroundStyle(Theme.table.muted)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+            .padding(.vertical, 6)
             HairlineRule()
-            ScrollView {
-                ContactSheet(data: session.filteredIndices.map(GridTile.init), minimum: 150) { tile in
-                    Button {
-                        session.show(tile.id)
-                        session.mode = .loupe
-                    } label: {
-                        FolderImage(url: session.url(for: session.items[tile.id]), maxPixel: 480)
-                            .overlay {
-                                switch session.decision(at: tile.id) {
-                                case .keep: GreasePencilMark(shape: .circle, lineWidth: 3).padding(8)
-                                case .reject: GreasePencilMark(shape: .cross, lineWidth: 3).padding(8)
-                                case nil: EmptyView()
-                                }
+            GeometryReader { geo in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        ContactSheet(data: session.visible.map(GridTile.init), minimum: 150) { tile in
+                            Button {
+                                session.show(tile.id)
+                                session.mode = .loupe
+                            } label: {
+                                FolderImage(url: session.url(for: session.items[tile.id]), maxPixel: 480)
+                                    .overlay {
+                                        switch session.decision(at: tile.id) {
+                                        case .keep: GreasePencilMark(shape: .circle, lineWidth: 3).padding(8)
+                                        case .reject: GreasePencilMark(shape: .cross, lineWidth: 3).padding(8)
+                                        case nil: EmptyView()
+                                        }
+                                    }
+                                    .overlay { if let row = session.row(at: tile.id) { TileMetaBadge(row: row) } }
+                                    .overlay { Rectangle().stroke(tile.id == session.index ? Theme.table.ink : .clear, lineWidth: 3) }
                             }
+                            .buttonStyle(.plain)
+                            .id(tile.id)
+                        }
+                        .padding(4)
                     }
-                    .buttonStyle(.plain)
+                    .onChange(of: session.index) { _, i in proxy.scrollTo(i) }
+                    .onAppear { proxy.scrollTo(session.index, anchor: .center) }
                 }
-                .padding(4)
+                // Matches ContactSheet's adaptive columns, for up and down.
+                .onChange(of: geo.size.width, initial: true) { _, width in
+                    session.gridColumns = max(Int((width - 8 + 4) / 154), 1)
+                }
             }
         }
         .lightTable()
@@ -313,6 +373,7 @@ struct FolderCullView: View {
 private struct FolderInfoPanel: View {
     let item: FolderItem
     let url: URL
+    let companions: [String]
     @State private var rows: [Row] = []
 
     struct Row: Identifiable {
@@ -338,10 +399,10 @@ private struct FolderInfoPanel: View {
         .padding(20)
         .frame(maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .leading) { Rectangle().fill(Theme.viewfinder.rule).frame(width: 1) }
-        .task(id: item.rel) { rows = Self.details(for: item, url: url) }
+        .task(id: [item.rel] + companions) { rows = Self.details(for: item, url: url, companions: companions) }
     }
 
-    private static func details(for item: FolderItem, url: URL) -> [Row] {
+    private static func details(for item: FolderItem, url: URL, companions: [String]) -> [Row] {
         var rows: [Row] = []
         if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
            let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
@@ -363,8 +424,8 @@ private struct FolderInfoPanel: View {
             }
         }
         rows.append(Row(label: "File size", value: ByteCountFormatter.string(fromByteCount: Int64(item.size), countStyle: .file)))
-        if !item.companions.isEmpty {
-            rows.append(Row(label: "Moves with", value: item.companions.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")))
+        if !companions.isEmpty {
+            rows.append(Row(label: "Moves with", value: companions.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")))
         }
         return rows
     }
@@ -379,7 +440,7 @@ private struct FolderFinishView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Clear out").font(.display(30, weight: 800, width: 70))
+            Text(session.finishTrashOnly ? "Trash all red" : "Clear out").font(.display(30, weight: 800, width: 70))
             if let outcome {
                 Text("Moved \(outcome.items) photo\(outcome.items == 1 ? "" : "s") (\(ByteCountFormatter.string(fromByteCount: Int64(outcome.bytes), countStyle: .file))).")
                     .font(.mono(13))
@@ -409,25 +470,32 @@ private struct FolderFinishView: View {
         let rejects = session.rejects
         let c = session.counts
         if rejects.isEmpty {
-            Text("Nothing is marked for the bin yet. Press ← or X on a photo to mark it.")
+            Text("Nothing is marked for the bin yet. Press 6, ← or X on a photo to mark it.")
                 .font(.mono(13))
                 .foregroundStyle(Theme.table.muted)
             HStack { Spacer(); Button("Close") { dismiss() }.buttonStyle(.text) }
         } else {
             let bytes = rejects.reduce(UInt64(0)) { $0 + $1.size }
-            let extras = rejects.reduce(0) { $0 + $1.companions.count }
-            Text("\(rejects.count) photo\(rejects.count == 1 ? "" : "s") marked for the bin (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)))"
+            let extras = rejects.reduce(0) { $0 + session.companions(of: $1).count }
+            Text("\(rejects.count) red photo\(rejects.count == 1 ? "" : "s") marked for the bin (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)))"
                  + (extras > 0 ? ", plus \(extras) Live Photo / sidecar file\(extras == 1 ? "" : "s") that go with them." : "."))
                 .font(.mono(13))
-            if c.left > 0 {
-                Text("\(c.left) haven't been reviewed and will be left alone.")
+            if session.filter.isActive {
+                Text("This covers every red in the folder, not only the ones your filters are showing.")
+                    .font(.mono(12))
+                    .foregroundStyle(Theme.table.muted)
+            }
+            if c.left + c.other > 0 {
+                Text("\(c.left + c.other) that aren't red will be left alone.")
                     .font(.mono(12))
                     .foregroundStyle(Theme.table.muted)
             }
             HStack(spacing: 18) {
                 Button("Keep reviewing") { dismiss() }.buttonStyle(.text)
                 Spacer()
-                Button("Move to “_Rejected”") { run(.folder) }.buttonStyle(.text).disabled(working)
+                if !session.finishTrashOnly {
+                    Button("Move to “_Rejected”") { run(.folder) }.buttonStyle(.text).disabled(working)
+                }
                 Button("Move to Trash") { run(.trash) }.buttonStyle(.pill).disabled(working)
             }
         }
@@ -439,6 +507,31 @@ private struct FolderFinishView: View {
             outcome = await session.applyCull(mode: mode)
             working = false
         }
+    }
+}
+/// Files whose metadata couldn't be read, and why.
+private struct FolderProblemsView: View {
+    let session: FolderCullSession
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Unreadable metadata").font(.display(30, weight: 800, width: 70))
+            Text("BestShot won't write to these, so nothing in them can be lost. Fix or remove the file, then reopen the folder.")
+                .font(.mono(12))
+                .foregroundStyle(Theme.table.muted)
+            ScrollView {
+                Text(session.problems.map(\.message).joined(separator: "\n"))
+                    .font(.mono(11))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 280)
+            HStack { Spacer(); Button("Close") { dismiss() }.buttonStyle(.pill) }
+        }
+        .padding(28)
+        .frame(width: 520)
+        .lightTable()
     }
 }
 #endif

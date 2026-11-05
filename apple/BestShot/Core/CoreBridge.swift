@@ -29,6 +29,50 @@ extension CullStore {
     static var empty: CullStore { CullStore(version: 1, decisions: [:], ranking: []) }
 }
 
+extension LabelColour: CaseIterable, Identifiable {
+    public static var allCases: [LabelColour] { [.red, .yellow, .green, .blue, .purple] }
+    public var id: String { slug }
+
+    /// Lowercase name, as in `labels.json` and the Triage export.
+    var slug: String {
+        switch self {
+        case .red: return "red"
+        case .yellow: return "yellow"
+        case .green: return "green"
+        case .blue: return "blue"
+        case .purple: return "purple"
+        }
+    }
+
+    var title: String { slug.capitalized }
+
+    /// The key that sets this colour. Purple has none: 1-5 are stars and 0
+    /// clears, which leaves four digits.
+    var key: String? {
+        switch self {
+        case .red: return "6"
+        case .yellow: return "7"
+        case .green: return "8"
+        case .blue: return "9"
+        case .purple: return nil
+        }
+    }
+
+    init?(slug: String) {
+        guard let match = Self.allCases.first(where: { $0.slug == slug }) else { return nil }
+        self = match
+    }
+}
+
+extension FolderFilter {
+    /// Matches everything.
+    static var all: FolderFilter {
+        FolderFilter(status: .all, stars: .any, labels: [], keywords: [], anyKeyword: false)
+    }
+
+    var isActive: Bool { self != .all }
+}
+
 extension CoreError {
     var message: String {
         switch self {

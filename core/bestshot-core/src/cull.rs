@@ -46,7 +46,11 @@ pub fn apply(
 ) -> Outcome {
     let mut out = Outcome::default();
     for item in rejects {
-        let rels: Vec<&String> = std::iter::once(&item.rel).chain(item.companions.iter()).collect();
+        // `sidecar` as well as the companions: one may have been created since the scan.
+        let mut rels: Vec<&String> = std::iter::once(&item.rel).chain(item.companions.iter()).collect();
+        if !rels.contains(&&item.sidecar) {
+            rels.push(&item.sidecar);
+        }
         let paths: Vec<PathBuf> = rels
             .iter()
             .map(|r| root.join(r))
@@ -136,5 +140,18 @@ mod tests {
         assert!(root.join("_Rejected/trip/IMG_1.MOV").exists());
         // The reject folder is never rescanned.
         assert_eq!(scan(root, true, true).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_sidecar_written_after_the_scan_still_moves() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join("IMG_1.JPG"), b"data").unwrap();
+        let items = scan(root, true, true).unwrap();
+        fs::write(root.join("IMG_1.xmp"), b"xmp").unwrap();
+
+        let out = apply(root, &[&items[0]], Mode::Folder, &|_| unreachable!());
+        assert_eq!(out.files, 2);
+        assert!(root.join("_Rejected/IMG_1.xmp").exists());
     }
 }

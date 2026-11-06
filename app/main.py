@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 import csv
 import io
 
@@ -102,13 +103,15 @@ def create_app() -> Flask:
         static_folder=str(STATIC_DIR),
     )
 
-    # Add CORS headers to all responses
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
+    # The frontend is same-origin, so no site gets CORS access. A browser sends Origin with
+    # anything that changes state: one that isn't this server is another site, and it can't
+    # delete or change projects, whatever a form or a simple request gets past CORS.
+    @app.before_request
+    def refuse_other_sites():
+        origin = request.headers.get("Origin")
+        if request.method not in ("GET", "HEAD", "OPTIONS") and origin:
+            if urlparse(origin).netloc != request.host:
+                abort(403)
 
     project_root = Path(os.environ.get("PROJECT_ROOT", str(DEFAULT_PROJECT_ROOT))).resolve()
     project_root.mkdir(parents=True, exist_ok=True)
@@ -1115,4 +1118,6 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 18473)), debug=True)
+    # This machine only, and no debugger: it runs code for whoever can reach it. Docker
+    # runs gunicorn instead, which binds for the container.
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 18473)))

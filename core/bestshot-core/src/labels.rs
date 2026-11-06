@@ -99,11 +99,23 @@ impl LabelConfig {
             .copied()
     }
 
-    /// `xmp:Label` wins; `photoshop:LabelColor` covers files with nothing
-    /// BestShot can map there.
+    /// `xmp:Label` first, then `photoshop:LabelColor`, with two limits. A label
+    /// mapped to "not a colour" means that, whatever else the file says. And a
+    /// label BestShot can't map can't be turned red by the fallback: Bridge writes
+    /// `Select` with `LabelColor="Red"`, red means reject here, and a pick must
+    /// never be binned on a guess. With no label text at all, LabelColor decides.
     pub fn colour_for(&self, fields: &Fields) -> Option<Colour> {
-        let of = |t: &Option<String>| t.as_deref().and_then(|t| self.colour_of(t));
-        of(&fields.label).or_else(|| of(&fields.label_color))
+        let fallback = fields.label_color.as_deref().and_then(|t| self.colour_of(t));
+        let Some(label) = fields.label.as_deref().map(str::trim).filter(|l| !l.is_empty()) else {
+            return fallback;
+        };
+        if let Some(colour) = self.colour_of(label) {
+            return Some(colour);
+        }
+        if matches!(self.aliases.get(&key(label)), Some(None)) {
+            return None;
+        }
+        fallback.filter(|colour| *colour != Colour::Red)
     }
 
     /// Renames a colour. Files already written with the old name keep their
@@ -198,6 +210,22 @@ mod tests {
         assert_eq!(c.colour_of("SELECT"), Some(Colour::Green));
         assert_eq!(c.colour_of("binned"), Some(Colour::Red));
         assert_eq!(c.colour_of("Red"), None, "an explicit null beats the colour word");
+    }
+
+    #[test]
+    fn the_fallback_never_guesses_red_and_not_a_colour_means_it() {
+        let mut c = LabelConfig::default();
+        let f = |label: &str, color: &str| Fields {
+            label: Some(label.to_string()),
+            label_color: Some(color.to_string()),
+            ..Default::default()
+        };
+        assert_eq!(c.colour_for(&f("Select", "Red")), None, "a pick would go in the bin");
+        assert_eq!(c.colour_for(&f("  ", "Red")), Some(Colour::Red), "no label text: LabelColor decides");
+        c.map("Select", None);
+        assert_eq!(c.colour_for(&f("Select", "Yellow")), None, "the reader said not a colour");
+        c.map("Select", Some(Colour::Red));
+        assert_eq!(c.colour_for(&f("Select", "Green")), Some(Colour::Red), "a mapping is an answer");
     }
 
     #[test]

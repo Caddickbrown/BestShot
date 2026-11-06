@@ -832,6 +832,35 @@ mod tests {
     }
 
     #[test]
+    fn a_bridge_select_with_a_red_label_colour_is_never_a_reject() {
+        // The shape Bridge really writes: its label text, and the colour it shows.
+        let dir = folder(&[("a.jpg", "x"), ("a.xmp", &sidecar(r#"xmp:Label="Select" photoshop:LabelColor="Red""#))]);
+        let mut c = open(&dir);
+        let row = c.row("a.jpg");
+        assert_eq!((row.colour, row.decision), (None, None), "a pick was about to go in Trash all red");
+        assert!(c.rejects().is_empty());
+
+        // "Not a colour" is an explicit answer, and must hold just the same.
+        let mut labels = LabelConfig::default();
+        labels.map("select", None);
+        c.set_options(Options { labels, write_jpeg: false });
+        assert_eq!(c.row("a.jpg").decision, None);
+        assert!(c.rejects().is_empty());
+
+        // Mapping it to red is the one way in.
+        let mut labels = LabelConfig::default();
+        labels.map("select", Some(Colour::Red));
+        c.set_options(Options { labels, write_jpeg: false });
+        assert_eq!(c.row("a.jpg").decision, Some(Decision::Reject));
+    }
+
+    #[test]
+    fn a_label_colour_alone_still_counts() {
+        let dir = folder(&[("a.jpg", "x"), ("a.xmp", &sidecar(r#"photoshop:LabelColor="Green""#))]);
+        assert_eq!(open(&dir).row("a.jpg").colour, Some(Colour::Green));
+    }
+
+    #[test]
     fn unmapped_labels_are_shown_kept_and_never_count_as_red() {
         let dir = folder(&[("a.jpg", "x"), ("a.xmp", &sidecar(r#"xmp:Label="Select" xmp:Rating="2""#))]);
         let mut c = open(&dir);

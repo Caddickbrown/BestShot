@@ -121,6 +121,8 @@ The app uses standard web technologies (HTML5, CSS3, ES6 JavaScript) without any
 
 4. Open your browser to `http://localhost:18473`
 
+   Run this way it listens on this machine only, with no debugger. Docker serves on the container's network with gunicorn. Other sites can't change your projects: requests from another origin are refused.
+
 ### Using Docker
 
 Build and run BestShot in a container:

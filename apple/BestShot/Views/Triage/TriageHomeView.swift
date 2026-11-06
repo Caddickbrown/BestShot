@@ -10,6 +10,9 @@ struct TriageHomeView: View {
 
     @State private var authStatus = PhotoLibraryService.shared.status
     @State private var order: SessionOrder = .newest
+    /// Photos marked for deletion in a session that ended before its commit. A delete
+    /// that went through leaves no asset, so anything still here was never deleted.
+    @State private var waitingDeletes: [PHAsset] = []
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
     /// Above this screen, so the monitor shares it and leaving doesn't lose it.
@@ -39,6 +42,7 @@ struct TriageHomeView: View {
         }
         .lightTableList()
         .navigationTitle("Triage")
+        .onChange(of: markedDeleted, initial: true) { findWaitingDeletes() }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -60,6 +64,13 @@ struct TriageHomeView: View {
 
     private var configForm: some View {
         Form {
+            if !waitingDeletes.isEmpty && session == nil {
+                Section {
+                    Text("\(waitingDeletes.count) photo\(waitingDeletes.count == 1 ? "" : "s") waiting to be deleted, from a session that ended early.")
+                    Button("Delete Them", role: .destructive) { Task { await finishWaitingDeletes() } }
+                    Button("Keep Them") { releaseWaitingDeletes() }
+                }
+            }
             Section("Order") {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { o in
@@ -113,6 +124,31 @@ struct TriageHomeView: View {
             }
         }
         .task { albums = PhotoLibraryService.shared.userAlbums() }
+    }
+
+    /// The ids marked for deletion, for noticing when that set changes.
+    private var markedDeleted: [String] {
+        reviews.filter { $0.decision == .deleted }.map(\.assetLocalID).sorted()
+    }
+
+    private func findWaitingDeletes() {
+        let ids = markedDeleted
+        guard !ids.isEmpty else { waitingDeletes = []; return }
+        let found = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+        waitingDeletes = found.objects(at: IndexSet(0..<found.count))
+    }
+
+    private func finishWaitingDeletes() async {
+        // Cancelling the system prompt leaves them waiting, to be decided another time.
+        if await PhotoLibraryService.shared.deleteAssets(waitingDeletes) { waitingDeletes = [] }
+    }
+
+    /// Takes the decision back, so the photos come up in the next session.
+    private func releaseWaitingDeletes() {
+        let ids = Set(waitingDeletes.map(\.localIdentifier))
+        for review in reviews where ids.contains(review.assetLocalID) { context.delete(review) }
+        try? context.save()
+        waitingDeletes = []
     }
 
     private var permissionPrompt: some View {

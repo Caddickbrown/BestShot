@@ -8,6 +8,8 @@ import Photos
 struct TriageView: View {
     @Bindable var session: TriageSession
     let onFinish: () -> Void
+    /// Back to the start screen without finishing.
+    let onLeave: () -> Void
 
     @State private var showGallery = false
     @State private var pinch: CGFloat = 1
@@ -28,6 +30,13 @@ struct TriageView: View {
         }
         .onChange(of: session.isComplete) { _, complete in
             if complete { showSummary = true }
+        }
+        .escapeCloses {
+            if showGallery {
+                withAnimation(.spring(response: 0.35)) { showGallery = false }
+            } else {
+                onLeave()
+            }
         }
     }
 
@@ -72,7 +81,7 @@ struct TriageView: View {
 
     private var header: some View {
         HStack(spacing: 16) {
-            Button { onFinish() } label: { Image(systemName: "xmark") }
+            Button { onLeave() } label: { Image(systemName: "xmark") }
 
             VStack(spacing: 4) {
                 GeometryReader { geo in

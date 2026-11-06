@@ -58,6 +58,7 @@ struct ComparisonSelectionView: View {
             }
         }
         .frame(minWidth: 360, minHeight: 320)
+        .escapeScreen { dismiss() }
     }
 
     private func optionLabel(title: String, subtitle: String, systemImage: String) -> some View {

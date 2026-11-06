@@ -46,10 +46,16 @@ struct ComparisonView: View {
                 Button("") { pick(.left) }.keyboardShortcut(.leftArrow, modifiers: [])
                 Button("") { pick(.right) }.keyboardShortcut(.rightArrow, modifiers: [])
                 Button("") { session.skip() }.keyboardShortcut(.space, modifiers: [])
-                Button("") { dismiss() }.keyboardShortcut(.escape, modifiers: [])
+                Button("") { leave() }.keyboardShortcut(.escape, modifiers: [])
             }
             .opacity(0)
         }
+        .escapeScreen(leave)
+    }
+
+    /// Esc: picks already made go to the results rather than being lost.
+    private func leave() {
+        if session.comparisonsAsked > 0 { onFinish() } else { dismiss() }
     }
 
     private var header: some View {

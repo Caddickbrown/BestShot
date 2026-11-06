@@ -17,6 +17,7 @@ struct GalleryView: View {
 
     // Import
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var showingPhotoPicker = false
     @State private var showingFileImporter = false
     @State private var isImporting = false
     @State private var importMessage: String?
@@ -65,7 +66,7 @@ struct GalleryView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .searchable(text: $searchText, prompt: "Search filename or tags")
+            .mediaSearch(text: $searchText, prompt: "Search filename or tags")
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) {
                 if selectionMode {
@@ -80,6 +81,7 @@ struct GalleryView: View {
             }
             .overlay { if isImporting { importOverlay } }
             .onChange(of: photoItems) { _, newItems in importFromPhotos(newItems) }
+            .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItems, matching: .any(of: [.images, .videos]))
             .fileImporter(
                 isPresented: $showingFileImporter,
                 allowedContentTypes: [.image, .movie, .video],
@@ -113,10 +115,9 @@ struct GalleryView: View {
                     resultsSession = nil
                 }
             }
-            .alert("Add Tag", isPresented: $showingBulkTag) {
-                TextField("Tag", text: $bulkTagText)
-                Button("Add", action: applyBulkTag)
-                Button("Cancel", role: .cancel) { bulkTagText = "" }
+            .sheet(isPresented: $showingBulkTag) {
+                TextPromptSheet(title: "Add Tag", placeholder: "Tag", action: "Add",
+                                text: $bulkTagText, onCommit: applyBulkTag)
             }
             .alert("Clear all rankings?", isPresented: $showingClearConfirm) {
                 Button("Clear", role: .destructive) {
@@ -137,6 +138,11 @@ struct GalleryView: View {
             .sheet(item: $shareURL) { wrapper in
                 ShareSheet(url: wrapper.url)
             }
+            .modifier(GalleryEscapes(
+                selecting: selectionMode, onSelecting: exitSelection,
+                picker: $showingPhotoPicker, importer: $showingFileImporter,
+                clearConfirm: $showingClearConfirm, importMessage: $importMessage, share: $shareURL
+            ))
     }
 
     // MARK: - Content
@@ -196,7 +202,9 @@ struct GalleryView: View {
         } description: {
             Text("Import photos and videos to start ranking.")
         } actions: {
-            PhotosPicker(selection: $photoItems, matching: .any(of: [.images, .videos])) {
+            Button {
+                showingPhotoPicker = true
+            } label: {
                 Label("Import from Photos", systemImage: "photo.on.rectangle")
             }
             .buttonStyle(.borderedProminent)
@@ -225,7 +233,9 @@ struct GalleryView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            PhotosPicker(selection: $photoItems, matching: .any(of: [.images, .videos])) {
+            Button {
+                showingPhotoPicker = true
+            } label: {
                 Label("Import", systemImage: "plus")
             }
 
@@ -434,6 +444,27 @@ struct GalleryView: View {
         } catch {
             importMessage = "Export failed: \(error.localizedDescription)"
         }
+    }
+}
+
+/// What Esc closes over the gallery that isn't a sheet of ours, newest first.
+private struct GalleryEscapes: ViewModifier {
+    let selecting: Bool
+    let onSelecting: () -> Void
+    @Binding var picker: Bool
+    @Binding var importer: Bool
+    @Binding var clearConfirm: Bool
+    @Binding var importMessage: String?
+    @Binding var share: ShareableURL?
+
+    func body(content: Content) -> some View {
+        content
+            .escapeCloses(when: selecting, onSelecting)
+            .escapeCloses(when: picker) { picker = false }
+            .escapeCloses(when: importer) { importer = false }
+            .escapeCloses(when: clearConfirm) { clearConfirm = false }
+            .escapeCloses(when: importMessage != nil) { importMessage = nil }
+            .escapeCloses(when: share != nil) { share = nil }
     }
 }
 

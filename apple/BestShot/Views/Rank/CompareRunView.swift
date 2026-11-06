@@ -40,6 +40,22 @@ struct CompareRunView: View {
             }
             return .handled
         }
+        .escapeScreen { board.finishCompare(save: true) }
+        #if os(iOS)
+        // On iOS onKeyPress needs Full Keyboard Access, and Esc's catcher holds
+        // first responder: these are key commands, heard along its chain.
+        .background {
+            Group {
+                Button("") { run.choose(.left) }.keyboardShortcut("1", modifiers: [])
+                Button("") { run.choose(.right) }.keyboardShortcut("2", modifiers: [])
+                Button("") { run.choose(.left) }.keyboardShortcut(.leftArrow, modifiers: [])
+                Button("") { run.choose(.right) }.keyboardShortcut(.rightArrow, modifiers: [])
+                Button("") { run.choose(.skip) }.keyboardShortcut(.space, modifiers: [])
+                Button("") { run.undo() }.keyboardShortcut(.delete, modifiers: [])
+            }
+            .opacity(0)
+        }
+        #endif
     }
 
     private func handle(_ key: KeyEquivalent) -> KeyPress.Result {

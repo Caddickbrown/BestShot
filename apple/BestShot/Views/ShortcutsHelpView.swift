@@ -7,7 +7,8 @@ struct ShortcutsHelpView: View {
 
     private let shortcuts: [(String, String)] = [
         ("← / →", "Navigate media in the viewer"),
-        ("Esc", "Close viewer / exit comparison"),
+        ("Esc", "Close what's on top, step back, then Triage"),
+        ("Esc", "Leave a field, keeping its text"),
         ("P", "Toggle slideshow"),
         ("1 or ←", "Pick left (comparison mode)"),
         ("2 or →", "Pick right (comparison mode)"),
@@ -23,7 +24,7 @@ struct ShortcutsHelpView: View {
         NavigationStack {
             List {
                 Section("Keyboard Shortcuts") {
-                    ForEach(shortcuts, id: \.0) { key, action in
+                    ForEach(shortcuts, id: \.1) { key, action in
                         HStack {
                             Text(key)
                                 .font(.callout.monospaced())
@@ -48,5 +49,6 @@ struct ShortcutsHelpView: View {
             }
         }
         .frame(minWidth: 360, minHeight: 420)
+        .escapeScreen { dismiss() }
     }
 }

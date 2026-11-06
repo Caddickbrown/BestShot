@@ -48,5 +48,10 @@ struct ComparisonResultsView: View {
             }
         }
         .frame(minWidth: 380, minHeight: 480)
+        // As in Rank's Compare, Esc saves. Discard is the way to throw it away.
+        .escapeScreen {
+            onApply()
+            dismiss()
+        }
     }
 }

@@ -56,7 +56,7 @@ struct AllMediaView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .searchable(text: $searchText, prompt: "Search filename or tags")
+        .mediaSearch(text: $searchText, prompt: "Search filename or tags")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

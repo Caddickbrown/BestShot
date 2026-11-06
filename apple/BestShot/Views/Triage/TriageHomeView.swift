@@ -13,14 +13,19 @@ struct TriageHomeView: View {
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
     @State private var session: TriageSession?
+    /// Left with photos still marked for deletion. Those marks live only in the
+    /// session, so it waits on the start screen until it's resumed and finished.
+    @State private var paused = false
     @State private var isLoading = false
     @State private var emptyMessage: String?
 
     var body: some View {
         Group {
-            if let session {
+            if let session, !paused {
                 TriageView(session: session) {
                     self.session = nil
+                } onLeave: {
+                    if session.deleteCount > 0 { paused = true } else { self.session = nil }
                 }
             } else {
                 startScreen
@@ -70,16 +75,26 @@ struct TriageHomeView: View {
             }
 
             Section {
-                Button {
-                    start()
-                } label: {
-                    if isLoading {
-                        ProgressView()
-                    } else {
-                        Label("Start Triage", systemImage: "play.fill")
+                if let session {
+                    Button {
+                        paused = false
+                    } label: {
+                        Label("Resume Triage", systemImage: "play.fill")
                     }
+                    Text("\(session.deleteCount) marked to delete. Resume, then Done, to delete them.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        start()
+                    } label: {
+                        if isLoading {
+                            ProgressView()
+                        } else {
+                            Label("Start Triage", systemImage: "play.fill")
+                        }
+                    }
+                    .disabled(isLoading)
                 }
-                .disabled(isLoading)
             }
 
             if let emptyMessage {
@@ -139,6 +154,7 @@ struct TriageHomeView: View {
                 if assets.isEmpty {
                     emptyMessage = "No unreviewed photos found for this source. Try another source or order."
                 } else {
+                    paused = false
                     session = TriageSession(assets: assets, context: context)
                 }
             }

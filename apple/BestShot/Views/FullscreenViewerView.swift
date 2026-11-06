@@ -49,11 +49,12 @@ struct FullscreenViewerView: View {
             Group {
                 Button("") { previous() }.keyboardShortcut(.leftArrow, modifiers: [])
                 Button("") { next() }.keyboardShortcut(.rightArrow, modifiers: [])
-                Button("") { dismiss() }.keyboardShortcut(.escape, modifiers: [])
+                Button("") { escape() }.keyboardShortcut(.escape, modifiers: [])
                 Button("") { slideshow.toggle() }.keyboardShortcut("p", modifiers: [])
             }
             .opacity(0)
         }
+        .escapeScreen(escape)
         .task(id: slideshow) {
             guard slideshow else { return }
             while slideshow && !Task.isCancelled {
@@ -90,7 +91,7 @@ struct FullscreenViewerView: View {
     private var controlsOverlay: some View {
         VStack {
             HStack {
-                Button { dismiss() } label: {
+                Button { close() } label: {
                     Image(systemName: "xmark").padding(10)
                 }
                 Spacer()
@@ -187,9 +188,7 @@ struct FullscreenViewerView: View {
                 }
             }
             HStack {
-                TextField("Add tag", text: $newTag)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addTag)
+                EscapingField(placeholder: "Add tag", text: $newTag, bordered: true, onSubmit: addTag)
                 Button("Add", action: addTag)
                     .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -199,7 +198,7 @@ struct FullscreenViewerView: View {
     private func commentEditor(_ item: MediaItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Notes").font(.headline)
-            TextEditor(text: Binding(
+            EscapingEditor(text: Binding(
                 get: { item.comment },
                 set: { item.comment = $0; try? context.save() }
             ))
@@ -223,6 +222,21 @@ struct FullscreenViewerView: View {
         guard !tag.isEmpty, let item = current, !item.tags.contains(tag) else { return }
         item.tags.append(tag)
         try? context.save()
+    }
+
+    /// The panel first, then the viewer.
+    private func escape() {
+        if showInfo {
+            withAnimation { showInfo = false }
+        } else {
+            close()
+        }
+    }
+
+    /// A tag still being typed is added rather than lost.
+    private func close() {
+        addTag()
+        dismiss()
     }
 
     private func next() {

@@ -35,17 +35,17 @@ struct OrganiseView: View {
         .onChange(of: session.isComplete) { _, complete in
             if complete { onFinish() }
         }
-        .alert("New Album", isPresented: $showNewAlbum) {
-            TextField("Album name", text: $newAlbumName)
-            Button("Create") {
+        .sheet(isPresented: $showNewAlbum) {
+            TextPromptSheet(title: "New Album", placeholder: "Album name", action: "Create", text: $newAlbumName) {
                 if let asset = session.current {
                     let name = newAlbumName
                     newAlbumName = ""
                     Task { await session.createAlbumAndAdd(name: name, asset: asset) }
                 }
             }
-            Button("Cancel", role: .cancel) { newAlbumName = "" }
         }
+        // Albums and Next are saved as they happen, so leaving loses nothing.
+        .escapeCloses(onFinish)
     }
 
     private var header: some View {

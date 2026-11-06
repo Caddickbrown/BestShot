@@ -81,6 +81,11 @@ struct TriageSummaryView: View {
         }
         .frame(minWidth: 380, minHeight: 420)
         .interactiveDismissDisabled(isDeleting)
+        .escapeScreen {
+            guard !isDeleting else { return }
+            onKeepGoing()
+            dismiss()
+        }
     }
 
     private func stat(_ value: String, _ label: String, _ color: Color) -> some View {

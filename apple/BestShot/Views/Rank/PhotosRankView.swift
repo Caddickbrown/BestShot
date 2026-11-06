@@ -28,6 +28,7 @@ struct PhotosRankView: View {
         } message: {
             Text(albumMessage ?? "")
         }
+        .escapeCloses(when: albumMessage != nil) { albumMessage = nil }
     }
 
     private func load() async {

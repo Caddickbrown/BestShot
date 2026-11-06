@@ -13,6 +13,13 @@ struct RootView: View {
     @State private var showingNewProject = false
     @State private var showingSettings = false
     @State private var showingShortcuts = false
+    @State private var escapes = EscapeStack()
+    /// On a phone, which column is showing. Triage, the detail, is home.
+    @State private var compactColumn = NavigationSplitViewColumn.detail
+    // Kept here so Esc can close their sheets without losing what's typed.
+    @State private var projectName = ""
+    @State private var projectDescription = ""
+    @State private var labelDrafts: [LabelColour: String] = [:]
 
     enum SidebarSelection: Hashable {
         case triage
@@ -24,7 +31,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(preferredCompactColumn: $compactColumn) {
             List(selection: $selection) {
                 Section("Review") {
                     Label("Triage", systemImage: "rectangle.stack.badge.person.crop")
@@ -85,12 +92,16 @@ struct RootView: View {
                 .environment(\.showRank, ShowRankAction { selection = .rank })
         }
         .sheet(isPresented: $showingNewProject) {
-            NewProjectSheet { name, description in
+            NewProjectSheet(name: $projectName, description: $projectDescription) { name, description in
                 createProject(name: name, description: description)
             }
         }
-        .sheet(isPresented: $showingSettings) { SettingsView() }
+        .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
         .sheet(isPresented: $showingShortcuts) { ShortcutsHelpView() }
+        .escapeRoot(escapes) {
+            selection = .triage
+            compactColumn = .detail
+        }
     }
 
     @ViewBuilder
@@ -164,17 +175,22 @@ private struct ProjectRow: View {
 /// web app's "Create project / Spin up" flow.
 struct NewProjectSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var description = ""
+    @Binding var name: String
+    @Binding var description: String
     let onCreate: (String, String) -> Void
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Project") {
-                    TextField("Name", text: $name)
+                    EscapingField(placeholder: "Name", text: $name)
+                    #if os(iOS)
+                    EscapingEditor(placeholder: "Description (optional)", text: $description)
+                        .frame(minHeight: 70)
+                    #else
                     TextField("Description (optional)", text: $description, axis: .vertical)
                         .lineLimit(2...4)
+                    #endif
                 }
             }
             .navigationTitle("New Project")
@@ -183,11 +199,15 @@ struct NewProjectSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        clear()
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
                         onCreate(name, description)
+                        clear()
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -195,6 +215,12 @@ struct NewProjectSheet: View {
             }
         }
         .frame(minWidth: 360, minHeight: 220)
+        .escapeScreen { dismiss() }
+    }
+
+    private func clear() {
+        name = ""
+        description = ""
     }
 }
 

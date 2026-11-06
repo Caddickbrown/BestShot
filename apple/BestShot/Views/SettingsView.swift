@@ -5,7 +5,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var labels = LabelStore.shared
-    @State private var names: [LabelColour: String] = [:]
+    /// Typed but not saved. Held by the root so Esc can close this and keep them.
+    @Binding var names: [LabelColour: String]
     @State private var namesMessage: String?
     @State private var showingBridgeImport = false
 
@@ -14,7 +15,7 @@ struct SettingsView: View {
             Form {
                 Section("Colour labels") {
                     ForEach(LabelColour.allCases) { colour in
-                        TextField(colour.title, text: nameBinding(colour))
+                        EscapingField(placeholder: colour.title, text: nameBinding(colour))
                     }
                     Button("Save label names", action: saveNames)
                     if let namesMessage {
@@ -57,6 +58,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showingBridgeImport) { BridgeImportView() }
         #endif
         .onChange(of: labels.revision) { names = [:] }
+        .escapeScreen { dismiss() }
     }
 
     private func nameBinding(_ colour: LabelColour) -> Binding<String> {

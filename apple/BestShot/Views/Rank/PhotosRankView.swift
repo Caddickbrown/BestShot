@@ -33,6 +33,12 @@ struct PhotosRankView: View {
 
     private func load() async {
         _ = await PhotoLibraryService.shared.requestAuthorization()
+        board = Self.makeBoard(context: context, media: media)
+    }
+
+    /// The board for the photos kept in Triage. The monitor's Rank uses this too.
+    @MainActor
+    static func makeBoard(context: ModelContext, media: PhotosRankMedia) -> RankBoard {
         let kept = ReviewDecision.kept.rawValue
         let reviews = (try? context.fetch(FetchDescriptor<AssetReview>(predicate: #Predicate { $0.decisionRaw == kept }))) ?? []
         let ids = reviews.map(\.assetLocalID)
@@ -44,8 +50,8 @@ struct PhotosRankView: View {
         result.enumerateObjects { asset, _, _ in assets.append(asset) }
         media.assets = Dictionary(uniqueKeysWithValues: assets.map { ($0.localIdentifier, $0) })
 
-        let order = savedOrder()
-        board = RankBoard(
+        let order = savedOrder(context)
+        return RankBoard(
             title: "Photos library",
             media: media,
             pools: [RankPool(id: "kept", title: "Kept", ids: assets.map(\.localIdentifier))],
@@ -57,7 +63,8 @@ struct PhotosRankView: View {
         }
     }
 
-    private func savedOrder() -> RankedOrder {
+    @MainActor
+    private static func savedOrder(_ context: ModelContext) -> RankedOrder {
         let key = RankedOrder.photosLibraryKey
         if let existing = try? context.fetch(FetchDescriptor<RankedOrder>(predicate: #Predicate { $0.key == key })).first {
             return existing
@@ -70,12 +77,15 @@ struct PhotosRankView: View {
     private func saveAlbum() {
         guard let board else { return }
         let assets = board.ranked.compactMap { media.assets[$0] }
-        Task {
-            let ok = await PhotoLibraryService.shared.replaceAlbumContents(titled: Self.albumTitle, with: assets)
-            albumMessage = ok
-                ? "Saved \(assets.count) photos to “\(Self.albumTitle)” in rank order."
-                : "Couldn't update the album. Check BestShot has full access to Photos."
-        }
+        Task { albumMessage = await Self.saveAlbum(assets) }
+    }
+
+    /// What to tell the user afterwards.
+    static func saveAlbum(_ assets: [PHAsset]) async -> String {
+        let ok = await PhotoLibraryService.shared.replaceAlbumContents(titled: albumTitle, with: assets)
+        return ok
+            ? "Saved \(assets.count) photos to “\(albumTitle)” in rank order."
+            : "Couldn't update the album. Check BestShot has full access to Photos."
     }
 }
 

@@ -107,9 +107,9 @@ final class PhotoLibraryService: @unchecked Sendable {
     }
 
     /// Start caching thumbnails for a batch of assets (grid performance).
-    func startCaching(_ assets: [PHAsset], targetSize: CGSize) {
+    func startCaching(_ assets: [PHAsset], targetSize: CGSize, contentMode: PHImageContentMode = .aspectFill) {
         imageManager.startCachingImages(for: assets, targetSize: targetSize,
-                                        contentMode: .aspectFill, options: nil)
+                                        contentMode: contentMode, options: nil)
     }
 
     func stopCachingAll() {

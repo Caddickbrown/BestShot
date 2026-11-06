@@ -62,6 +62,7 @@ runner for every push touching `apple/` or `core/`.
 | Folders (Mac) | `ViewModels/FolderCullSession.swift`, `Views/Folder/*` (ImageIO thumbnails, HEIC native) |
 | Look | `Utilities/Theme.swift` (tokens shared with `desktop/src/styles.css`), `Views/Design/*` (grease-pencil marks, buttons, contact sheet), `Resources/Fonts` (Archivo, IBM Plex Mono; OFL) |
 | Photos library | `Services/PhotoLibraryService.swift`, Triage / Organise |
+| Monitor (iOS) | `Monitor/*`: `MonitorDesk` (state), `MonitorKeymap` (keys and hint bar), `MonitorDisplay` (the external-display scene, lock, idle), `PhotoMarks` |
 | Projects | SwiftData models + `Services/*`, the original port of the web app |
 
 ### Keys (Mac and iPad keyboards)

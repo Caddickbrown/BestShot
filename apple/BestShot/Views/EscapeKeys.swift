@@ -19,6 +19,10 @@ import UIKit
 // chain, and a SwiftUI TextField, TextEditor or .searchable keeps Esc for itself.
 // So every field is an `EscapingField` or `EscapingEditor`, which claim Esc ahead
 // of the text system: it lets go of the field and keeps the text.
+//
+// With a monitor connected the catcher also takes every other key for
+// `MonitorDesk`, the only one holding first responder here, so there's one catcher,
+// not two to trade it. With no monitor it hears Esc and nothing else.
 
 private struct EscapeStackKey: EnvironmentKey {
     @MainActor static let defaultValue = EscapeStack()
@@ -38,7 +42,11 @@ extension View {
         #if os(iOS)
         background(EscapeCatcherHost().frame(width: 0, height: 0).allowsHitTesting(false))
             .environment(\.escapeStack, stack)
-            .onAppear { stack.base = home }
+            .onAppear {
+                stack.base = home
+                stack.monitorStep = { MonitorDisplay.shared.desk?.stepBackFromEscape() ?? false }
+                stack.onSheets = { MonitorDisplay.shared.desk?.phoneSheetUp = $0 }
+            }
         #else
         self
         #endif
@@ -59,7 +67,7 @@ extension View {
     @ViewBuilder
     func escapeScreen(_ close: @escaping () -> Void) -> some View {
         #if os(iOS)
-        modifier(EscapeLayer(active: true, close: close))
+        modifier(EscapeLayer(active: true, isSheet: true, close: close))
             .background(EscapeCatcherHost().frame(width: 0, height: 0).allowsHitTesting(false))
         #else
         self
@@ -149,6 +157,7 @@ struct EscapingEditor: View {
 private struct EscapeLayer: ViewModifier {
     @Environment(\.escapeStack) private var stack
     let active: Bool
+    var isSheet = false
     let close: () -> Void
 
     @State private var id = UUID()
@@ -162,7 +171,7 @@ private struct EscapeLayer: ViewModifier {
     }
 
     private func sync(visible: Bool) {
-        if visible && active { stack.push(id, close: close) } else { stack.remove(id) }
+        if visible && active { stack.push(id, isSheet: isSheet, close: close) } else { stack.remove(id) }
     }
 }
 
@@ -195,10 +204,52 @@ final class EscapeCatcherController: UIViewController {
     override var keyCommands: [UIKeyCommand]? {
         let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapePressed))
         escape.wantsPriorityOverSystemBehavior = true
-        return [escape]
+        guard monitorDesk != nil else { return [escape] }
+        return [escape] + MonitorChords.commands(action: #selector(chord(_:)))
     }
 
     @objc private func escapePressed() { onEscape() }
+
+    // MARK: The monitor's keys
+
+    private var repeater = MonitorKeyRepeater()
+
+    /// Only with a monitor there: without one, this catcher is only for Esc.
+    private var monitorDesk: MonitorDesk? {
+        MonitorDisplay.shared.desk.flatMap { $0.isConnected ? $0 : nil }
+    }
+
+    @objc private func chord(_ command: UIKeyCommand) {
+        guard let press = MonitorChords.press(for: command) else { return }
+        if press.matches(.escape) { onEscape() } else { monitorDesk?.handle(press) }
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard let desk = monitorDesk else {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+        var unhandled = Set<UIPress>()
+        for press in presses {
+            guard let key = press.key, !MonitorChords.comesAsCommand(key), let keyPress = MonitorPress(key),
+                  desk.handle(keyPress) else {
+                unhandled.insert(press)
+                continue
+            }
+            repeater.start(keyPress, code: key.keyCode, desk: desk)
+        }
+        if !unhandled.isEmpty { super.pressesBegan(unhandled, with: event) }
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.key?.keyCode == repeater.code }) { repeater.stop() }
+        super.pressesEnded(presses, with: event)
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        repeater.stop()
+        super.pressesCancelled(presses, with: event)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -227,12 +278,17 @@ final class EscapeCatcherController: UIViewController {
         super.viewDidDisappear(animated)
         reclaim?.invalidate()
         reclaim = nil
+        repeater.stop()
     }
 
     /// Never from a field being typed in, nor from another catcher: a sheet's and
     /// the root's would trade it.
     private func takeKeysIfFree() {
-        guard view.window != nil, !isFirstResponder else { return }
+        guard let window = view.window else { return }
+        // First responder means nothing in a window that isn't key, and a monitor
+        // coming and going can leave the phone's window that way.
+        if monitorDesk != nil, !window.isKeyWindow { window.makeKey() }
+        guard !isFirstResponder else { return }
         let holder = UIResponder.bestShotCurrentFirst()
         if !(holder is UIKeyInput), !(holder is EscapeCatcherController) { becomeFirstResponder() }
     }

@@ -18,6 +18,7 @@ struct ShortcutsHelpView: View {
         ("6 7 8 9", "Folders: red, yellow, green, blue; again to clear"),
         ("K", "Folders: keywords"),
         ("⌘⌫", "Folders: Trash all red"),
+        ("?", "On a monitor: every key that works there"),
     ]
 
     var body: some View {

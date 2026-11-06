@@ -87,6 +87,16 @@ struct OrganiseHomeView: View {
         .task { albums = PhotoLibraryService.shared.userAlbums() }
     }
 
+    /// The photos a new session would go through. The monitor starts one this way.
+    @MainActor
+    static func fetchSession(order: SessionOrder, source: TriageSourceOption, context: ModelContext) -> [PHAsset] {
+        let reviews = (try? context.fetch(FetchDescriptor<AssetReview>())) ?? []
+        return PhotoLibraryService.shared.fetchAssets(
+            in: TriageHomeView.resolveCollection(source), order: order,
+            excluding: Set(reviews.filter(\.organised).map(\.assetLocalID))
+        )
+    }
+
     private func start() {
         isLoading = true
         emptyMessage = nil

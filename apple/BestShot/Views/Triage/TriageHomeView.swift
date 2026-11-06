@@ -12,10 +12,16 @@ struct TriageHomeView: View {
     @State private var order: SessionOrder = .newest
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
-    @State private var session: TriageSession?
-    /// Left with photos still marked for deletion. Those marks live only in the
-    /// session, so it waits on the start screen until it's resumed and finished.
-    @State private var paused = false
+    /// Above this screen, so the monitor shares it and leaving doesn't lose it.
+    @State private var holder = TriageHolder.shared
+    private var session: TriageSession? {
+        get { holder.session }
+        nonmutating set { holder.session = newValue }
+    }
+    private var paused: Bool {
+        get { holder.paused }
+        nonmutating set { holder.paused = newValue }
+    }
     @State private var isLoading = false
     @State private var emptyMessage: String?
 
@@ -25,7 +31,7 @@ struct TriageHomeView: View {
                 TriageView(session: session) {
                     self.session = nil
                 } onLeave: {
-                    if session.deleteCount > 0 { paused = true } else { self.session = nil }
+                    holder.leave()
                 }
             } else {
                 startScreen
@@ -137,11 +143,7 @@ struct TriageHomeView: View {
     private func start() {
         isLoading = true
         emptyMessage = nil
-        // Exclude only assets already kept or deleted (organised-only records
-        // should still be triageable).
-        let reviewedIDs = Set(reviews
-            .filter { $0.decision == .kept || $0.decision == .deleted }
-            .map(\.assetLocalID))
+        let reviewedIDs = Self.reviewedIDs(reviews)
         let chosenOrder = order
         let chosenSource = source
         Task {
@@ -159,6 +161,21 @@ struct TriageHomeView: View {
                 }
             }
         }
+    }
+
+    /// Exclude only assets already kept or deleted (organised-only records should
+    /// still be triageable).
+    static func reviewedIDs(_ reviews: [AssetReview]) -> Set<String> {
+        Set(reviews.filter { $0.decision == .kept || $0.decision == .deleted }.map(\.assetLocalID))
+    }
+
+    /// The photos a new session would go through. The monitor starts one this way.
+    @MainActor
+    static func fetchSession(order: SessionOrder, source: TriageSourceOption, context: ModelContext) -> [PHAsset] {
+        let reviews = (try? context.fetch(FetchDescriptor<AssetReview>())) ?? []
+        return PhotoLibraryService.shared.fetchAssets(
+            in: resolveCollection(source), order: order, excluding: reviewedIDs(reviews)
+        )
     }
 
     static func resolveCollection(_ source: TriageSourceOption) -> PHAssetCollection? {

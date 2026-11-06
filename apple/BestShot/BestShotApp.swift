@@ -15,6 +15,9 @@ struct BestShotApp: App {
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
+        #if os(iOS)
+        MonitorDisplay.shared.start(container: container)
+        #endif
     }
 
     var body: some Scene {

@@ -10,6 +10,7 @@ struct PhotoAssetImage: View {
     var contentMode: ContentMode = .fit
 
     @State private var image: PlatformImage?
+    @State private var loaded: String?
 
     var body: some View {
         Group {
@@ -23,9 +24,13 @@ struct PhotoAssetImage: View {
                     .overlay(ProgressView().controlSize(.small))
             }
         }
-        .task(id: asset.localIdentifier) {
-            image = nil
-            image = await PhotoLibraryService.shared.requestImage(for: asset, targetSize: targetSize)
+        .task(id: "\(asset.localIdentifier) \(targetSize.width)x\(targetSize.height)") {
+            // A new size of the same photo: the old one stays up until it's here.
+            if loaded != asset.localIdentifier { image = nil }
+            loaded = asset.localIdentifier
+            if let sharper = await PhotoLibraryService.shared.requestImage(for: asset, targetSize: targetSize) {
+                image = sharper
+            }
         }
     }
 }

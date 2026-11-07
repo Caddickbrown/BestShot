@@ -1,10 +1,10 @@
 import SwiftUI
 import Photos
 
-/// The active triage screen. Presents a focus card (swipe Keep/Delete, buttons
-/// for Favourite/Skip/Undo) that you can **pinch out** to see the whole session
-/// gallery for context, then tap a tile to zoom back in. Finishing commits the
-/// batch deletion.
+/// The active triage screen. Presents a focus card (swipe Keep/Delete, icons for
+/// the rest) that you can spread two fingers on to look closer, or pinch together
+/// to see the whole session gallery, then tap a tile to go back in. Finishing
+/// commits the batch deletion.
 struct TriageView: View {
     @Bindable var session: TriageSession
     let onFinish: () -> Void
@@ -12,7 +12,6 @@ struct TriageView: View {
     let onLeave: () -> Void
 
     @State private var showGallery = false
-    @State private var pinch: CGFloat = 1
     @State private var showSummary = false
 
     var body: some View {
@@ -55,21 +54,11 @@ struct TriageView: View {
                 asset: asset,
                 isFavourited: session.isFavourited(asset),
                 onKeep: { withAnimation(.spring(response: 0.3)) { session.keep() } },
-                onDelete: { withAnimation(.spring(response: 0.3)) { session.delete() } }
+                onDelete: { withAnimation(.spring(response: 0.3)) { session.delete() } },
+                onGrid: { withAnimation(.spring(response: 0.35)) { showGallery = true } }
             )
             .id(asset.localIdentifier)
             .padding(12)
-            .scaleEffect(pinch)
-            .gesture(
-                MagnificationGesture()
-                    .onChanged { pinch = min(1, $0) }
-                    .onEnded { value in
-                        if value < 0.75 {
-                            withAnimation(.spring(response: 0.35)) { showGallery = true }
-                        }
-                        withAnimation(.spring(response: 0.3)) { pinch = 1 }
-                    }
-            )
             .transition(.opacity)
         } else {
             ContentUnavailableView("All done", systemImage: "checkmark.circle")
@@ -81,7 +70,8 @@ struct TriageView: View {
 
     private var header: some View {
         HStack(spacing: 16) {
-            Button { onLeave() } label: { Image(systemName: "xmark") }
+            Button { onLeave() } label: { Image(systemName: "chevron.left") }
+                .accessibilityLabel("Leave Triage")
 
             VStack(spacing: 4) {
                 GeometryReader { geo in
@@ -92,9 +82,9 @@ struct TriageView: View {
                 }
                 .frame(height: 2)
                 HStack(spacing: 12) {
-                    tally("✓ \(session.keptCount)", Theme.viewfinder.ink)
-                    tally("✕ \(session.deleteCount)", Theme.viewfinder.accent)
-                    tally("♥ \(session.favouriteCount)", Theme.viewfinder.muted)
+                    tally(.keep, session.keptCount, Theme.viewfinder.ink)
+                    tally(.bin, session.deleteCount, Theme.viewfinder.accent)
+                    tally(.favourite, session.favouriteCount, Theme.viewfinder.muted)
                     Spacer()
                     Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
                         .font(.mono(11))
@@ -107,9 +97,11 @@ struct TriageView: View {
             } label: {
                 Image(systemName: showGallery ? "rectangle.portrait" : "square.grid.2x2")
             }
+            .accessibilityLabel(showGallery ? "Back to the photo" : "See the whole set")
 
-            Button("Done") { showSummary = true }
-                .buttonStyle(.viewfinderText)
+            Button { showSummary = true } label: { Image(systemName: TriageControl.done.symbol) }
+                .accessibilityLabel(TriageControl.done.title)
+                .help(TriageControl.done.title)
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
@@ -118,42 +110,60 @@ struct TriageView: View {
         .overlay(alignment: .bottom) { HairlineRule(palette: Theme.viewfinder) }
     }
 
-    private func tally(_ text: String, _ color: Color) -> some View {
-        Text(text)
-            .font(.mono(12))
-            .foregroundStyle(color)
+    private func tally(_ control: TriageControl, _ count: Int, _ color: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: control.symbol).font(.system(size: 10, weight: .semibold))
+            Text("\(count)").font(.mono(12))
+        }
+        .foregroundStyle(color)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(control.title): \(count)")
     }
 
     // MARK: - Controls
 
     private var controls: some View {
-        HStack(spacing: 10) {
-            Button("← Bin") {
-                withAnimation(.spring(response: 0.3)) { session.delete() }
+        let favourite = session.current.map(session.isFavourited) == true
+        return HStack(spacing: 0) {
+            ForEach(TriageControl.bar, id: \.self) { control in
+                Button { run(control) } label: {
+                    icon(control, isOn: control == .favourite && favourite)
+                }
+                .buttonStyle(.plain)
+                .disabled(control == .undo && !session.canUndo)
+                .accessibilityLabel(control.title(isOn: favourite))
+                .help(control.title(isOn: favourite))
             }
-            .buttonStyle(.viewfinderText)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 44)
-            .overlay(Capsule().stroke(Theme.viewfinder.rule, lineWidth: 1))
-            Spacer(minLength: 0)
-            Button("Undo") { session.undo() }
-                .buttonStyle(.viewfinderText)
-                .disabled(!session.canUndo)
-            Button("Skip") { session.skip() }
-                .buttonStyle(.viewfinderText)
-            Button(session.current.map(session.isFavourited) == true ? "♥ Fav" : "♡ Fav") { session.toggleFavourite() }
-                .buttonStyle(.viewfinderText)
-            Spacer(minLength: 0)
-            Button("Keep →") {
-                withAnimation(.spring(response: 0.3)) { session.keep() }
-            }
-            .buttonStyle(.viewfinderPill)
-            .frame(minHeight: 44)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(Color.black)
         .overlay(alignment: .top) { HairlineRule(palette: Theme.viewfinder) }
+    }
+
+    /// Keep is the one filled: it's what you'll press most.
+    private func icon(_ control: TriageControl, isOn: Bool) -> some View {
+        let inked = control == .keep
+        return Image(systemName: control.symbol(isOn: isOn))
+            .font(.system(size: 21, weight: .medium))
+            .foregroundStyle(inked ? Theme.viewfinder.accentInk
+                             : control == .bin || isOn ? Theme.viewfinder.accent : Theme.viewfinder.ink)
+            .opacity(control == .undo && !session.canUndo ? 0.35 : 1)
+            .frame(width: 52, height: 52)
+            .background(inked ? Theme.viewfinder.ink : .clear, in: Circle())
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+    }
+
+    private func run(_ control: TriageControl) {
+        switch control {
+        case .bin: withAnimation(.spring(response: 0.3)) { session.delete() }
+        case .keep: withAnimation(.spring(response: 0.3)) { session.keep() }
+        case .undo: session.undo()
+        case .skip: session.skip()
+        case .favourite: session.toggleFavourite()
+        case .done: showSummary = true
+        }
     }
 }

@@ -72,12 +72,13 @@ final class PhotoLibraryService: @unchecked Sendable {
         return assets
     }
 
-    /// User-visible albums (top-level, non-smart), for the organise picker.
+    /// User-visible albums (top-level, non-smart), for the organise picker. One
+    /// per name: the fullest stands for the others, which stay in Photos untouched.
     func userAlbums() -> [PHAssetCollection] {
         let result = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
         var albums: [PHAssetCollection] = []
         result.enumerateObjects { collection, _, _ in albums.append(collection) }
-        return albums.sorted { ($0.localizedTitle ?? "") .localizedStandardCompare($1.localizedTitle ?? "") == .orderedAscending }
+        return AlbumList.unique(albums, title: \.localizedTitle, count: \.estimatedAssetCount)
     }
 
     /// Count of assets in a collection (for album chips).

@@ -47,9 +47,15 @@ final class OrganiseSession {
     }
 
     /// Create a new album, add the asset, and make it available for later photos.
+    /// A name already in use files into that album rather than making its twin.
     func createAlbumAndAdd(name: String, asset: PHAsset) async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let album = await library.createAlbum(named: trimmed) else { return }
+        guard !trimmed.isEmpty else { return }
+        if let same = AlbumList.existing(named: trimmed, in: albums, title: \.localizedTitle) {
+            await add(asset, to: same)
+            return
+        }
+        guard let album = await library.createAlbum(named: trimmed) else { return }
         albums.append(album)
         albums.sort { ($0.localizedTitle ?? "").localizedStandardCompare($1.localizedTitle ?? "") == .orderedAscending }
         await add(asset, to: album)

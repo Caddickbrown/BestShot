@@ -343,8 +343,15 @@ private struct EscapingFieldRepresentable: UIViewRepresentable {
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // One line tall, always: a wrapped UIKit field otherwise takes every point offered.
+        field.setContentHuggingPriority(.required, for: .vertical)
+        field.setContentCompressionResistancePriority(.required, for: .vertical)
         if autofocus { DispatchQueue.main.async { field.becomeFirstResponder() } }
         return field
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView field: EscapingTextField, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? field.intrinsicContentSize.width, height: field.intrinsicContentSize.height)
     }
 
     func updateUIView(_ field: EscapingTextField, context: Context) {

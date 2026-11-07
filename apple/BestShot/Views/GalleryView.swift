@@ -44,15 +44,7 @@ struct GalleryView: View {
     @State private var showingClearConfirm = false
 
     private var displayedItems: [MediaItem] {
-        var items = project.sortedItems(by: sort, filter: filter)
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if !q.isEmpty {
-            items = items.filter { item in
-                item.filename.lowercased().contains(q) ||
-                item.tags.contains { $0.lowercased().contains(q) }
-            }
-        }
-        return items
+        project.sortedItems(by: sort, filter: filter).filter { MediaSearch.matches(searchText, item: $0) }
     }
 
     private var canReorder: Bool {
@@ -61,12 +53,12 @@ struct GalleryView: View {
 
     var body: some View {
         content
-            .lightTableList()
+            .tableSurfaceList()
             .navigationTitle(project.name)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .mediaSearch(text: $searchText, prompt: "Search filename or tags")
+            .mediaSearch(text: $searchText, prompt: "Search names, tags or comments")
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) {
                 if selectionMode {
@@ -250,12 +242,15 @@ struct GalleryView: View {
                 Picker("Filter", selection: $filter) {
                     ForEach(MediaFilter.allCases) { Text($0.title).tag($0) }
                 }
+                .pickerStyle(.menu)
                 Picker("Sort", selection: $sort) {
                     ForEach(SortOption.allCases) { Text($0.title).tag($0) }
                 }
+                .pickerStyle(.menu)
                 Picker("Grid", selection: $gridSize) {
                     ForEach(GridSize.allCases) { Text($0.label).tag($0) }
                 }
+                .pickerStyle(.menu)
                 Divider()
                 Button { showingFileImporter = true } label: {
                     Label("Import from Files", systemImage: "folder")

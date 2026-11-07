@@ -76,10 +76,10 @@ extension View {
 
     /// The search field. On iOS not .searchable, whose field keeps Esc for itself.
     @ViewBuilder
-    func mediaSearch(text: Binding<String>, prompt: String) -> some View {
+    func mediaSearch(text: Binding<String>, prompt: String, shown: Bool = true) -> some View {
         #if os(iOS)
         safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 6) {
+            if shown { HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 EscapingField(placeholder: prompt, text: text)
                 if !text.wrappedValue.isEmpty {
@@ -96,10 +96,10 @@ extension View {
             .padding(.vertical, 8)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
-            .padding(.vertical, 6)
+            .padding(.vertical, 6) }
         }
         #else
-        searchable(text: text, prompt: prompt)
+        if shown { searchable(text: text, prompt: prompt) } else { self }
         #endif
     }
 }

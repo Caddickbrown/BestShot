@@ -12,22 +12,19 @@ struct AllMediaView: View {
     @State private var viewerItem: MediaItem?
 
     private var displayed: [MediaItem] {
-        var items = allItems.filter { filter.matches($0) }
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if !q.isEmpty {
-            items = items.filter {
-                $0.filename.lowercased().contains(q) ||
-                $0.tags.contains { $0.lowercased().contains(q) }
-            }
-        }
-        return items.sorted { $0.importedAt > $1.importedAt }
+        allItems
+            .filter { filter.matches($0) && MediaSearch.matches(searchText, item: $0) }
+            .sorted { $0.importedAt > $1.importedAt }
     }
 
     var body: some View {
         Group {
             if allItems.isEmpty {
-                ContentUnavailableView("No Media", systemImage: "square.grid.2x2",
-                                       description: Text("Create a project and import media to see it here."))
+                // Nothing to search, so no search box promising otherwise.
+                ContentUnavailableView("Nothing here yet", systemImage: "square.grid.2x2",
+                                       description: Text("All Media shows the photos and videos imported into projects. Your Photos library is in Triage and Organise."))
+            } else if displayed.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             } else {
                 ScrollView {
                     LazyVGrid(
@@ -51,21 +48,23 @@ struct AllMediaView: View {
                 }
             }
         }
-        .lightTableList()
+        .tableSurfaceList()
         .navigationTitle("All Media")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .mediaSearch(text: $searchText, prompt: "Search filename or tags")
+        .mediaSearch(text: $searchText, prompt: "Search names, tags or projects", shown: !allItems.isEmpty)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Picker("Filter", selection: $filter) {
                         ForEach(MediaFilter.allCases) { Text($0.title).tag($0) }
                     }
+                    .pickerStyle(.menu)
                     Picker("Grid", selection: $gridSize) {
                         ForEach(GridSize.allCases) { Text($0.label).tag($0) }
                     }
+                    .pickerStyle(.menu)
                 } label: {
                     Label("Options", systemImage: "ellipsis.circle")
                 }

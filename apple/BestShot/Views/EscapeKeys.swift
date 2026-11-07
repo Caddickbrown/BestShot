@@ -18,7 +18,8 @@ import UIKit
 // A focused field is first responder, the catcher (its sibling) drops out of the
 // chain, and a SwiftUI TextField, TextEditor or .searchable keeps Esc for itself.
 // So every field is an `EscapingField` or `EscapingEditor`, which claim Esc ahead
-// of the text system: it lets go of the field and keeps the text.
+// of the text system: it lets go of the field and keeps the text. ⌘. goes every
+// way Esc does, for keyboards with no Esc: nothing in iOS makes it Esc.
 //
 // With a monitor connected the catcher also takes every other key for
 // `MonitorDesk`, the only one holding first responder here, so there's one catcher,
@@ -202,9 +203,11 @@ final class EscapeCatcherController: UIViewController {
     override var canBecomeFirstResponder: Bool { true }
 
     override var keyCommands: [UIKeyCommand]? {
-        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapePressed))
-        escape.wantsPriorityOverSystemBehavior = true
-        guard monitorDesk != nil else { return [escape] }
+        let escape = EscapeChord.escape.keyCommand(action: #selector(escapePressed))
+        // The monitor's own chords include ⌘.
+        guard monitorDesk != nil else {
+            return [escape, EscapeChord.commandPeriod.keyCommand(action: #selector(escapePressed))]
+        }
         return [escape] + MonitorChords.commands(action: #selector(chord(_:)))
     }
 
@@ -308,6 +311,18 @@ extension UIResponder {
 
 // MARK: - UIKit fields
 
+extension EscapeChord {
+    /// With priority over the text system, and a held key is one press: it mustn't
+    /// run on through what's behind.
+    func keyCommand(action: Selector) -> UIKeyCommand {
+        let c = UIKeyCommand(input: self == .escape ? UIKeyCommand.inputEscape : input,
+                             modifierFlags: command ? .command : [], action: action)
+        c.wantsPriorityOverSystemBehavior = true
+        c.repeatBehavior = .nonRepeatable
+        return c
+    }
+}
+
 private struct EscapingFieldRepresentable: UIViewRepresentable {
     let placeholder: String
     @Binding var text: String
@@ -351,12 +366,11 @@ private struct EscapingFieldRepresentable: UIViewRepresentable {
     }
 }
 
-/// Declares Esc on the field itself, ahead of the text system.
+/// Declares Esc and ⌘. on the field itself, ahead of the text system.
 final class EscapingTextField: UITextField {
     override var keyCommands: [UIKeyCommand]? {
-        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(letGo))
-        escape.wantsPriorityOverSystemBehavior = true
-        return (super.keyCommands ?? []) + [escape]
+        (super.keyCommands ?? []) + EscapeChord.declared(composing: markedTextRange != nil)
+            .map { $0.keyCommand(action: #selector(letGo)) }
     }
 
     @objc private func letGo() { resignFirstResponder() }
@@ -392,9 +406,8 @@ private struct EscapingEditorRepresentable: UIViewRepresentable {
 
 final class EscapingTextView: UITextView {
     override var keyCommands: [UIKeyCommand]? {
-        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(letGo))
-        escape.wantsPriorityOverSystemBehavior = true
-        return (super.keyCommands ?? []) + [escape]
+        (super.keyCommands ?? []) + EscapeChord.declared(composing: markedTextRange != nil)
+            .map { $0.keyCommand(action: #selector(letGo)) }
     }
 
     @objc private func letGo() { resignFirstResponder() }

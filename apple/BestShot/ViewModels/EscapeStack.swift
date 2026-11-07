@@ -41,3 +41,19 @@ final class EscapeStack {
         if let top = layers.last { top.close() } else { base() }
     }
 }
+
+/// The keys that mean Esc. iOS's text system knows the Esc key alone and never
+/// turns ⌘. into it, so ⌘. works only where it's declared, and an iPad's keyboard
+/// often has no Esc. From MiniOffice.
+struct EscapeChord: Equatable {
+    let input: String
+    let command: Bool
+
+    static let escape = EscapeChord(input: "\u{1B}", command: false)
+    static let commandPeriod = EscapeChord(input: ".", command: true)
+
+    /// Mid-composition both belong to the input method.
+    static func declared(composing: Bool) -> [EscapeChord] {
+        composing ? [] : [escape, commandPeriod]
+    }
+}

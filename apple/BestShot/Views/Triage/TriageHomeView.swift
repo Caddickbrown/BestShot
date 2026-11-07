@@ -40,7 +40,7 @@ struct TriageHomeView: View {
                 startScreen
             }
         }
-        .lightTableList()
+        .tableSurfaceList()
         .navigationTitle("Triage")
         .onChange(of: markedDeleted, initial: true) { findWaitingDeletes() }
         #if os(iOS)
@@ -71,46 +71,13 @@ struct TriageHomeView: View {
                     Button("Keep Them") { releaseWaitingDeletes() }
                 }
             }
-            Section("Order") {
+            SourceSection(source: $source, albums: albums)
+
+            Section {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { o in
                         Label(o.title, systemImage: o.systemImage).tag(o)
                     }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            }
-
-            Section("Source") {
-                Picker("Source", selection: $source) {
-                    Text("All Photos").tag(TriageSourceOption.allPhotos)
-                    Text("Screenshots").tag(TriageSourceOption.screenshots)
-                    ForEach(albums, id: \.localIdentifier) { album in
-                        Text(album.localizedTitle ?? "Album").tag(TriageSourceOption.album(album.localIdentifier))
-                    }
-                }
-            }
-
-            Section {
-                if let session {
-                    Button {
-                        paused = false
-                    } label: {
-                        Label("Resume Triage", systemImage: "play.fill")
-                    }
-                    Text("\(session.deleteCount) marked to delete. Resume, then Done, to delete them.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                } else {
-                    Button {
-                        start()
-                    } label: {
-                        if isLoading {
-                            ProgressView()
-                        } else {
-                            Label("Start Triage", systemImage: "play.fill")
-                        }
-                    }
-                    .disabled(isLoading)
                 }
             }
 
@@ -119,11 +86,44 @@ struct TriageHomeView: View {
             }
 
             Section {
-                Text("Swipe right to keep, left to delete. Deletions are batched and confirmed once at the end. Pinch out to see the whole set.")
+                Text("Swipe right to keep, left to delete. Deletions are batched and confirmed once at the end. Spread two fingers to zoom in; pinch them together to see the whole set.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { startBar }
         .task { albums = PhotoLibraryService.shared.userAlbums() }
+    }
+
+    /// Always on screen, however long the list above it gets.
+    private var startBar: some View {
+        VStack(spacing: 6) {
+            if let session {
+                Button {
+                    paused = false
+                } label: {
+                    Label("Resume Triage", systemImage: "play.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.pill)
+                Text("\(session.deleteCount) marked to delete. Resume, then finish, to delete them.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            } else {
+                Button {
+                    start()
+                } label: {
+                    Group {
+                        if isLoading { ProgressView().tint(Theme.table.accentInk) }
+                        else { Label("Start Triage", systemImage: "play.fill") }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.pill)
+                .disabled(isLoading)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(Theme.table.background)
+        .overlay(alignment: .top) { HairlineRule() }
     }
 
     /// The ids marked for deletion, for noticing when that set changes.
@@ -218,9 +218,9 @@ struct TriageHomeView: View {
         switch source {
         case .allPhotos:
             return nil
-        case .screenshots:
+        case .smart(let smart):
             return PHAssetCollection.fetchAssetCollections(
-                with: .smartAlbum, subtype: .smartAlbumScreenshots, options: nil
+                with: .smartAlbum, subtype: smart.subtype, options: nil
             ).firstObject
         case .album(let id):
             return PHAssetCollection.fetchAssetCollections(
@@ -228,12 +228,4 @@ struct TriageHomeView: View {
             ).firstObject
         }
     }
-}
-
-/// Selectable triage source. Albums are referenced by local identifier so the
-/// value stays `Hashable` for the picker.
-enum TriageSourceOption: Hashable {
-    case allPhotos
-    case screenshots
-    case album(String)
 }

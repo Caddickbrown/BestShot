@@ -77,7 +77,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     func toggleFavourite() { triage.session?.toggleFavourite() }
 
     var sources: [(option: TriageSourceOption, title: String)] {
-        [(.allPhotos, "All Photos"), (.screenshots, "Screenshots")]
+        TriageSourceOption.quick.map { ($0, $0.title) }
             + albums.map { (.album($0.localIdentifier), $0.localizedTitle ?? "Album") }
     }
 

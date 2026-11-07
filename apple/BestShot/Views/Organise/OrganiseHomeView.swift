@@ -24,7 +24,7 @@ struct OrganiseHomeView: View {
                 startScreen
             }
         }
-        .lightTableList()
+        .tableSurfaceList()
         .navigationTitle("Organise")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -55,34 +55,32 @@ struct OrganiseHomeView: View {
 
     private var configForm: some View {
         Form {
-            Section("Order") {
+            SourceSection(source: $source, albums: albums)
+            Section {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            }
-            Section("Source") {
-                Picker("Source", selection: $source) {
-                    Text("All Photos").tag(TriageSourceOption.allPhotos)
-                    Text("Screenshots").tag(TriageSourceOption.screenshots)
-                    ForEach(albums, id: \.localIdentifier) { album in
-                        Text(album.localizedTitle ?? "Album").tag(TriageSourceOption.album(album.localIdentifier))
-                    }
-                }
-            }
-            Section {
-                Button {
-                    start()
-                } label: {
-                    if isLoading { ProgressView() }
-                    else { Label("Start Organising", systemImage: "play.fill") }
-                }
-                .disabled(isLoading)
             }
             if let emptyMessage {
                 Section { Text(emptyMessage).foregroundStyle(.secondary) }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button {
+                start()
+            } label: {
+                Group {
+                    if isLoading { ProgressView().tint(Theme.table.accentInk) }
+                    else { Label("Start Organising", systemImage: "play.fill") }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.pill)
+            .disabled(isLoading)
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(Theme.table.background)
+            .overlay(alignment: .top) { HairlineRule() }
         }
         .task { albums = PhotoLibraryService.shared.userAlbums() }
     }

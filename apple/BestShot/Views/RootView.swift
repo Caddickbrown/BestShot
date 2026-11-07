@@ -12,7 +12,6 @@ struct RootView: View {
     @State private var selection: SidebarSelection? = .triage
     @State private var showingNewProject = false
     @State private var showingSettings = false
-    @State private var showingShortcuts = false
     @State private var escapes = EscapeStack()
     /// On a phone, which column is showing. Triage, the detail, is home.
     @State private var compactColumn = NavigationSplitViewColumn.detail
@@ -47,11 +46,21 @@ struct RootView: View {
                         .tag(SidebarSelection.folders)
                 }
                 #endif
-                Section {
+                Section("Library") {
                     Label("All Media", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.allMedia)
                 }
                 Section("Projects") {
+                    if projects.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Nothing here yet. A project is a set of photos you import to rank together, apart from your library.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Button("New Project") { showingNewProject = true }
+                                .font(.footnote)
+                        }
+                        .padding(.vertical, 2)
+                    }
                     ForEach(projects) { project in
                         ProjectRow(project: project)
                             .tag(SidebarSelection.project(project.uuid))
@@ -67,23 +76,18 @@ struct RootView: View {
             }
             .navigationTitle("BestShot")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                // Both in plain sight. A secondary item folds into the bar's own
+                // overflow button, which put one More menu inside another.
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
                     Button {
                         showingNewProject = true
                     } label: {
                         Label("New Project", systemImage: "plus")
-                    }
-                }
-                ToolbarItem(placement: .secondaryAction) {
-                    Menu {
-                        Button { showingSettings = true } label: {
-                            Label("Settings", systemImage: "gearshape")
-                        }
-                        Button { showingShortcuts = true } label: {
-                            Label("Keyboard Shortcuts", systemImage: "keyboard")
-                        }
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
                     }
                 }
             }
@@ -97,7 +101,6 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
-        .sheet(isPresented: $showingShortcuts) { ShortcutsHelpView() }
         .escapeRoot(escapes) {
             selection = .triage
             compactColumn = .detail

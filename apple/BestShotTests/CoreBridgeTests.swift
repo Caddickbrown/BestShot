@@ -18,6 +18,17 @@ final class CoreBridgeTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
+    func testALabelsTintCrossesTheBridgeAndSurvivesASave() throws {
+        let path = root.appendingPathComponent("labels.json").path
+        var settings = loadLabelSettings(path: path).settings
+        settings = try tintLabel(settings: settings, colour: .blue, hex: "#12ab9f")
+        try saveLabelSettings(path: path, settings: settings)
+        XCTAssertEqual(loadLabelSettings(path: path).settings.tints[.blue], "#12AB9F")
+        settings = try tintLabel(settings: settings, colour: .blue, hex: nil)
+        XCTAssertNil(settings.tints[.blue])
+        XCTAssertThrowsError(try tintLabel(settings: settings, colour: .blue, hex: "blue"))
+    }
+
     private func touch(_ rel: String) throws {
         let url = root.appendingPathComponent(rel)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

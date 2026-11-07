@@ -45,7 +45,7 @@ struct BridgeImportView: View {
         }
         .padding(28)
         .frame(width: 600, height: 560)
-        .lightTable()
+        .tableSurface()
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { run(url) }
         }

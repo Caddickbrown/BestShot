@@ -7,11 +7,22 @@ struct BestShotApp: App {
     /// Media bytes and thumbnails live on disk (see `MediaStore`); the store
     /// only holds lightweight metadata + relative file paths.
     let container: ModelContainer
+    @AppStorage(Appearance.key) private var appearance = Appearance.fallback
+
+    /// The tests run inside this app, and must never open a real library.
+    private static var underTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
 
     init() {
         BrandFonts.register()
         do {
-            container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self, RankedOrder.self)
+            if Self.underTest {
+                container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self, RankedOrder.self,
+                                               configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            } else {
+                container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self, RankedOrder.self)
+            }
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
@@ -23,8 +34,8 @@ struct BestShotApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                // Light table by default; judging screens switch to the viewfinder.
-                .preferredColorScheme(.light)
+                // The table follows this; judging screens are always the viewfinder.
+                .preferredColorScheme(appearance.scheme)
                 .tint(Theme.accent)
         }
         .modelContainer(container)

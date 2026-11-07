@@ -143,7 +143,7 @@ struct FolderHomeView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .lightTable()
+        .tableSurface()
         .overlay {
             if dropTargeted {
                 Rectangle().strokeBorder(Theme.table.accent, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))

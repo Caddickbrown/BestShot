@@ -32,7 +32,7 @@ struct RankBoardView: View {
                 }
             }
         }
-        .lightTable()
+        .tableSurface()
         #if os(iOS)
         .fullScreenCover(item: $board.compare) { run in
             CompareRunView(board: board, run: run)

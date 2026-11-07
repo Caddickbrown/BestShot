@@ -41,5 +41,12 @@ final class LabelStore {
         revision += 1
     }
 
+    /// A change to how labels look. Nothing in a file changes, so open folders
+    /// have nothing to pick up, and any names being typed stay.
+    func saveLook(_ new: LabelSettings) throws {
+        try saveLabelSettings(path: Self.fileURL.path, settings: new)
+        settings = new
+    }
+
     func name(_ colour: LabelColour) -> String { settings.names[colour] ?? colour.title }
 }

@@ -25,6 +25,8 @@ struct MonitorMetrics {
 struct MonitorRoot: View {
     let desk: MonitorDesk
     @Environment(\.displayScale) private var pixels
+    @Environment(\.colorScheme) private var system
+    @AppStorage(Appearance.key) private var appearance = Appearance.fallback
 
     var body: some View {
         GeometryReader { geo in
@@ -49,7 +51,7 @@ struct MonitorRoot: View {
             .onChange(of: metrics.photoEdge, initial: true) { _, edge in desk.photoEdge = edge }
         }
         .ignoresSafeArea()
-        .environment(\.colorScheme, desk.isLocked || desk.isPaused || desk.isJudging ? .dark : .light)
+        .environment(\.colorScheme, desk.isLocked || desk.isPaused || desk.isJudging ? .dark : appearance.scheme ?? system)
     }
 
     private func backdrop(_ palette: Theme.Palette) -> Color {

@@ -354,6 +354,8 @@ impl From<LabelColour> for labels::Colour {
 pub struct LabelSettings {
     pub names: HashMap<LabelColour, String>,
     pub aliases: HashMap<String, Option<LabelColour>>,
+    /// How a label looks on screen, `#RRGGBB`. A colour not here keeps its own look.
+    pub tints: HashMap<LabelColour, String>,
 }
 
 impl From<labels::LabelConfig> for LabelSettings {
@@ -361,6 +363,7 @@ impl From<labels::LabelConfig> for LabelSettings {
         Self {
             names: c.names.into_iter().map(|(k, v)| (k.into(), v)).collect(),
             aliases: c.aliases.into_iter().map(|(k, v)| (k, v.map(Into::into))).collect(),
+            tints: c.tints.into_iter().map(|(k, v)| (k.into(), v)).collect(),
         }
     }
 }
@@ -370,6 +373,7 @@ impl From<LabelSettings> for labels::LabelConfig {
         Self {
             names: s.names.into_iter().map(|(k, v)| (k.into(), v)).collect(),
             aliases: s.aliases.into_iter().map(|(k, v)| (k, v.map(Into::into))).collect(),
+            tints: s.tints.into_iter().map(|(k, v)| (k.into(), v)).collect(),
             ..Default::default()
         }
     }
@@ -399,6 +403,14 @@ pub fn save_label_settings(path: String, settings: LabelSettings) -> Result<(), 
 pub fn rename_label(settings: LabelSettings, colour: LabelColour, name: String) -> Result<LabelSettings, CoreError> {
     let mut config: labels::LabelConfig = settings.into();
     config.rename(colour.into(), &name).map_err(|message| CoreError::Io { message })?;
+    Ok(config.into())
+}
+
+/// Sets how a label looks, or puts its own look back with `None`.
+#[uniffi::export]
+pub fn tint_label(settings: LabelSettings, colour: LabelColour, hex: Option<String>) -> Result<LabelSettings, CoreError> {
+    let mut config: labels::LabelConfig = settings.into();
+    config.set_tint(colour.into(), hex.as_deref()).map_err(|message| CoreError::Io { message })?;
     Ok(config.into())
 }
 

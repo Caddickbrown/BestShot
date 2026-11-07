@@ -67,6 +67,9 @@ pub struct LabelConfig {
     /// Label text found in files (lowercased) -> colour. A `null` colour means
     /// "not a colour", which also overrides `names` and the colour words.
     pub aliases: BTreeMap<String, Option<Colour>>,
+    /// How a label looks on screen, `#RRGGBB`. A colour not here keeps its own
+    /// look. Only the look: files, names and what green and red decide don't change.
+    pub tints: BTreeMap<Colour, String>,
 }
 
 impl Default for LabelConfig {
@@ -75,6 +78,7 @@ impl Default for LabelConfig {
             version: 1,
             names: Colour::ALL.iter().map(|c| (*c, c.word().to_string())).collect(),
             aliases: BTreeMap::new(),
+            tints: BTreeMap::new(),
         }
     }
 }
@@ -137,6 +141,20 @@ impl LabelConfig {
         Ok(())
     }
 
+    /// Sets how a label looks, or puts its own look back with `None`.
+    pub fn set_tint(&mut self, colour: Colour, hex: Option<&str>) -> Result<(), String> {
+        let Some(hex) = hex else {
+            self.tints.remove(&colour);
+            return Ok(());
+        };
+        let digits = hex.trim().trim_start_matches('#');
+        if digits.len() != 6 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(format!("“{hex}” isn't a colour. Use six hex digits, such as #2FA354."));
+        }
+        self.tints.insert(colour, format!("#{}", digits.to_ascii_uppercase()));
+        Ok(())
+    }
+
     pub fn map(&mut self, text: &str, colour: Option<Colour>) {
         self.aliases.insert(key(text), colour);
     }
@@ -187,6 +205,47 @@ pub fn save(path: &Path, config: &LabelConfig) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tint_is_saved_tidied_and_can_be_put_back() {
+        let mut config = LabelConfig::default();
+        config.set_tint(Colour::Blue, Some(" 12ab9f ")).unwrap();
+        assert_eq!(config.tints[&Colour::Blue], "#12AB9F");
+        config.set_tint(Colour::Blue, Some("#0000FF")).unwrap();
+        assert_eq!(config.tints[&Colour::Blue], "#0000FF");
+        config.set_tint(Colour::Blue, None).unwrap();
+        assert!(config.tints.is_empty());
+    }
+
+    #[test]
+    fn a_tint_that_isnt_a_colour_is_refused_and_changes_nothing() {
+        let mut config = LabelConfig::default();
+        config.set_tint(Colour::Red, Some("#112233")).unwrap();
+        for bad in ["", "#12", "#GGGGGG", "#1122334", "blue"] {
+            assert!(config.set_tint(Colour::Red, Some(bad)).is_err(), "{bad}");
+        }
+        assert_eq!(config.tints[&Colour::Red], "#112233");
+    }
+
+    #[test]
+    fn a_tint_changes_the_look_and_never_what_a_label_means() {
+        let mut config = LabelConfig::default();
+        config.set_tint(Colour::Green, Some("#FF00FF")).unwrap();
+        assert_eq!(config.colour_of("Green"), Some(Colour::Green));
+        assert_eq!(Colour::Green.decision(), Some(Decision::Keep));
+        assert_eq!(config.name(Colour::Green), "Green");
+    }
+
+    #[test]
+    fn a_file_from_before_tints_still_loads_with_its_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("labels.json");
+        fs::write(&path, r#"{"version":1,"names":{"red":"Bin"},"aliases":{}}"#).unwrap();
+        let (config, warning) = load(&path);
+        assert_eq!(warning, None);
+        assert_eq!(config.name(Colour::Red), "Bin");
+        assert!(config.tints.is_empty());
+    }
 
     #[test]
     fn colour_words_work_but_bridge_names_wait_for_a_mapping() {

@@ -363,7 +363,7 @@ struct FolderCullView: View {
                 }
             }
         }
-        .lightTable()
+        .tableSurface()
     }
 
     private struct GridTile: Identifiable { let id: Int }
@@ -462,7 +462,7 @@ private struct FolderFinishView: View {
         }
         .padding(28)
         .frame(width: 520)
-        .lightTable()
+        .tableSurface()
     }
 
     @ViewBuilder
@@ -531,7 +531,7 @@ private struct FolderProblemsView: View {
         }
         .padding(28)
         .frame(width: 520)
-        .lightTable()
+        .tableSurface()
     }
 }
 #endif

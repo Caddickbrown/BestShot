@@ -19,9 +19,14 @@ struct PhotosRankView: View {
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .lightTable()
+                    .tableSurface()
             }
         }
+        // The board has its own heading. Left to the default the bar holds a large
+        // title's empty space above it, pushing the whole sheet down.
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .task { await load() }
         .alert("Album", isPresented: Binding(get: { albumMessage != nil }, set: { if !$0 { albumMessage = nil } })) {
             Button("OK") { albumMessage = nil }

@@ -37,11 +37,14 @@ struct TriageHomeView: View {
                     holder.leave()
                 }
             } else {
-                startScreen
+                // Its own heading, as Rank has: no title in the bar over it.
+                VStack(spacing: 0) {
+                    ScreenHeader(eyebrow: "Photos library", title: "Triage", status: status)
+                    startScreen
+                }
             }
         }
         .tableSurfaceList()
-        .navigationTitle("Triage")
         .onChange(of: markedDeleted, initial: true) { findWaitingDeletes() }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -49,6 +52,11 @@ struct TriageHomeView: View {
     }
 
     // MARK: - Start screen
+
+    private var status: String? {
+        guard let session else { return nil }
+        return session.deleteCount > 0 ? "Paused · \(session.deleteCount) to delete" : "Paused"
+    }
 
     @ViewBuilder
     private var startScreen: some View {
@@ -65,15 +73,17 @@ struct TriageHomeView: View {
     private var configForm: some View {
         Form {
             if !waitingDeletes.isEmpty && session == nil {
-                Section {
+                TableSection("Waiting") {
                     Text("\(waitingDeletes.count) photo\(waitingDeletes.count == 1 ? "" : "s") waiting to be deleted, from a session that ended early.")
                     Button("Delete Them", role: .destructive) { Task { await finishWaitingDeletes() } }
+                        .buttonStyle(TextButtonStyle(destructive: true))
                     Button("Keep Them") { releaseWaitingDeletes() }
+                        .buttonStyle(.text)
                 }
             }
             SourceSection(source: $source, albums: albums)
 
-            Section {
+            TableSection("Order") {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { o in
                         Label(o.title, systemImage: o.systemImage).tag(o)
@@ -82,21 +92,21 @@ struct TriageHomeView: View {
             }
 
             if let emptyMessage {
-                Section { Text(emptyMessage).foregroundStyle(.secondary) }
+                TableSection { Text(emptyMessage).foregroundStyle(Theme.table.muted) }
             }
 
-            Section {
-                Text("Swipe right to keep, left to delete. Deletions are batched and confirmed once at the end. Spread two fingers to zoom in; pinch them together to see the whole set.")
-                    .font(.footnote).foregroundStyle(.secondary)
+            TableSection {
+                FormNote("Swipe right to keep, left to delete. Deletions are batched and confirmed once at the end. Spread two fingers to zoom in; pinch them together to see the whole set.")
             }
         }
+        .tableForm()
         .safeAreaInset(edge: .bottom, spacing: 0) { startBar }
         .task { albums = PhotoLibraryService.shared.userAlbums() }
     }
 
     /// Always on screen, however long the list above it gets.
     private var startBar: some View {
-        VStack(spacing: 6) {
+        BottomBar {
             if let session {
                 Button {
                     paused = false
@@ -104,8 +114,7 @@ struct TriageHomeView: View {
                     Label("Resume Triage", systemImage: "play.fill").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.pill)
-                Text("\(session.deleteCount) marked to delete. Resume, then finish, to delete them.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                FormNote("\(session.deleteCount) marked to delete. Resume, then finish, to delete them.")
             } else {
                 Button {
                     start()
@@ -120,10 +129,6 @@ struct TriageHomeView: View {
                 .disabled(isLoading)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(Theme.table.background)
-        .overlay(alignment: .top) { HairlineRule() }
     }
 
     /// The ids marked for deletion, for noticing when that set changes.
@@ -152,26 +157,19 @@ struct TriageHomeView: View {
     }
 
     private var permissionPrompt: some View {
-        ContentUnavailableView {
-            Label("Access Your Photos", systemImage: "photo.stack")
-        } description: {
-            Text("BestShot needs access to your photo library to triage, favourite, and organise photos.")
-        } actions: {
+        EmptyState(title: "Access Your Photos",
+                   message: "BestShot needs access to your photo library to triage, favourite, and organise photos.") {
             Button("Allow Access") {
                 Task {
                     authStatus = await PhotoLibraryService.shared.requestAuthorization()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.pill)
         }
     }
 
     private var deniedPrompt: some View {
-        ContentUnavailableView {
-            Label("Photos Access Denied", systemImage: "lock")
-        } description: {
-            Text("Enable photo library access in Settings to use triage.")
-        }
+        EmptyState("Photos Access Denied", message: "Enable photo library access in Settings to use triage.")
     }
 
     // MARK: - Start a session

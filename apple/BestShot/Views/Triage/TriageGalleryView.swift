@@ -10,18 +10,18 @@ struct TriageGalleryView: View {
     /// Called when the user taps a tile to return to focus at that index.
     let onSelect: (Int) -> Void
 
-    private let columns = [GridItem(.adaptive(minimum: 90), spacing: 4)]
+    private let columns = [GridItem(.adaptive(minimum: 90), spacing: Theme.Space.gutter)]
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 4) {
+                LazyVGrid(columns: columns, spacing: Theme.Space.gutter) {
                     ForEach(Array(session.assets.enumerated()), id: \.element.localIdentifier) { idx, asset in
                         tile(asset, index: idx)
                             .id(idx)
                     }
                 }
-                .padding(4)
+                .padding(Theme.Space.gutter)
             }
             .onAppear { proxy.scrollTo(session.index, anchor: .center) }
         }
@@ -36,17 +36,20 @@ struct TriageGalleryView: View {
             .aspectRatio(1, contentMode: .fit)
             .clipped()
             .overlay { tint(for: decision) }
-            .overlay(alignment: .topTrailing) { decisionBadge(decision) }
+            .overlay { decisionMark(decision) }
             .overlay(alignment: .bottomLeading) {
                 if session.isFavourited(asset) {
                     Image(systemName: "heart.fill")
-                        .font(.caption2).foregroundStyle(.pink).padding(3)
+                        .font(.system(size: 10)).foregroundStyle(Theme.viewfinder.accent).padding(4)
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(index == session.index ? Theme.accent : .clear, lineWidth: 3)
+                Rectangle()
+                    .strokeBorder(index == session.index ? Theme.viewfinder.ink : .clear, lineWidth: 3)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(decision == .undecided ? "Not decided" : decision == .kept ? "Kept" : decision == .deleted ? "To delete" : "Skipped")
+            .accessibilityAddTraits(.isButton)
             .onTapGesture { onSelect(index) }
             .contextMenu {
                 Button { session.setDecision(.kept, for: asset) } label: { Label("Keep", systemImage: "checkmark") }
@@ -55,25 +58,24 @@ struct TriageGalleryView: View {
             }
     }
 
+    /// What's going dims, as on the light table; what's skipped dims less.
     @ViewBuilder
     private func tint(for decision: ReviewDecision) -> some View {
         switch decision {
-        case .deleted: Color.red.opacity(0.35)
-        case .kept: Color.green.opacity(0.20)
-        case .skipped: Color.black.opacity(0.35)
-        case .undecided: Color.clear
+        case .deleted: Color.black.opacity(0.5)
+        case .skipped: Color.black.opacity(0.3)
+        case .kept, .undecided: Color.clear
         }
     }
 
+    /// The grease-pencil marks every BestShot uses: a ring to keep, a cross to bin.
     @ViewBuilder
-    private func decisionBadge(_ decision: ReviewDecision) -> some View {
+    private func decisionMark(_ decision: ReviewDecision) -> some View {
         switch decision {
         case .deleted:
-            Image(systemName: "trash.fill").font(.caption2).foregroundStyle(.white)
-                .padding(3).background(Circle().fill(.red)).padding(3)
+            GreasePencilMark(shape: .cross, color: Theme.viewfinder.accent, lineWidth: 3).padding(10)
         case .kept:
-            Image(systemName: "checkmark").font(.caption2.bold()).foregroundStyle(.white)
-                .padding(3).background(Circle().fill(.green)).padding(3)
+            GreasePencilMark(shape: .circle, color: Theme.viewfinder.accent, lineWidth: 3).padding(8)
         default:
             EmptyView()
         }

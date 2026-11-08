@@ -102,7 +102,7 @@ struct TriageCardView: View {
     }
 
     private func animated(_ change: () -> Void) {
-        if reduceMotion { change() } else { withAnimation(.spring(response: 0.3), change) }
+        if reduceMotion { change() } else { withAnimation(Theme.Motion.snap, change) }
     }
 
     /// The icon of what letting go will do, fading in with the drag.

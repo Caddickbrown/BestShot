@@ -8,7 +8,7 @@ struct SourceSection: View {
     let albums: [PHAssetCollection]
 
     var body: some View {
-        Section("Go through") {
+        TableSection("Go through") {
             Picker("Source", selection: $source) {
                 ForEach(TriageSourceOption.quick, id: \.self) { option in
                     Label(option.title, systemImage: option.symbol).tag(option)

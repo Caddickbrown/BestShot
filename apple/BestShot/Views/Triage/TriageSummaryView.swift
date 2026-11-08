@@ -15,23 +15,23 @@ struct TriageSummaryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(Theme.accent)
+            VStack(spacing: Theme.Space.section) {
+                GreasePencilMark(shape: .circle, lineWidth: 3)
+                    .frame(width: 64, height: 64)
+                    .accessibilityHidden(true)
 
-                Text("Session summary").font(.title2.bold())
+                Text("Session summary").font(.sectionTitle)
 
-                HStack(spacing: 28) {
-                    stat("\(session.keptCount)", "Kept", .green)
-                    stat("\(session.deleteCount)", "To delete", .red)
-                    stat("\(session.favouriteCount)", "Favourited", .pink)
+                HStack(spacing: Theme.Space.tabs + 6) {
+                    stat("\(session.keptCount)", "Kept", Theme.table.ink)
+                    stat("\(session.deleteCount)", "To delete", Theme.table.accent)
+                    stat("\(session.favouriteCount)", "Favourited", Theme.table.muted)
                 }
 
                 if session.deleteCount > 0 {
                     Text("Deleting moves \(session.deleteCount) photo\(session.deleteCount == 1 ? "" : "s") to Recently Deleted (recoverable for 30 days).")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(.note)
+                        .foregroundStyle(Theme.table.muted)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
 
@@ -42,14 +42,14 @@ struct TriageSummaryView: View {
                               systemImage: "trash")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.pill)
                     .disabled(isDeleting)
                 } else {
                     Text("Nothing marked for deletion.")
-                        .foregroundStyle(.secondary)
+                        .font(.note)
+                        .foregroundStyle(Theme.table.muted)
                     Button("Finish") { onCommit(); dismiss() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.pill)
                 }
 
                 if session.keptCount > 1 {
@@ -64,11 +64,14 @@ struct TriageSummaryView: View {
 
                 if !session.isComplete {
                     Button("Keep triaging") { onKeepGoing(); dismiss() }
+                        .buttonStyle(.text)
                 }
 
-                if isDeleting { ProgressView() }
+                if isDeleting { ProgressView().tint(Theme.table.accent) }
             }
-            .padding()
+            .padding(Theme.Space.screen)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .tableSurface()
             .navigationTitle("Finish")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -89,10 +92,11 @@ struct TriageSummaryView: View {
     }
 
     private func stat(_ value: String, _ label: String, _ color: Color) -> some View {
-        VStack {
-            Text(value).font(.title.bold().monospacedDigit()).foregroundStyle(color)
-            Text(label).font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 2) {
+            Text(value).font(.panelTitle).monospacedDigit().foregroundStyle(color)
+            Text(label).font(.small).foregroundStyle(Theme.table.muted)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func commit() {

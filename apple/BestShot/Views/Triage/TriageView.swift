@@ -32,7 +32,7 @@ struct TriageView: View {
         }
         .escapeCloses {
             if showGallery {
-                withAnimation(.spring(response: 0.35)) { showGallery = false }
+                Theme.Motion.run(Theme.Motion.settle) { showGallery = false }
             } else {
                 onLeave()
             }
@@ -46,23 +46,22 @@ struct TriageView: View {
         if showGallery {
             TriageGalleryView(session: session) { index in
                 session.focus(on: index)
-                withAnimation(.spring(response: 0.35)) { showGallery = false }
+                Theme.Motion.run(Theme.Motion.settle) { showGallery = false }
             }
             .transition(.scale(scale: 0.9).combined(with: .opacity))
         } else if let asset = session.current {
             TriageCardView(
                 asset: asset,
                 isFavourited: session.isFavourited(asset),
-                onKeep: { withAnimation(.spring(response: 0.3)) { session.keep() } },
-                onDelete: { withAnimation(.spring(response: 0.3)) { session.delete() } },
-                onGrid: { withAnimation(.spring(response: 0.35)) { showGallery = true } }
+                onKeep: { Theme.Motion.run(Theme.Motion.snap) { session.keep() } },
+                onDelete: { Theme.Motion.run(Theme.Motion.snap) { session.delete() } },
+                onGrid: { Theme.Motion.run(Theme.Motion.settle) { showGallery = true } }
             )
             .id(asset.localIdentifier)
             .padding(12)
             .transition(.opacity)
         } else {
-            ContentUnavailableView("All done", systemImage: "checkmark.circle")
-                .frame(maxHeight: .infinity)
+            EmptyState("All done", palette: Theme.viewfinder)
         }
     }
 
@@ -74,26 +73,20 @@ struct TriageView: View {
                 .accessibilityLabel("Leave Triage")
 
             VStack(spacing: 4) {
-                GeometryReader { geo in
-                    Rectangle().fill(Theme.viewfinder.rule)
-                        .overlay(alignment: .leading) {
-                            Rectangle().fill(Theme.viewfinder.ink).frame(width: geo.size.width * session.progress)
-                        }
-                }
-                .frame(height: 2)
+                ProgressLine(value: session.progress, palette: Theme.viewfinder)
                 HStack(spacing: 12) {
                     tally(.keep, session.keptCount, Theme.viewfinder.ink)
                     tally(.bin, session.deleteCount, Theme.viewfinder.accent)
                     tally(.favourite, session.favouriteCount, Theme.viewfinder.muted)
                     Spacer()
                     Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
-                        .font(.mono(11))
+                        .font(.small)
                         .foregroundStyle(Theme.viewfinder.muted)
                 }
             }
 
             Button {
-                withAnimation(.spring(response: 0.35)) { showGallery.toggle() }
+                Theme.Motion.run(Theme.Motion.settle) { showGallery.toggle() }
             } label: {
                 Image(systemName: showGallery ? "rectangle.portrait" : "square.grid.2x2")
             }
@@ -113,7 +106,7 @@ struct TriageView: View {
     private func tally(_ control: TriageControl, _ count: Int, _ color: Color) -> some View {
         HStack(spacing: 3) {
             Image(systemName: control.symbol).font(.system(size: 10, weight: .semibold))
-            Text("\(count)").font(.mono(12))
+            Text("\(count)").font(.eyebrow)
         }
         .foregroundStyle(color)
         .accessibilityElement(children: .ignore)
@@ -158,8 +151,8 @@ struct TriageView: View {
 
     private func run(_ control: TriageControl) {
         switch control {
-        case .bin: withAnimation(.spring(response: 0.3)) { session.delete() }
-        case .keep: withAnimation(.spring(response: 0.3)) { session.keep() }
+        case .bin: Theme.Motion.run(Theme.Motion.snap) { session.delete() }
+        case .keep: Theme.Motion.run(Theme.Motion.snap) { session.keep() }
         case .undo: session.undo()
         case .skip: session.skip()
         case .favourite: session.toggleFavourite()

@@ -6,7 +6,7 @@ struct PillButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.mono(14, medium: true))
+            .font(.pill)
             .padding(.horizontal, 18)
             .padding(.vertical, 9)
             .foregroundStyle(palette.accentInk)
@@ -22,7 +22,7 @@ struct TextButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.mono(13))
+            .font(.note)
             .foregroundStyle(destructive ? palette.accent : palette.ink)
             .opacity(configuration.isPressed ? 0.55 : 1)
             .padding(.vertical, 6)
@@ -73,7 +73,7 @@ struct ContactSheet<Data: RandomAccessCollection, Cell: View>: View where Data.E
     @ViewBuilder let cell: (Data.Element) -> Cell
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: 4)], spacing: 4) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: Theme.Space.gutter)], spacing: Theme.Space.gutter) {
             ForEach(data) { element in
                 cell(element)
                     .aspectRatio(1, contentMode: .fit)
@@ -99,5 +99,207 @@ struct PrintMount<Content: View, Caption: View>: View {
         }
         .padding(EdgeInsets(top: 8, leading: 8, bottom: 2, trailing: 8))
         .background(Theme.table.paper)
+    }
+}
+
+// MARK: - Shared parts, from Rank
+
+/// A secondary action that needs an edge: a hairline capsule round plain text.
+/// Rank's Compare has one for Save & exit.
+struct OutlineButtonStyle: ButtonStyle {
+    var palette: Theme.Palette = Theme.table
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.note)
+            .foregroundStyle(palette.ink)
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .overlay(Capsule().stroke(palette.rule, lineWidth: 1))
+            .contentShape(Capsule())
+    }
+}
+
+extension ButtonStyle where Self == OutlineButtonStyle {
+    static var outline: OutlineButtonStyle { OutlineButtonStyle() }
+    static var viewfinderOutline: OutlineButtonStyle { OutlineButtonStyle(palette: Theme.viewfinder) }
+}
+
+/// The top of a screen, as Rank's: a small line, the name in Archivo, the counts
+/// on the right, anything else under them, then a hairline.
+struct ScreenHeader<Accessory: View>: View {
+    var eyebrow: String?
+    let title: String
+    var status: String?
+    var palette: Theme.Palette = Theme.table
+    @ViewBuilder var accessory: () -> Accessory
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: Theme.Space.stack) {
+                HStack(alignment: .lastTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let eyebrow {
+                            Text(eyebrow)
+                                .font(.eyebrow)
+                                .foregroundStyle(palette.muted)
+                        }
+                        Text(title)
+                            .font(.screenTitle)
+                            .foregroundStyle(palette.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    Spacer()
+                    if let status {
+                        Text(status)
+                            .font(.eyebrow)
+                            .foregroundStyle(palette.muted)
+                    }
+                }
+                accessory()
+            }
+            .padding(.horizontal, Theme.Space.screen)
+            .padding(.top, Theme.Space.headerTop)
+            .padding(.bottom, Theme.Space.headerBottom)
+            HairlineRule(palette: palette)
+        }
+    }
+}
+
+extension ScreenHeader where Accessory == EmptyView {
+    init(eyebrow: String? = nil, title: String, status: String? = nil, palette: Theme.Palette = Theme.table) {
+        self.init(eyebrow: eyebrow, title: title, status: status, palette: palette) { EmptyView() }
+    }
+}
+
+/// Nothing to show, or something to ask first: a heading and a line, centred,
+/// with any buttons under them.
+struct EmptyState<Actions: View>: View {
+    let title: String
+    var message: String?
+    var palette: Theme.Palette = Theme.table
+    @ViewBuilder var actions: () -> Actions
+
+    var body: some View {
+        VStack(spacing: Theme.Space.stack) {
+            Text(title)
+                .font(.sectionTitle)
+                .foregroundStyle(palette.ink)
+                .multilineTextAlignment(.center)
+            if let message {
+                Text(message)
+                    .font(.note)
+                    .foregroundStyle(palette.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 480)
+            }
+            if Actions.self != EmptyView.self {
+                VStack(spacing: Theme.Space.stack) { actions() }
+                    .padding(.top, 6)
+            }
+        }
+        .padding(Theme.Space.panel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension EmptyState where Actions == EmptyView {
+    init(_ title: String, message: String? = nil, palette: Theme.Palette = Theme.table) {
+        self.init(title: title, message: message, palette: palette) { EmptyView() }
+    }
+}
+
+/// A section of a system Form or List set like the sheet: a mono label over
+/// rows on paper.
+struct TableSection<Content: View, Footer: View>: View {
+    var title: String?
+    @ViewBuilder var content: () -> Content
+    @ViewBuilder var footer: () -> Footer
+
+    var body: some View {
+        Section {
+            content().listRowBackground(Theme.table.paper)
+        } header: {
+            if let title { SheetLabel(title) }
+        } footer: {
+            footer()
+        }
+    }
+}
+
+extension TableSection where Footer == EmptyView {
+    init(_ title: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.init(title: title, content: content) { EmptyView() }
+    }
+}
+
+/// Small print in a form or under a control.
+struct FormNote: View {
+    let text: String
+    var palette: Theme.Palette = Theme.table
+
+    init(_ text: String, palette: Theme.Palette = Theme.table) {
+        self.text = text
+        self.palette = palette
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.eyebrow)
+            .foregroundStyle(palette.muted)
+    }
+}
+
+/// A bar along the bottom with the screen's one main action, over a hairline.
+struct BottomBar<Content: View>: View {
+    var palette: Theme.Palette = Theme.table
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 6) { content() }
+            .padding(.horizontal, Theme.Space.screen)
+            .padding(.vertical, Theme.Space.stack)
+            .frame(maxWidth: .infinity)
+            .background(palette.background)
+            .overlay(alignment: .top) { HairlineRule(palette: palette) }
+    }
+}
+
+/// How far through: a hairline that fills with ink.
+struct ProgressLine: View {
+    let value: Double
+    var palette: Theme.Palette = Theme.table
+
+    var body: some View {
+        GeometryReader { geo in
+            Rectangle().fill(palette.rule)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(palette.ink).frame(width: geo.size.width * min(1, max(0, value)))
+                }
+        }
+        .frame(height: 2)
+        .accessibilityElement()
+        .accessibilityValue("\(Int((value * 100).rounded())) percent")
+    }
+}
+
+/// A rank, as Rank writes it on a print: the top three in red, the first ringed.
+struct RankNumber: View {
+    let rank: Int
+    var palette: Theme.Palette = Theme.table
+
+    var body: some View {
+        Text("\(rank)")
+            .font(.heading(rank <= 3 ? 20 : 17))
+            .foregroundStyle(rank <= 3 ? palette.accent : palette.ink)
+            .background(alignment: .center) {
+                if rank == 1 {
+                    GreasePencilMark(shape: .circle, color: palette.accent, lineWidth: 2)
+                        .frame(width: 34, height: 30)
+                }
+            }
     }
 }

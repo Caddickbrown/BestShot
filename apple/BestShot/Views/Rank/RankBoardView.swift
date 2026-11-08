@@ -9,8 +9,12 @@ struct RankBoardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            HairlineRule()
+            ScreenHeader(eyebrow: board.title, title: "Rank", status: status) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Space.tabs) { poolTabs; Spacer(); actions }
+                    VStack(alignment: .leading, spacing: Theme.Space.stack) { poolTabs; actions }
+                }
+            }
             if board.pool.isEmpty {
                 emptyState
             } else {
@@ -20,7 +24,7 @@ struct RankBoardView: View {
                         if !board.unranked.isEmpty {
                             SheetLabel("Not ranked yet · \(board.unranked.count)")
                                 .padding(.horizontal, 12)
-                                .padding(.top, 24)
+                                .padding(.top, Theme.Space.section)
                                 .padding(.bottom, 8)
                             ContactSheet(data: board.unranked.map(Tile.init), minimum: 140) { tile in
                                 mountedPrint(tile.id, rank: nil)
@@ -28,7 +32,7 @@ struct RankBoardView: View {
                             }
                         }
                     }
-                    .padding(4)
+                    .padding(Theme.Space.gutter)
                 }
             }
         }
@@ -51,38 +55,13 @@ struct RankBoardView: View {
 
     // MARK: - Header
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .lastTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(board.title)
-                        .font(.mono(12))
-                        .foregroundStyle(Theme.table.muted)
-                    Text("Rank")
-                        .font(.display(38, weight: 800, width: 70))
-                }
-                Spacer()
-                Text(status)
-                    .font(.mono(12))
-                    .foregroundStyle(Theme.table.muted)
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 22) { poolTabs; Spacer(); actions }
-                VStack(alignment: .leading, spacing: 10) { poolTabs; actions }
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
-    }
-
     private var status: String {
         let r = board.ranked.count, n = board.unranked.count
         return "\(r) ranked · \(n) new"
     }
 
     private var poolTabs: some View {
-        HStack(spacing: 22) {
+        HStack(spacing: Theme.Space.tabs) {
             ForEach(board.pools) { pool in
                 Button {
                     board.poolID = pool.id
@@ -105,7 +84,7 @@ struct RankBoardView: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: Theme.Space.actions) {
             if let extraAction {
                 Button(extraAction.title, action: extraAction.run)
                     .buttonStyle(.text)
@@ -137,7 +116,7 @@ struct RankBoardView: View {
         Group {
             if board.ranked.isEmpty {
                 Text("Drag photos here, or press Compare.")
-                    .font(.mono(13))
+                    .font(.note)
                     .foregroundStyle(Theme.table.muted)
                     .frame(maxWidth: .infinity, minHeight: 120)
                     .dropDestination(for: String.self) { items, _ in
@@ -170,20 +149,10 @@ struct RankBoardView: View {
             board.media.thumbnail(id)
         } caption: {
             HStack(spacing: 6) {
-                if let rank {
-                    Text("\(rank)")
-                        .font(.display(rank <= 3 ? 20 : 17, weight: 800, width: 70))
-                        .foregroundStyle(rank <= 3 ? Theme.table.accent : Theme.table.ink)
-                        .background(alignment: .center) {
-                            if rank == 1 {
-                                GreasePencilMark(shape: .circle, lineWidth: 2)
-                                    .frame(width: 34, height: 30)
-                            }
-                        }
-                }
+                if let rank { RankNumber(rank: rank) }
                 Spacer(minLength: 0)
                 Text(board.media.caption(id))
-                    .font(.mono(9))
+                    .font(.tiny)
                     .foregroundStyle(Theme.table.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -194,15 +163,6 @@ struct RankBoardView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Text("Nothing to rank yet")
-                .font(.display(24, weight: 800, width: 70))
-            Text("Keep some photos first, then rank them best to worst here.")
-                .font(.mono(13))
-                .foregroundStyle(Theme.table.muted)
-                .multilineTextAlignment(.center)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState("Nothing to rank yet", message: "Keep some photos first, then rank them best to worst here.")
     }
 }

@@ -101,7 +101,7 @@ struct FolderCullView: View {
                 .buttonStyle(TextButtonStyle(palette: palette))
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.name)
-                    .font(.display(22, weight: 800, width: 70))
+                    .font(.barTitle)
                 if let item = session.current {
                     Text("\(session.position.map { String($0 + 1) } ?? "–") / \(session.visible.count) · \(item.rel)")
                         .font(.mono(11))
@@ -186,7 +186,7 @@ struct FolderCullView: View {
         ZStack {
             if session.noMatches {
                 VStack(spacing: 12) {
-                    Text("Nothing matches these filters").font(.display(26, weight: 800, width: 70))
+                    Text("Nothing matches these filters").font(.heading(26))
                     Button("Clear filters") { session.filter = .all }.buttonStyle(.viewfinderText)
                 }
             } else if let item = session.current {
@@ -259,7 +259,7 @@ struct FolderCullView: View {
     private var doneCard: some View {
         let c = session.counts
         return VStack(spacing: 12) {
-            Text("All reviewed").font(.display(30, weight: 800, width: 70))
+            Text("All reviewed").font(.panelTitle)
             Text("\(session.items.count) photos: \(c.keep) kept, \(c.reject) for the bin.")
                 .font(.mono(13))
                 .foregroundStyle(Theme.viewfinder.muted)
@@ -440,7 +440,7 @@ private struct FolderFinishView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(session.finishTrashOnly ? "Trash all red" : "Clear out").font(.display(30, weight: 800, width: 70))
+            Text(session.finishTrashOnly ? "Trash all red" : "Clear out").font(.panelTitle)
             if let outcome {
                 Text("Moved \(outcome.items) photo\(outcome.items == 1 ? "" : "s") (\(ByteCountFormatter.string(fromByteCount: Int64(outcome.bytes), countStyle: .file))).")
                     .font(.mono(13))
@@ -516,7 +516,7 @@ private struct FolderProblemsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Unreadable metadata").font(.display(30, weight: 800, width: 70))
+            Text("Unreadable metadata").font(.panelTitle)
             Text("BestShot won't write to these, so nothing in them can be lost. Fix or remove the file, then reopen the folder.")
                 .font(.mono(12))
                 .foregroundStyle(Theme.table.muted)

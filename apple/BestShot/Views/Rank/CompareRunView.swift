@@ -79,9 +79,9 @@ struct CompareRunView: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(run.isFinished ? "Ranking ready" : "Which is better?")
-                    .font(.display(22, weight: 800, width: 70))
+                    .font(.barTitle)
                 Text(progressText)
-                    .font(.mono(11))
+                    .font(.small)
                     .foregroundStyle(Theme.viewfinder.muted)
             }
             Spacer()
@@ -92,13 +92,11 @@ struct CompareRunView: View {
                 Button("Skip / tie") { run.choose(.skip) }
                     .buttonStyle(.viewfinderText)
                 Button("Save & exit") { board.finishCompare(save: true) }
-                    .buttonStyle(.viewfinderText)
-                    .padding(.horizontal, 14)
-                    .overlay(Capsule().stroke(Theme.viewfinder.rule, lineWidth: 1))
+                    .buttonStyle(.viewfinderOutline)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Theme.Space.screen)
+        .padding(.vertical, Theme.Space.bar)
     }
 
     private var progressText: String {
@@ -111,12 +109,13 @@ struct CompareRunView: View {
 
     @ViewBuilder
     private func pairView(_ pair: RankPair) -> some View {
-        let layout = stacked ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: Theme.Space.gutter))
+                             : AnyLayout(HStackLayout(spacing: Theme.Space.gutter))
         layout {
             side(pair.left, choice: .left, hint: stacked ? "Tap · ↑" : "← or 1")
             side(pair.right, choice: .right, hint: stacked ? "Tap · ↓" : "→ or 2")
         }
-        .padding(4)
+        .padding(Theme.Space.gutter)
     }
 
     private func side(_ id: String, choice: RankChoice, hint: String) -> some View {
@@ -128,8 +127,8 @@ struct CompareRunView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .id(id)
                 HStack(spacing: 16) {
-                    Text(board.media.caption(id)).font(.mono(12))
-                    Text(hint).font(.mono(12)).foregroundStyle(Theme.viewfinder.muted)
+                    Text(board.media.caption(id)).font(.eyebrow)
+                    Text(hint).font(.eyebrow).foregroundStyle(Theme.viewfinder.muted)
                 }
                 .padding(.vertical, 8)
             }
@@ -144,11 +143,11 @@ struct CompareRunView: View {
         let saved = p.totalPairs > 0 ? Int((1 - Double(p.asked) / Double(p.totalPairs)) * 100) : 0
         return VStack(spacing: 14) {
             Text("Ranking ready")
-                .font(.display(30, weight: 800, width: 70))
+                .font(.panelTitle)
             Text("\(run.session.order().count) photos ranked in \(p.asked) comparisons"
                  + (p.inferred > 0 ? ", with \(p.inferred) worked out automatically" : "")
                  + (saved > 0 ? " (\(saved)% fewer than comparing every pair)." : "."))
-                .font(.mono(13))
+                .font(.note)
                 .foregroundStyle(Theme.viewfinder.muted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
@@ -159,7 +158,7 @@ struct CompareRunView: View {
                     .buttonStyle(.viewfinderPill)
             }
         }
-        .padding(40)
+        .padding(Theme.Space.panel)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

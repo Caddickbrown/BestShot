@@ -16,6 +16,9 @@ struct BestShotApp: App {
 
     init() {
         BrandFonts.register()
+        #if os(iOS)
+        BrandBars.apply()
+        #endif
         do {
             if Self.underTest {
                 container = try ModelContainer(for: Project.self, MediaItem.self, AssetReview.self, RankedOrder.self,

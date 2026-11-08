@@ -75,6 +75,64 @@ enum Theme {
         }
     }
 
+    // MARK: Spacing, radii, motion
+    //
+    // Rank's sheet set these: a 20pt inset to the header, 4pt gaps between
+    // prints, plain text buttons 18pt apart and one red pill. Every screen takes
+    // them from here.
+
+    enum Space {
+        /// The side inset of a screen's header and bars.
+        static let screen: CGFloat = 20
+        /// Above a header's eyebrow, and under its last line.
+        static let headerTop: CGFloat = 16
+        static let headerBottom: CGFloat = 8
+        /// Between the lines of a header, and the rows of a short stack.
+        static let stack: CGFloat = 10
+        /// Between plain text buttons in a row.
+        static let actions: CGFloat = 18
+        /// Between tabs, and around a stat.
+        static let tabs: CGFloat = 22
+        /// Above a section label on the sheet.
+        static let section: CGFloat = 24
+        /// Between prints on a contact sheet, and around it.
+        static let gutter: CGFloat = 4
+        /// Around an empty state or a centred panel.
+        static let panel: CGFloat = 40
+        /// Inside a bar: above and below its contents.
+        static let bar: CGFloat = 12
+    }
+
+    /// The only radii. Prints and tiles have none; pills are capsules.
+    /// The same names as `--radius-sm`, `--radius-md`, `--radius-lg` on the web.
+    enum Radius {
+        static let sm: CGFloat = 2
+        static let md: CGFloat = 6
+        static let lg: CGFloat = 12
+    }
+
+    /// Springs, and none at all with Reduce Motion on.
+    enum Motion {
+        /// A decision landing: a photo kept or binned.
+        static let snap = Animation.spring(response: 0.3)
+        /// A view changing over: the card to the grid and back.
+        static let settle = Animation.spring(response: 0.35)
+
+        @MainActor
+        static func run(_ animation: Animation, _ change: () -> Void) {
+            if reduceMotion { change() } else { withAnimation(animation, change) }
+        }
+
+        @MainActor
+        static var reduceMotion: Bool {
+            #if canImport(UIKit)
+            UIAccessibility.isReduceMotionEnabled
+            #else
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            #endif
+        }
+    }
+
     /// `#RRGGBB`, for saving a colour someone picked.
     static func hex(_ colour: Color) -> String {
         let c = colour.resolve(in: EnvironmentValues())
@@ -185,7 +243,82 @@ extension Font {
     static func mono(_ size: CGFloat, medium: Bool = false) -> Font {
         .custom(medium ? "IBMPlexMono-Medium" : "IBMPlexMono-Regular", size: size)
     }
+
+    /// Archivo's heavy condensed cut, which every heading uses.
+    static func heading(_ size: CGFloat) -> Font { display(size, weight: 800, width: 70) }
+
+    // The type scale, from Rank. Headings are Archivo; everything else is Plex Mono.
+
+    /// A screen's name: "Rank", "Triage".
+    static let screenTitle = heading(38)
+    /// A centred heading: an empty state, a finished run.
+    static let panelTitle = heading(30)
+    /// A smaller heading: an empty state, a sheet's own title.
+    static let sectionTitle = heading(24)
+    /// The title in a bar over photos: "Which is better?"
+    static let barTitle = heading(22)
+    /// The line over a screen's name, and the counts beside it.
+    static let eyebrow = mono(12)
+    /// Rows, choices and fields.
+    static let row = mono(14)
+    /// Running text, and plain text buttons.
+    static let note = mono(13)
+    /// The label on the one red pill.
+    static let pill = mono(14, medium: true)
+    /// Progress and small print.
+    static let small = mono(11)
+    /// A print's caption.
+    static let tiny = mono(9)
 }
+
+#if canImport(UIKit)
+extension UIFont {
+    /// Plex Mono for UIKit, scaled with the text size setting.
+    static func mono(_ size: CGFloat, medium: Bool = false, style: UIFont.TextStyle = .body) -> UIFont {
+        let base = UIFont(name: medium ? "IBMPlexMono-Medium" : "IBMPlexMono-Regular", size: size)
+            ?? .monospacedSystemFont(ofSize: size, weight: medium ? .medium : .regular)
+        return UIFontMetrics(forTextStyle: style).scaledFont(for: base)
+    }
+
+    /// Archivo's heading cut for UIKit.
+    static func heading(_ size: CGFloat, style: UIFont.TextStyle = .largeTitle) -> UIFont {
+        let wght: UInt32 = 0x7767_6874, wdth: UInt32 = 0x7764_7468
+        let attributes: [CFString: Any] = [
+            kCTFontFamilyNameAttribute: "Archivo",
+            kCTFontVariationAttribute: [wght: 800, wdth: 70],
+        ]
+        let font = CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(attributes as CFDictionary), size, nil) as UIFont
+        return UIFontMetrics(forTextStyle: style).scaledFont(for: font)
+    }
+}
+
+/// The system's bars in the table's type and colours, so a sheet's title and its
+/// Done read like the rest. Called once at launch.
+@MainActor
+enum BrandBars {
+    static func apply() {
+        let ink = UIColor(Theme.table.ink)
+        let bar = UINavigationBarAppearance()
+        bar.configureWithOpaqueBackground()
+        bar.backgroundColor = UIColor(Theme.table.background)
+        bar.shadowColor = UIColor(Theme.table.rule)
+        bar.titleTextAttributes = [.font: UIFont.mono(15, medium: true, style: .headline), .foregroundColor: ink]
+        bar.largeTitleTextAttributes = [.font: UIFont.heading(34), .foregroundColor: ink]
+        let button = UIBarButtonItemAppearance()
+        button.normal.titleTextAttributes = [.font: UIFont.mono(15)]
+        bar.buttonAppearance = button
+        bar.doneButtonAppearance = button
+        bar.backButtonAppearance = button
+        let edge = bar.copy()
+        edge.shadowColor = .clear
+        UINavigationBar.appearance().standardAppearance = bar
+        UINavigationBar.appearance().compactAppearance = bar
+        UINavigationBar.appearance().scrollEdgeAppearance = edge
+        UISegmentedControl.appearance().setTitleTextAttributes([.font: UIFont.mono(13)], for: .normal)
+        UISegmentedControl.appearance().setTitleTextAttributes([.font: UIFont.mono(13, medium: true)], for: .selected)
+    }
+}
+#endif
 
 // MARK: - Surfaces
 
@@ -201,6 +334,15 @@ extension View {
     /// The table behind a system Form or List.
     func tableSurfaceList() -> some View {
         self
+            .scrollContentBackground(.hidden)
+            .tableSurface()
+    }
+
+    /// A system Form or List set like the sheet: on the table, rows in Plex Mono.
+    /// Sections are `TableSection`s.
+    func tableForm() -> some View {
+        self
+            .font(.row)
             .scrollContentBackground(.hidden)
             .tableSurface()
     }

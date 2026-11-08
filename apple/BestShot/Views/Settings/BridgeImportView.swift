@@ -18,7 +18,7 @@ struct BridgeImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Import from Bridge").font(.display(30, weight: 800, width: 70))
+            Text("Import from Bridge").font(.panelTitle)
             Text("Choose a folder Bridge has labelled. BestShot only reads it.")
                 .font(.mono(12))
                 .foregroundStyle(Theme.table.muted)

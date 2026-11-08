@@ -76,7 +76,7 @@ struct FolderHomeView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Folders")
-                    .font(.display(44, weight: 800, width: 70))
+                    .font(.heading(44))
                 Text("Rate, label and cull a folder of photos. Ratings, labels and keywords are standard XMP sidecars; decisions and ranking are saved in the folder, so it picks up where BestShot for Linux left off.")
                     .font(.mono(13))
                     .foregroundStyle(Theme.table.muted)

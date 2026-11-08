@@ -68,7 +68,7 @@ private struct MonitorNotice: View {
     var body: some View {
         VStack(spacing: metrics.text * 0.6) {
             Text(title)
-                .font(.display(metrics.title * 1.6, weight: 800, width: 70))
+                .font(.heading(metrics.title * 1.6))
                 .foregroundStyle(palette.ink)
             Text(line)
                 .font(.mono(metrics.text))
@@ -178,7 +178,7 @@ struct MonitorList: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: metrics.caption * 0.3) {
                 Text(title)
-                    .font(.display(metrics.title * 1.5, weight: 800, width: 70))
+                    .font(.heading(metrics.title * 1.5))
                     .foregroundStyle(palette.ink)
                 if !caption.isEmpty {
                     Text(caption).font(.mono(metrics.caption)).foregroundStyle(palette.muted)
@@ -530,7 +530,7 @@ private struct MonitorOverlayView: View {
         let waiting = desk.library.triageWaiting
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: metrics.caption * 0.5) {
-                Text("Finish Triage").font(.display(metrics.title * 1.3, weight: 800, width: 70)).foregroundStyle(sheet.ink)
+                Text("Finish Triage").font(.heading(metrics.title * 1.3)).foregroundStyle(sheet.ink)
                 Text(summary(waiting, finish)).font(.mono(metrics.text)).foregroundStyle(sheet.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -561,7 +561,7 @@ private struct MonitorOverlayView: View {
     private var helpView: some View {
         let keys = desk.pageKeys
         return VStack(alignment: .leading, spacing: 0) {
-            Text("All keys").font(.display(metrics.title * 1.3, weight: 800, width: 70)).foregroundStyle(sheet.ink)
+            Text("All keys").font(.heading(metrics.title * 1.3)).foregroundStyle(sheet.ink)
                 .padding(metrics.text)
             HairlineRule(palette: sheet)
             ScrollViewReader { proxy in

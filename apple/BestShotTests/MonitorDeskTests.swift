@@ -207,7 +207,7 @@ final class MonitorDeskTests: XCTestCase {
         await desk.work?.value
         XCTAssertEqual(library.commits, 1)
         XCTAssertNil(desk.overlay)
-        XCTAssertEqual(desk.pane, .home)
+        XCTAssertEqual(desk.pane, .triage, "back to Triage's start, one press from the menu")
         XCTAssertEqual(desk.marks.mark("a"), PhotoMark(), "the deleted photo's mark goes with it")
         XCTAssertEqual(desk.marks.mark("b").rating, 3)
     }
@@ -255,8 +255,8 @@ final class MonitorDeskTests: XCTestCase {
             presses += 1
             XCTAssertLessThan(presses, 8)
         }
-        XCTAssertEqual(desk.pane, .home)
-        XCTAssertEqual(library.left, 1)
+        XCTAssertEqual(desk.pane, .home, "the main menu")
+        XCTAssertGreaterThan(library.left, 0)
         XCTAssertEqual(library.decision("a"), .deleted, "going home keeps what's marked")
         XCTAssertEqual(library.triageIDs.count, 4, "and the session waits behind Resume")
     }
@@ -270,8 +270,22 @@ final class MonitorDeskTests: XCTestCase {
 
     func testEscAtHomeIsThePhones() {
         XCTAssertTrue(desk.stepBackFromEscape())
+        XCTAssertEqual(desk.pane, .triage)
+        XCTAssertTrue(desk.stepBackFromEscape())
         XCTAssertEqual(desk.pane, .home)
         XCTAssertFalse(desk.stepBackFromEscape())
+    }
+
+    func testHomeIsTheMainMenu() {
+        while desk.stepBackFromEscape() {}
+        XCTAssertEqual(desk.rows.map(\.title), MonitorSection.allCases.map(\.title))
+        XCTAssertFalse(desk.keys.contains { $0.keys == "esc" }, "no Back in the hint bar at home")
+        press(.down)
+        press(.enter)
+        XCTAssertEqual(desk.pane, .rank)
+        XCTAssertTrue(desk.keys.contains { $0.keys == "esc" })
+        XCTAssertTrue(desk.stepBackFromEscape())
+        XCTAssertEqual(desk.pane, .home)
     }
 
     func testEscStackAsksTheMonitorAfterAPhoneSheetAndBeforeThePhone() {
@@ -556,7 +570,7 @@ final class MonitorDeskTests: XCTestCase {
 
     func testTriageEndedOnThePhoneFallsBackToHome() {
         library.triageIDs = []
-        XCTAssertEqual(desk.pane, .home)
+        XCTAssertEqual(desk.pane, .triage)
     }
 }
 

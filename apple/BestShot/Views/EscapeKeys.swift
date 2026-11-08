@@ -6,7 +6,7 @@ import UIKit
 // MARK: - Esc leads home
 //
 // On iPhone and iPad, each press closes what's on top, then steps back, and a
-// few presses from anywhere reach Triage. `EscapeStack` decides; this file gets
+// few presses from anywhere reach the main menu. `EscapeStack` decides; this file gets
 // the key to it. The Mac has its own Esc and these modifiers leave it alone.
 //
 // A key command is only heard along the responder chain from the first

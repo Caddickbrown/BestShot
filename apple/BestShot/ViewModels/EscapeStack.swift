@@ -2,7 +2,7 @@ import Foundation
 
 /// Who hears Esc: the newest thing on screen first, down to `base`, which goes
 /// home. Whatever is on top registers while it's up and closes on the press, so
-/// a few presses from anywhere reach Triage.
+/// a few presses from anywhere reach the main menu.
 ///
 /// With a monitor up: a sheet on the phone goes first, then the monitor steps back
 /// to its own home, then the phone's layers and `base` follow, so one key reaches

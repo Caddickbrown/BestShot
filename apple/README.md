@@ -78,12 +78,14 @@ clear it; `→` and `←` set green and red and move on.
 Compare: `←`/`1` left · `→`/`2` right · `Space` skip · `⌫` undo · `Esc` save
 and exit.
 
-`Esc` on iPhone and iPad always leads home to Triage: each press lets go of a
-field (keeping its text), closes what's on top, then steps back. Nothing is
+The app opens on its main menu (Triage, Organise, Rank, All Media,
+Projects). `Esc` on iPhone and iPad always leads back there: each press lets go
+of a field (keeping its text), closes what's on top, then steps back. Nothing is
 lost on the way: a Triage session with photos marked for deletion waits behind
 Resume Triage, a project's Compare goes to its Proposed Ranking and Esc there
 applies it, a tag being typed in the viewer is added, and New Project and
-Settings keep what's typed for next time. There is no external-display mode.
+Settings keep what's typed for next time. On an external monitor Esc steps
+back the same way, through Triage's start to the monitor's own main menu.
 
 ### Metadata
 

@@ -1,11 +1,11 @@
 import SwiftUI
 import Observation
 
-/// One of the monitor's screens. The stack always starts at `home`, Triage, so
-/// Esc has a way down from anywhere.
+/// One of the monitor's screens. The stack always starts at `home`, the main
+/// menu, so Esc has a way down from anywhere.
 enum MonitorPane: Hashable {
     case home
-    case loupe, grid, filters
+    case triage, loupe, grid, filters
     case rank, rankCompare
     case organiseHome, organise
     case media(project: UUID?), mediaPhoto(project: UUID?)
@@ -16,6 +16,7 @@ enum MonitorPane: Hashable {
 /// What ↵ does on a row.
 enum MonitorRowAction: Equatable {
     case none
+    case section(MonitorSection)
     case allowPhotos
     case order(SessionOrder), source(TriageSourceOption), startTriage, resumeTriage
     case status(MonitorFilter.Status), stars(Int), tag(String), clearFilters
@@ -227,7 +228,7 @@ final class MonitorDesk {
     /// its screens read as home until the stack catches up.
     var pane: MonitorPane {
         let top = stack.last ?? .home
-        if library.triageIDs.isEmpty, top == .loupe || top == .grid || top == .filters { return .home }
+        if library.triageIDs.isEmpty, top == .loupe || top == .grid || top == .filters { return .triage }
         if top == .rankCompare, board?.compare == nil { return .rank }
         return top
     }
@@ -433,7 +434,7 @@ final class MonitorDesk {
         while stack.count > 1, library.triageIDs.isEmpty, [.loupe, .grid, .filters].contains(stack.last!) {
             stack.removeLast()
         }
-        if stack == [.home] { arrivedHome() }
+        if stack.last == .home || stack.last == .triage { arrivedHome() }
     }
 
     private func arrivedHome() {
@@ -455,7 +456,7 @@ final class MonitorDesk {
         switch section {
         case .triage:
             if library.triageIDs.isEmpty {
-                stack = [.home]
+                stack = [.home, .triage]
                 arrivedHome()
             } else {
                 resumeTriage()
@@ -484,7 +485,8 @@ final class MonitorDesk {
     /// The list on screen, if the screen is a list.
     var rows: [MonitorRow] {
         switch pane {
-        case .home: return homeRows
+        case .home: return menuRows
+        case .triage: return triageRows
         case .filters: return filterRows
         case .rank: return rankRows
         case .organiseHome: return organiseHomeRows
@@ -555,6 +557,7 @@ final class MonitorDesk {
     private func run(_ row: MonitorRow) {
         switch row.action {
         case .none: break
+        case .section(let section): go(to: section)
         case .allowPhotos: spawn { [library] in await library.askForPhotoAccess() }
         case .order(let new): order = new
         case .source(let new): source = new
@@ -587,7 +590,29 @@ final class MonitorDesk {
         }
     }
 
-    private var homeRows: [MonitorRow] {
+    /// The main menu: every section, the same ones ⌘1–6 reach.
+    private var menuRows: [MonitorRow] {
+        MonitorSection.allCases.map { section in
+            MonitorRow(id: "section-\(section.rawValue)", title: section.title, detail: menuDetail(section),
+                       action: .section(section))
+        }
+    }
+
+    private func menuDetail(_ section: MonitorSection) -> String {
+        switch section {
+        case .triage:
+            guard !library.triageIDs.isEmpty else { return "Keep or delete, photo by photo" }
+            let waiting = library.triageWaiting
+            return waiting > 0 ? "Resume · \(waiting) marked to delete" : "Resume"
+        case .rank: return "Put your keepers in order"
+        case .organise: return library.organisePhoto == nil ? "File photos into albums" : "Resume"
+        case .allMedia: return "Everything imported into projects"
+        case .projects: return "\(library.projects.count) project\(library.projects.count == 1 ? "" : "s")"
+        case .settings: return "Label names, text size"
+        }
+    }
+
+    private var triageRows: [MonitorRow] {
         guard library.hasPhotoAccess else {
             if library.canAskForPhotoAccess {
                 return [MonitorRow(id: "allow", title: "Allow access to Photos",
@@ -658,7 +683,7 @@ final class MonitorDesk {
     }
 
     private var organiseHomeRows: [MonitorRow] {
-        guard library.hasPhotoAccess else { return homeRows }
+        guard library.hasPhotoAccess else { return triageRows }
         var rows = choiceRows(order: organiseOrder, source: organiseSource, orderAction: MonitorRowAction.organiseOrder,
                               sourceAction: MonitorRowAction.organiseSource)
         rows.append(MonitorRow(id: "start-organise", title: "Start Organising", group: "Go", action: .startOrganise))
@@ -709,7 +734,7 @@ final class MonitorDesk {
     private func resumeTriage() {
         library.resumeTriage()
         restoreRedMarks()
-        stack = [.home, .loupe]
+        stack = [.home, .triage, .loupe]
     }
 
     /// A red mark means delete, whatever happened to the decision behind it (a
@@ -919,7 +944,7 @@ final class MonitorDesk {
             case .finish:
                 overlay = nil
                 library.endTriage()
-                stack = [.home]
+                stack = [.home, .triage]
                 arrivedHome()
             case .keepGoing: overlay = nil
             case nil: break
@@ -943,7 +968,7 @@ final class MonitorDesk {
             undoStack = []
             overlay = nil
             library.endTriage()
-            stack = [.home]
+            stack = [.home, .triage]
             arrivedHome()
             notice = "\(deleted) photo\(deleted == 1 ? "" : "s") moved to Recently Deleted."
         } else {

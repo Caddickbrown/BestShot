@@ -7,7 +7,7 @@ struct ShortcutsHelpView: View {
 
     private let shortcuts: [(String, String)] = [
         ("← / →", "Navigate media in the viewer"),
-        ("Esc or ⌘.", "Close what's on top, step back, then Triage"),
+        ("Esc or ⌘.", "Close what's on top, step back, then the main menu"),
         ("Esc or ⌘.", "Leave a field, keeping its text"),
         ("P", "Toggle slideshow"),
         ("1 or ←", "Pick left (comparison mode)"),

@@ -147,6 +147,7 @@ private struct MonitorScreen: View {
             return desk.library.projects.first { $0.id == project }?.name ?? "Project"
         case .projects: return "Projects"
         case .settings: return "Settings"
+        case .home: return "BestShot"
         default: return "Triage"
         }
     }

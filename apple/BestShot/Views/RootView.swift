@@ -9,12 +9,15 @@ struct RootView: View {
     @Query(sort: [SortDescriptor(\Project.sortIndex), SortDescriptor(\Project.createdAt)])
     private var projects: [Project]
 
-    @State private var selection: SidebarSelection? = .triage
+    /// Nothing chosen: the app opens on its main menu, the sidebar.
+    @State private var selection: SidebarSelection?
     @State private var showingNewProject = false
     @State private var showingSettings = false
     @State private var escapes = EscapeStack()
-    /// On a phone, which column is showing. Triage, the detail, is home.
-    @State private var compactColumn = NavigationSplitViewColumn.detail
+    /// On a phone, which column is showing. The menu, the sidebar, is home.
+    @State private var compactColumn = NavigationSplitViewColumn.sidebar
+    /// On an iPad, the menu stays in sight beside what's open.
+    @State private var columns = NavigationSplitViewVisibility.all
     // Kept here so Esc can close their sheets without losing what's typed.
     @State private var projectName = ""
     @State private var projectDescription = ""
@@ -30,7 +33,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationSplitView(preferredCompactColumn: $compactColumn) {
+        NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
             List(selection: $selection) {
                 Section("Review") {
                     Label("Triage", systemImage: "rectangle.stack.badge.person.crop")
@@ -101,9 +104,11 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
+        // Esc's last step is the main menu. A Triage session waits behind Resume.
         .escapeRoot(escapes) {
-            selection = .triage
-            compactColumn = .detail
+            selection = nil
+            compactColumn = .sidebar
+            columns = .all
         }
     }
 
@@ -132,7 +137,7 @@ struct RootView: View {
                 ContentUnavailableView("Select a Project", systemImage: "photo.on.rectangle")
             }
         case nil:
-            ContentUnavailableView("Select a Project", systemImage: "photo.on.rectangle")
+            HomeDetailView()
         }
     }
 
@@ -242,5 +247,23 @@ extension EnvironmentValues {
     var showRank: ShowRankAction {
         get { self[ShowRankKey.self] }
         set { self[ShowRankKey.self] = newValue }
+    }
+}
+
+/// Beside the menu on an iPad or a Mac, before anything is chosen.
+private struct HomeDetailView: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("BestShot")
+                .font(.display(24, weight: 800, width: 70))
+            Text("Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums.")
+                .font(.mono(13))
+                .foregroundStyle(Theme.table.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tableSurface()
     }
 }

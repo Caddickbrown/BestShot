@@ -10,9 +10,9 @@ struct BulkActionBar: View {
     let onCancel: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: Theme.Space.actions) {
             Text("\(count) selected")
-                .font(.subheadline.weight(.medium))
+                .font(.mono(13, medium: true))
 
             Spacer()
 
@@ -29,14 +29,16 @@ struct BulkActionBar: View {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
+            .buttonStyle(TextButtonStyle(destructive: true))
             .disabled(count == 0)
 
             Button("Cancel", action: onCancel)
         }
         .labelStyle(.iconOnly)
-        .buttonStyle(.bordered)
-        .padding(12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .padding()
+        .buttonStyle(.text)
+        .padding(.horizontal, Theme.Space.screen)
+        .padding(.vertical, Theme.Space.bar)
+        .background(Theme.table.background)
+        .overlay(alignment: .top) { HairlineRule() }
     }
 }

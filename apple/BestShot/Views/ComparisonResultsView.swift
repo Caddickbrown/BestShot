@@ -15,21 +15,22 @@ struct ComparisonResultsView: View {
                 Section {
                     ForEach(Array(items.enumerated()), id: \.element.uuid) { index, item in
                         HStack(spacing: 12) {
-                            Text("#\(index + 1)")
-                                .font(.headline.monospacedDigit())
+                            RankNumber(rank: index + 1)
                                 .frame(width: 44, alignment: .leading)
-                                .foregroundStyle(Theme.accent)
                             AsyncFileImage(url: item.thumbnailURL ?? item.fileURL,
                                            downsampleTo: 160, contentMode: .fill)
                                 .frame(width: 48, height: 48)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .background(Theme.table.tile)
+                                .clipped()
                             Text(item.filename).lineLimit(1)
                         }
+                        .listRowBackground(Theme.table.paper)
                     }
                 } header: {
-                    Text("\(session.comparisonsAsked) comparisons · \(session.comparisonsSkipped) inferred")
+                    SheetLabel("\(session.comparisonsAsked) comparisons · \(session.comparisonsSkipped) inferred")
                 }
             }
+            .tableForm()
             .navigationTitle("Proposed Ranking")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

@@ -14,9 +14,13 @@ struct ComparisonSelectionView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("What would you like to rank?")
-                    .font(.headline)
+                    .font(.sectionTitle)
+                    .padding(.horizontal, Theme.Space.screen)
+                    .padding(.top, Theme.Space.headerTop)
+                    .padding(.bottom, Theme.Space.stack)
+                HairlineRule()
 
                 Button {
                     onSelect(.all)
@@ -29,6 +33,7 @@ struct ComparisonSelectionView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                HairlineRule()
 
                 Button {
                     onSelect(.unranked)
@@ -43,10 +48,11 @@ struct ComparisonSelectionView: View {
                 .buttonStyle(.plain)
                 .disabled(!canCompareUnranked)
                 .opacity(canCompareUnranked ? 1 : 0.4)
+                HairlineRule()
 
                 Spacer()
             }
-            .padding()
+            .tableSurface()
             .navigationTitle("Comparison Mode")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -61,19 +67,22 @@ struct ComparisonSelectionView: View {
         .escapeScreen { dismiss() }
     }
 
+    /// A row on the table, between hairlines.
     private func optionLabel(title: String, subtitle: String, systemImage: String) -> some View {
         HStack(spacing: 14) {
             Image(systemName: systemImage)
-                .font(.title2)
+                .font(.system(size: 20))
+                .foregroundStyle(Theme.table.muted)
                 .frame(width: 40)
-            VStack(alignment: .leading) {
-                Text(title).font(.headline)
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.mono(15, medium: true))
+                Text(subtitle).font(.eyebrow).foregroundStyle(Theme.table.muted)
             }
             Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            Image(systemName: "chevron.right").foregroundStyle(Theme.table.dim)
         }
-        .padding()
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, Theme.Space.screen)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
 }

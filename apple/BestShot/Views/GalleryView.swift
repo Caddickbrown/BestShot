@@ -51,14 +51,22 @@ struct GalleryView: View {
         sort == .rank && searchText.isEmpty && !selectionMode
     }
 
+    private var status: String {
+        let n = project.itemCount, ranked = n - project.unrankedCount
+        return "\(ranked) ranked · \(project.unrankedCount) new"
+    }
+
     var body: some View {
-        content
+        VStack(spacing: 0) {
+            ScreenHeader(eyebrow: project.projectDescription.isEmpty ? "Project" : project.projectDescription,
+                         title: project.name, status: project.items.isEmpty ? nil : status)
+            content
+                .mediaSearch(text: $searchText, prompt: "Search names, tags or comments")
+        }
             .tableSurfaceList()
-            .navigationTitle(project.name)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .mediaSearch(text: $searchText, prompt: "Search names, tags or comments")
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) {
                 if selectionMode {
@@ -146,14 +154,14 @@ struct GalleryView: View {
         } else {
             ScrollView {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: 10)],
-                    spacing: 10
+                    columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: Theme.Space.gutter)],
+                    spacing: Theme.Space.gutter
                 ) {
                     ForEach(displayedItems) { item in
                         cell(for: item)
                     }
                 }
-                .padding()
+                .padding(Theme.Space.gutter)
             }
         }
     }
@@ -189,34 +197,32 @@ struct GalleryView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Media Yet", systemImage: "photo.badge.plus")
-        } description: {
-            Text("Import photos and videos to start ranking.")
-        } actions: {
+        EmptyState(title: "No Media Yet", message: "Import photos and videos to start ranking.") {
             Button {
                 showingPhotoPicker = true
             } label: {
                 Label("Import from Photos", systemImage: "photo.on.rectangle")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.pill)
             Button {
                 showingFileImporter = true
             } label: {
                 Label("Import from Files", systemImage: "folder")
             }
+            .buttonStyle(.text)
         }
     }
 
     private var importOverlay: some View {
         ZStack {
             Color.black.opacity(0.3).ignoresSafeArea()
-            VStack(spacing: 12) {
-                ProgressView()
-                Text("Importing…")
+            VStack(spacing: Theme.Space.stack) {
+                ProgressView().tint(Theme.table.accent)
+                Text("Importing…").font(.note)
             }
             .padding(24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .background(Theme.table.paper)
+            .overlay(Rectangle().stroke(Theme.table.rule, lineWidth: 1))
         }
     }
 

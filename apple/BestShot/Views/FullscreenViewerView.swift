@@ -42,6 +42,7 @@ struct FullscreenViewerView: View {
                     .transition(.move(edge: .trailing))
             }
         }
+        .viewfinder()
         #if os(macOS)
         .frame(minWidth: 640, minHeight: 480)
         #endif
@@ -96,7 +97,7 @@ struct FullscreenViewerView: View {
                 }
                 Spacer()
                 if let item = current {
-                    Text(item.filename).font(.callout).lineLimit(1)
+                    Text(item.filename).font(.eyebrow).lineLimit(1)
                 }
                 Spacer()
                 Button { slideshow.toggle() } label: {
@@ -106,7 +107,9 @@ struct FullscreenViewerView: View {
                     Image(systemName: "info.circle").padding(10)
                 }
             }
-            .background(.ultraThinMaterial)
+            .padding(.horizontal, 6)
+            .background(Color.black.opacity(0.6))
+            .overlay(alignment: .bottom) { HairlineRule(palette: Theme.viewfinder) }
 
             Spacer()
 
@@ -117,9 +120,10 @@ struct FullscreenViewerView: View {
                 .disabled(index == 0)
                 Spacer()
                 Text("\(index + 1) / \(items.count)")
-                    .font(.caption)
-                    .padding(6)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .font(.eyebrow)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
                 Spacer()
                 Button { next() } label: {
                     Image(systemName: "chevron.right").font(.title).padding()
@@ -128,7 +132,7 @@ struct FullscreenViewerView: View {
             }
             .padding(.horizontal)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Theme.viewfinder.ink)
         .buttonStyle(.plain)
     }
 
@@ -139,7 +143,7 @@ struct FullscreenViewerView: View {
             Spacer()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Details").font(.title3.bold())
+                    Text("Details").font(.barTitle)
 
                     row("File", item.filename)
                     row("Type", item.mediaType.rawValue.capitalized)
@@ -148,33 +152,36 @@ struct FullscreenViewerView: View {
                     if let rank = item.rank { row("Rank", "#\(rank + 1)") }
 
                     if let exif = item.exif, !exif.isEmpty {
-                        Divider()
-                        Text("Camera").font(.headline)
+                        HairlineRule(palette: Theme.viewfinder)
+                        SheetLabel("Camera", palette: Theme.viewfinder)
                         ForEach(exif.displayRows, id: \.0) { label, value in
                             row(label, value)
                         }
                     }
 
-                    Divider()
+                    HairlineRule(palette: Theme.viewfinder)
                     tagsEditor(item)
 
-                    Divider()
+                    HairlineRule(palette: Theme.viewfinder)
                     commentEditor(item)
                 }
-                .padding()
+                .padding(Theme.Space.screen)
             }
             .frame(width: 300)
-            .background(.regularMaterial)
+            .background(Theme.viewfinder.paper)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(Theme.viewfinder.rule).frame(width: 1)
+            }
         }
     }
 
     private func tagsEditor(_ item: MediaItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Tags").font(.headline)
+            SheetLabel("Tags", palette: Theme.viewfinder)
             FlowLayout(spacing: 6) {
                 ForEach(item.tags, id: \.self) { tag in
                     HStack(spacing: 4) {
-                        Text(tag).font(.caption)
+                        Text(tag).font(.eyebrow)
                         Button {
                             item.tags.removeAll { $0 == tag }
                             try? context.save()
@@ -184,12 +191,13 @@ struct FullscreenViewerView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.quaternary, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.viewfinder.rule, lineWidth: 1))
                 }
             }
             HStack {
                 EscapingField(placeholder: "Add tag", text: $newTag, bordered: true, onSubmit: addTag)
                 Button("Add", action: addTag)
+                    .buttonStyle(.viewfinderText)
                     .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
@@ -197,20 +205,21 @@ struct FullscreenViewerView: View {
 
     private func commentEditor(_ item: MediaItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Notes").font(.headline)
+            SheetLabel("Notes", palette: Theme.viewfinder)
             EscapingEditor(text: Binding(
                 get: { item.comment },
                 set: { item.comment = $0; try? context.save() }
             ))
             .frame(minHeight: 100)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            .padding(.horizontal, 6)
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).stroke(Theme.viewfinder.rule))
         }
     }
 
     private func row(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.callout)
+            Text(label).font(.small).foregroundStyle(Theme.viewfinder.muted)
+            Text(value).font(.note)
         }
     }
 

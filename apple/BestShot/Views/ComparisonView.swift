@@ -15,16 +15,17 @@ struct ComparisonView: View {
                 GeometryReader { geo in
                     let isWide = geo.size.width > geo.size.height
                     let layout = isWide
-                        ? AnyLayout(HStackLayout(spacing: 12))
-                        : AnyLayout(VStackLayout(spacing: 12))
+                        ? AnyLayout(HStackLayout(spacing: Theme.Space.gutter))
+                        : AnyLayout(VStackLayout(spacing: Theme.Space.gutter))
                     layout {
                         side(pair.left, side: .left)
                         side(pair.right, side: .right)
                     }
-                    .padding(12)
+                    .padding(Theme.Space.gutter)
                 }
             } else {
                 ProgressView()
+                    .tint(Theme.viewfinder.accent)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
@@ -58,6 +59,7 @@ struct ComparisonView: View {
         if session.comparisonsAsked > 0 { onFinish() } else { dismiss() }
     }
 
+    /// As Rank's Compare bar: the question in Archivo, the count in mono.
     private var header: some View {
         HStack {
             Button {
@@ -65,20 +67,22 @@ struct ComparisonView: View {
             } label: {
                 Label("Exit", systemImage: "xmark")
             }
+            .buttonStyle(.viewfinderText)
             Spacer()
             VStack(spacing: 2) {
-                Text("Comparison Mode").font(.headline)
+                Text("Which is better?").font(.barTitle)
                 Text("\(session.comparisonsAsked) compared · \(session.comparisonsSkipped) inferred")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.small)
+                    .foregroundStyle(Theme.viewfinder.muted)
             }
             Spacer()
             // Balance layout
-            Label("Exit", systemImage: "xmark").opacity(0)
+            Label("Exit", systemImage: "xmark").font(.note).opacity(0)
         }
-        .padding()
+        .padding(.horizontal, Theme.Space.screen)
+        .padding(.vertical, Theme.Space.bar)
         .overlay(alignment: .bottom) {
-            ProgressView(value: session.progress)
+            ProgressLine(value: session.progress, palette: Theme.viewfinder)
         }
     }
 
@@ -90,10 +94,11 @@ struct ComparisonView: View {
                 Label("Skip / Tie", systemImage: "equal")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.viewfinderOutline)
         }
-        .padding()
+        .padding(.horizontal, Theme.Space.screen)
+        .padding(.vertical, Theme.Space.bar)
+        .overlay(alignment: .top) { HairlineRule(palette: Theme.viewfinder) }
     }
 
     private func side(_ item: MediaItem, side: ComparisonSession.Side) -> some View {
@@ -104,14 +109,15 @@ struct ComparisonView: View {
                 AsyncFileImage(url: item.fileURL, downsampleTo: 1600, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Text(item.filename)
-                    .font(.caption)
+                    .font(.eyebrow)
                     .lineLimit(1)
-                    .padding(6)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
                     .padding(8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
+            .background(Theme.viewfinder.paper)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

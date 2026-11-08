@@ -10,6 +10,7 @@ struct OrganiseView: View {
 
     @State private var showNewAlbum = false
     @State private var newAlbumName = ""
+    @State private var albumQuery = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -69,43 +70,112 @@ struct OrganiseView: View {
         .padding(.top, 8)
     }
 
-    private func albumChips(for asset: PHAsset) -> some View {
-        ScrollView {
-            FlowLayout(spacing: 8) {
-                Button {
-                    showNewAlbum = true
-                } label: {
-                    Label("New Album", systemImage: "plus")
-                        .foregroundStyle(Theme.table.accent)
-                }
-                .buttonStyle(.outline)
+    /// Albums matching what's typed (all of them when nothing is).
+    private var shownAlbums: [PHAssetCollection] {
+        let q = albumQuery.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return session.albums }
+        return session.albums.filter { session.label($0).localizedCaseInsensitiveContains(q) }
+    }
 
-                ForEach(session.albums, id: \.localIdentifier) { album in
-                    let added = session.isAdded(album: album, to: asset)
-                    Button {
-                        Task { await session.pick(asset, album: album) }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: added ? "checkmark" : "rectangle.stack")
-                            Text(album.localizedTitle ?? "Album").lineLimit(1)
-                            // Photos hides an album in its folder; the folder tells twins apart.
-                            if let folder = session.folder(of: album) {
-                                Text("· \(folder)").opacity(0.6).lineLimit(1)
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(session.label(album))
+    /// What's typed names no album yet, so ↵ or + makes one.
+    private var canCreate: Bool {
+        let q = albumQuery.trimmingCharacters(in: .whitespaces)
+        return !q.isEmpty && !session.albums.contains {
+            ($0.localizedTitle ?? "").localizedCaseInsensitiveCompare(q) == .orderedSame
+        }
+    }
+
+    private func submitQuery(_ asset: PHAsset) {
+        let q = albumQuery.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return }
+        let matches = shownAlbums
+        if matches.count == 1 {
+            Task { await session.pick(asset, album: matches[0]) }
+        } else if canCreate {
+            Task { await session.createAlbumAndAdd(name: q, asset: asset) }
+        } else { return }
+        albumQuery = ""
+    }
+
+    /// One search box that finds an album or makes a new one, the five in use
+    /// in a row of their own, then every other album, small enough to scan.
+    private func albumChips(for asset: PHAsset) -> some View {
+        let recentIDs = Set(AlbumRecency.recentIDs(AlbumRecency.settled))
+        let searching = !albumQuery.trimmingCharacters(in: .whitespaces).isEmpty
+        let albums = shownAlbums
+        let recent = searching ? [] : albums.filter { recentIDs.contains($0.localIdentifier) }
+        let rest = searching ? albums : albums.filter { !recentIDs.contains($0.localIdentifier) }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Theme.table.muted)
+                TextField("Find or add an album", text: $albumQuery)
+                    .font(.row)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.words)
+                    #endif
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit { submitQuery(asset) }
+                if canCreate {
+                    Button { submitQuery(asset) } label: {
+                        Label("Add", systemImage: "plus").font(.note)
                     }
-                    // In it already: inked in, like the one pill on a screen.
-                    .buttonStyle(AlbumChipStyle(added: added))
-                    .accessibilityHint(session.singleAlbum ? "Files the photo here and moves to the next"
-                                       : added ? "Takes the photo out of this album" : "Adds the photo to this album")
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.table.accent)
+                    .accessibilityLabel("Add album \(albumQuery)")
                 }
             }
-            .padding(.horizontal, Theme.Space.screen)
-            .padding(.vertical, Theme.Space.bar)
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .overlay(Capsule().stroke(Theme.table.rule, lineWidth: 1))
+
+            if !recent.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(recent, id: \.localIdentifier) { chip($0, asset) }
+                    }
+                }
+            }
+            ScrollView {
+                FlowLayout(spacing: 6) {
+                    ForEach(rest, id: \.localIdentifier) { chip($0, asset) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .overlay {
+                if albums.isEmpty && searching {
+                    Text(canCreate ? "↵ adds \u{201C}\(albumQuery.trimmingCharacters(in: .whitespaces))\u{201D}" : "No album matches")
+                        .font(.note).foregroundStyle(Theme.table.muted)
+                }
+            }
         }
-        .frame(maxHeight: 160)
+        .padding(.horizontal, Theme.Space.screen)
+        .padding(.vertical, Theme.Space.bar)
+        .frame(maxHeight: 300)
+    }
+
+    private func chip(_ album: PHAssetCollection, _ asset: PHAsset) -> some View {
+        let added = session.isAdded(album: album, to: asset)
+        return Button {
+            Task { await session.pick(asset, album: album) }
+        } label: {
+            HStack(spacing: 4) {
+                if added { Image(systemName: "checkmark").font(.small) }
+                Text(album.localizedTitle ?? "Album").lineLimit(1)
+                // Photos hides an album in its folder; the folder tells twins apart.
+                if let folder = session.folder(of: album) {
+                    Text(folder).font(.small).opacity(0.55)
+                        .lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 110, alignment: .leading)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(session.label(album))
+        }
+        // In it already: inked in, like the one pill on a screen.
+        .buttonStyle(AlbumChipStyle(added: added))
+        .accessibilityHint(session.singleAlbum ? "Files the photo here and moves to the next"
+                           : added ? "Takes the photo out of this album" : "Adds the photo to this album")
     }
 
     private var controls: some View {
@@ -142,8 +212,8 @@ private struct AlbumChipStyle: ButtonStyle {
         configuration.label
             .font(.note)
             .foregroundStyle(added ? Theme.table.paper : Theme.table.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(added ? Theme.table.ink : .clear, in: Capsule())
             .overlay(Capsule().stroke(added ? .clear : Theme.table.rule, lineWidth: 1))
             .opacity(configuration.isPressed ? 0.55 : 1)

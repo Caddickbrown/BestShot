@@ -174,6 +174,11 @@ enum AlbumRecency {
         stamps = s
     }
 
+    /// The albums used most recently, newest first.
+    static func recentIDs(_ limit: Int) -> [String] {
+        stamps.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
+    }
+
     static func ordered(_ albums: [PHAssetCollection]) -> [PHAssetCollection] {
         let s = stamps
         return albums.sorted { a, b in

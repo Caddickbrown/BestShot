@@ -52,9 +52,18 @@ struct OrganiseView: View {
     private var header: some View {
         VStack(spacing: 6) {
             ProgressLine(value: session.progress)
-            Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
-                .font(.small)
-                .foregroundStyle(Theme.table.muted)
+            HStack {
+                Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
+                    .font(.small)
+                    .foregroundStyle(Theme.table.muted)
+                Spacer()
+                // One album per photo: a tap files it and moves on.
+                Toggle("One album, then next", isOn: $session.singleAlbum)
+                    .font(.small)
+                    .foregroundStyle(Theme.table.muted)
+                    .tint(Theme.table.accent)
+                    .fixedSize()
+            }
         }
         .padding(.horizontal, Theme.Space.screen)
         .padding(.top, 8)
@@ -74,7 +83,7 @@ struct OrganiseView: View {
                 ForEach(session.albums, id: \.localIdentifier) { album in
                     let added = session.isAdded(album: album, to: asset)
                     Button {
-                        Task { await session.toggle(asset, in: album) }
+                        Task { await session.pick(asset, album: album) }
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: added ? "checkmark" : "rectangle.stack")
@@ -89,7 +98,8 @@ struct OrganiseView: View {
                     }
                     // In it already: inked in, like the one pill on a screen.
                     .buttonStyle(AlbumChipStyle(added: added))
-                    .accessibilityHint(added ? "Takes the photo out of this album" : "Adds the photo to this album")
+                    .accessibilityHint(session.singleAlbum ? "Files the photo here and moves to the next"
+                                       : added ? "Takes the photo out of this album" : "Adds the photo to this album")
                 }
             }
             .padding(.horizontal, Theme.Space.screen)

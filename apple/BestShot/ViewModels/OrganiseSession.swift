@@ -86,6 +86,22 @@ final class OrganiseSession {
         if ok { added[asset.localIdentifier]?.remove(album.localIdentifier) }
     }
 
+    /// Single album mode: one tap files the photo and moves straight on.
+    /// Remembered on this device.
+    var singleAlbum: Bool = UserDefaults.standard.bool(forKey: "organise.singleAlbum") {
+        didSet { UserDefaults.standard.set(singleAlbum, forKey: "organise.singleAlbum") }
+    }
+
+    /// What a tap on an album does: in single album mode, file it and go to
+    /// the next photo (after a beat, so the tick is seen); otherwise toggle.
+    func pick(_ asset: PHAsset, album: PHAssetCollection) async {
+        guard singleAlbum else { await toggle(asset, in: album); return }
+        await add(asset, to: album)
+        guard isAdded(album: album, to: asset) else { return }   // the add failed: stay put
+        try? await Task.sleep(for: .milliseconds(250))
+        if current?.localIdentifier == asset.localIdentifier { next() }
+    }
+
     /// A tap on an album: in if it's out, out if it's in.
     func toggle(_ asset: PHAsset, in album: PHAssetCollection) async {
         if isAdded(album: album, to: asset) { await remove(asset, from: album) }
@@ -98,13 +114,13 @@ final class OrganiseSession {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if let same = AlbumList.existing(named: trimmed, in: albums, title: \.localizedTitle, folder: folder(of:)) {
-            await add(asset, to: same)
+            await pick(asset, album: same)
             return
         }
         guard let album = await library.createAlbum(named: trimmed) else { return }
         // A new album joins the front of the pool at once, ready for the next photo.
         albums.insert(album, at: 0)
-        await add(asset, to: album)
+        await pick(asset, album: album)
     }
 
     /// Advance, marking the current asset organised so it's skipped next time.

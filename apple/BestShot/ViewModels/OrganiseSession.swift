@@ -159,8 +159,14 @@ enum AlbumRecency {
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 
+    /// Albums this near the front stay where they are when used again, so
+    /// the ones you're working with don't shuffle under your finger.
+    static let settled = 5
+
     static func used(_ albumID: String) {
         var s = stamps
+        let front = s.sorted { $0.value > $1.value }.prefix(settled).map(\.key)
+        guard !front.contains(albumID) else { return }
         s[albumID] = Date().timeIntervalSince1970
         if s.count > keep {
             for (id, _) in s.sorted(by: { $0.value < $1.value }).prefix(s.count - keep) { s[id] = nil }

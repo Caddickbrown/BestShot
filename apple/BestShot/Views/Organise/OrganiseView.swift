@@ -11,6 +11,7 @@ struct OrganiseView: View {
     @State private var showNewAlbum = false
     @State private var newAlbumName = ""
     @State private var albumQuery = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +22,9 @@ struct OrganiseView: View {
                     .id(asset.localIdentifier)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(Theme.Space.bar)
+                    // A tap on the photo puts the keyboard away.
+                    .contentShape(Rectangle())
+                    .onTapGesture { searchFocused = false }
 
                 HairlineRule()
                 albumChips(for: asset)
@@ -109,6 +113,7 @@ struct OrganiseView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Theme.table.muted)
                 TextField("Find or add an album", text: $albumQuery)
+                    .focused($searchFocused)
                     .font(.row)
                     #if os(iOS)
                     .textInputAutocapitalization(.words)

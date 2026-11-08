@@ -77,7 +77,7 @@ struct OrganiseView: View {
     private var shownAlbums: [PHAssetCollection] {
         let q = albumQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return session.albums }
-        return session.albums.filter { session.label($0).localizedCaseInsensitiveContains(q) }
+        return session.albums.filter { ($0.localizedTitle ?? "").localizedCaseInsensitiveContains(q) }
     }
 
     /// What's typed names no album yet, so ↵ or + makes one.
@@ -88,15 +88,20 @@ struct OrganiseView: View {
         }
     }
 
+    /// ↵ files into the album with exactly the name typed (one outside any
+    /// folder first), or makes it. It never guesses from part of a name: that
+    /// filed Dan's photo into a different album than the one he was typing.
     private func submitQuery(_ asset: PHAsset) {
         let q = albumQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
-        let matches = shownAlbums
-        if matches.count == 1 {
-            Task { await session.pick(asset, album: matches[0]) }
-        } else if canCreate {
+        let exact = session.albums.filter {
+            ($0.localizedTitle ?? "").localizedCaseInsensitiveCompare(q) == .orderedSame
+        }
+        if let album = exact.first(where: { session.folder(of: $0) == nil }) ?? exact.first {
+            Task { await session.pick(asset, album: album) }
+        } else {
             Task { await session.createAlbumAndAdd(name: q, asset: asset) }
-        } else { return }
+        }
         albumQuery = ""
     }
 

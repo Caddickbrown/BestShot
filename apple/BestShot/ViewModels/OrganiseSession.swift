@@ -12,11 +12,14 @@ import Observation
 final class OrganiseSession {
 
     let assets: [PHAsset]
-    var index: Int = 0
+    var index: Int = 0 {
+        didSet { loadMembership() }
+    }
     /// Albums available to file into (mutable so newly created ones appear).
     private(set) var albums: [PHAssetCollection]
 
-    /// assetLocalID -> set of album localIdentifiers added this session.
+    /// assetLocalID -> set of album localIdentifiers the photo is in: the
+    /// albums it was already in when it came up, plus any added this session.
     private(set) var added: [String: Set<String>] = [:]
 
     private let context: ModelContext
@@ -26,6 +29,20 @@ final class OrganiseSession {
         self.assets = assets
         self.albums = albums
         self.context = context
+        loadMembership()
+    }
+
+    /// Ticks the albums the current photo (and the next, so it's ready) is
+    /// already in, read from Photos once per photo.
+    private func loadMembership() {
+        for i in [index, index + 1] where assets.indices.contains(i) {
+            let asset = assets[i]
+            guard added[asset.localIdentifier] == nil else { continue }
+            let found = PHAssetCollection.fetchAssetCollectionsContaining(asset, with: .album, options: nil)
+            var ids = Set<String>()
+            found.enumerateObjects { collection, _, _ in ids.insert(collection.localIdentifier) }
+            added[asset.localIdentifier] = ids
+        }
     }
 
     var isComplete: Bool { index >= assets.count }

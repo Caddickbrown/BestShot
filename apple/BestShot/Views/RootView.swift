@@ -133,7 +133,7 @@ struct RootView: View {
                 GalleryView(project: project)
                     .id(project.uuid)
             } else {
-                ContentUnavailableView("Select a Project", systemImage: "photo.on.rectangle")
+                EmptyState("Select a Project").tableSurface()
             }
         case nil:
             HomeDetailView()

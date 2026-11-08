@@ -133,16 +133,19 @@ struct OrganiseView: View {
             .frame(height: 40)
             .overlay(Capsule().stroke(Theme.table.rule, lineWidth: 1))
 
-            if !recent.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(recent, id: \.localIdentifier) { chip($0, asset) }
-                    }
-                }
-            }
             ScrollView {
-                FlowLayout(spacing: 6) {
-                    ForEach(rest, id: \.localIdentifier) { chip($0, asset) }
+                VStack(alignment: .leading, spacing: 10) {
+                    // The five in use wrap like the rest (a sideways row looked
+                    // cut off), set apart by a hairline.
+                    if !recent.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(recent, id: \.localIdentifier) { chip($0, asset) }
+                        }
+                        HairlineRule()
+                    }
+                    FlowLayout(spacing: 6) {
+                        ForEach(rest, id: \.localIdentifier) { chip($0, asset) }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

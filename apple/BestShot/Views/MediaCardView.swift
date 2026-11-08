@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A single gallery tile: thumbnail + rank badge / "New" pill + optional
-/// selection checkmark.
+/// selection checkmark. Square, unrounded, as the prints on Rank's sheet.
 struct MediaCardView: View {
     let item: MediaItem
     var isSelected: Bool = false
@@ -14,14 +14,15 @@ struct MediaCardView: View {
                            contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
+                .background(Theme.table.tile)
                 .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(alignment: .center) {
                     if item.mediaType == .video {
-                        Image(systemName: "play.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .shadow(radius: 4)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(Theme.viewfinder.ink)
+                            .frame(width: 48, height: 48)
+                            .background(Color.black.opacity(0.55), in: Circle())
                     }
                 }
 
@@ -31,9 +32,10 @@ struct MediaCardView: View {
 
             if !item.tags.isEmpty {
                 Image(systemName: "tag.fill")
-                    .font(.caption2)
-                    .padding(4)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.table.ink)
+                    .padding(5)
+                    .background(Theme.table.paper)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(6)
             }
@@ -41,31 +43,32 @@ struct MediaCardView: View {
             if selectionMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundStyle(isSelected ? Color.accentColor : .white)
+                    .foregroundStyle(isSelected ? Theme.table.accent : .white)
                     .background(Circle().fill(.black.opacity(0.35)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(6)
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 3)
+            Rectangle()
+                .strokeBorder(isSelected ? Theme.table.accent : .clear, lineWidth: 3)
         }
     }
 
+    /// The rank as Rank writes it, on a slip of paper; a new one gets the red tab.
     @ViewBuilder
     private var badge: some View {
         if let rank = item.rank {
-            Text("#\(rank + 1)")
-                .font(.caption2.bold())
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(.ultraThinMaterial, in: Capsule())
+            RankNumber(rank: rank + 1)
+                .padding(.horizontal, 6)
+                .background(Theme.table.paper)
+                .accessibilityLabel("Rank \(rank + 1)")
         } else {
             Text("New")
-                .font(.caption2.bold())
+                .font(.mono(10, medium: true))
                 .padding(.horizontal, 6).padding(.vertical, 3)
-                .foregroundStyle(.black)
-                .background(Theme.accent, in: Capsule())
+                .foregroundStyle(Theme.table.accentInk)
+                .background(Theme.table.accent, in: Capsule())
         }
     }
 }

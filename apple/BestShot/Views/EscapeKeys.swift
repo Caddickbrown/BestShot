@@ -81,13 +81,13 @@ extension View {
         #if os(iOS)
         safeAreaInset(edge: .top, spacing: 0) {
             if shown { HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                Image(systemName: "magnifyingglass").foregroundStyle(Theme.table.muted)
                 EscapingField(placeholder: prompt, text: text)
                 if !text.wrappedValue.isEmpty {
                     Button {
                         text.wrappedValue = ""
                     } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.table.dim)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear search")
@@ -95,8 +95,9 @@ extension View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-            .padding(.horizontal)
+            .background(Theme.table.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).stroke(Theme.table.rule, lineWidth: 1))
+            .padding(.horizontal, Theme.Space.screen)
             .padding(.vertical, 6) }
         }
         #else
@@ -140,7 +141,8 @@ struct EscapingEditor: View {
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(placeholder)
-                        .foregroundStyle(.tertiary)
+                        .font(.mono(15))
+                        .foregroundStyle(Theme.table.dim)
                         .padding(.top, 8)
                         .allowsHitTesting(false)
                 }
@@ -335,7 +337,9 @@ private struct EscapingFieldRepresentable: UIViewRepresentable {
     func makeUIView(context: Context) -> EscapingTextField {
         let field = EscapingTextField()
         field.placeholder = placeholder
-        field.font = .preferredFont(forTextStyle: .body)
+        field.font = .mono(15)
+        field.textColor = UIColor(Theme.table.ink)
+        field.tintColor = UIColor(Theme.table.accent)
         field.adjustsFontForContentSizeCategory = true
         field.borderStyle = bordered ? .roundedRect : .none
         field.returnKeyType = .done
@@ -390,7 +394,9 @@ private struct EscapingEditorRepresentable: UIViewRepresentable {
 
     func makeUIView(context: Context) -> EscapingTextView {
         let view = EscapingTextView()
-        view.font = .preferredFont(forTextStyle: .body)
+        view.font = .mono(15)
+        view.textColor = UIColor(Theme.table.ink)
+        view.tintColor = UIColor(Theme.table.accent)
         view.adjustsFontForContentSizeCategory = true
         view.backgroundColor = .clear
         view.textContainer.lineFragmentPadding = 0
@@ -439,10 +445,13 @@ struct TextPromptSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                EscapingField(placeholder: placeholder, text: $text, autofocus: true) {
-                    if !isEmpty { commit() }
+                TableSection {
+                    EscapingField(placeholder: placeholder, text: $text, autofocus: true) {
+                        if !isEmpty { commit() }
+                    }
                 }
             }
+            .tableForm()
             .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

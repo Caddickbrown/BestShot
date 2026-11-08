@@ -143,6 +143,7 @@ struct ScreenHeader<Accessory: View>: View {
                         if let eyebrow {
                             Text(eyebrow)
                                 .font(.eyebrow)
+                                .lineLimit(1)
                                 .foregroundStyle(palette.muted)
                         }
                         Text(title)

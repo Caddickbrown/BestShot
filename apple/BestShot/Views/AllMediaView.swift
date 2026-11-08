@@ -17,43 +17,51 @@ struct AllMediaView: View {
             .sorted { $0.importedAt > $1.importedAt }
     }
 
+    private var status: String {
+        let n = displayed.count
+        return n == allItems.count ? "\(n) item\(n == 1 ? "" : "s")" : "\(n) of \(allItems.count)"
+    }
+
     var body: some View {
-        Group {
-            if allItems.isEmpty {
-                // Nothing to search, so no search box promising otherwise.
-                ContentUnavailableView("Nothing here yet", systemImage: "square.grid.2x2",
-                                       description: Text("All Media shows the photos and videos imported into projects. Your Photos library is in Triage and Organise."))
-            } else if displayed.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            } else {
-                ScrollView {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: 10)],
-                        spacing: 10
-                    ) {
-                        ForEach(displayed) { item in
-                            VStack(spacing: 4) {
-                                MediaCardView(item: item)
-                                    .onTapGesture { viewerItem = item }
-                                if let project = item.project {
-                                    Text(project.name)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+        VStack(spacing: 0) {
+            ScreenHeader(eyebrow: "Library", title: "All Media", status: allItems.isEmpty ? nil : status)
+            Group {
+                if allItems.isEmpty {
+                    // Nothing to search, so no search box promising otherwise.
+                    EmptyState("Nothing here yet",
+                               message: "All Media shows the photos and videos imported into projects. Your Photos library is in Triage and Organise.")
+                } else if displayed.isEmpty {
+                    EmptyState("No results for “\(searchText)”", message: "Check the spelling or try a new search.")
+                } else {
+                    ScrollView {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: Theme.Space.gutter)],
+                            spacing: Theme.Space.gutter
+                        ) {
+                            ForEach(displayed) { item in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    MediaCardView(item: item)
+                                        .onTapGesture { viewerItem = item }
+                                    if let project = item.project {
+                                        Text(project.name)
+                                            .font(.tiny)
+                                            .foregroundStyle(Theme.table.muted)
+                                            .lineLimit(1)
+                                            .padding(.horizontal, 2)
+                                    }
                                 }
                             }
                         }
+                        .padding(Theme.Space.gutter)
                     }
-                    .padding()
                 }
             }
+            .mediaSearch(text: $searchText, prompt: "Search names, tags or projects", shown: !allItems.isEmpty)
         }
         .tableSurfaceList()
-        .navigationTitle("All Media")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .mediaSearch(text: $searchText, prompt: "Search names, tags or projects", shown: !allItems.isEmpty)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

@@ -11,7 +11,7 @@ struct FlowLayout: Layout {
         var currentRowWidth: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let size = fitted(subview, maxWidth)
             if currentRowWidth + size.width > maxWidth, !rows[rows.count - 1].isEmpty {
                 rows.append([])
                 currentRowWidth = 0
@@ -27,13 +27,21 @@ struct FlowLayout: Layout {
                       height: max(0, height))
     }
 
+    /// Its natural size, but never wider than a row: a long item is offered
+    /// the row's width so it shortens its own text instead of running off.
+    private func fitted(_ subview: LayoutSubview, _ maxWidth: CGFloat) -> CGSize {
+        let size = subview.sizeThatFits(.unspecified)
+        guard size.width > maxWidth, maxWidth.isFinite else { return size }
+        return subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+    }
+
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
         var x = bounds.minX
         var y = bounds.minY
         var rowHeight: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let size = fitted(subview, bounds.width)
             if x + size.width > bounds.maxX, x > bounds.minX {
                 x = bounds.minX
                 y += rowHeight + spacing

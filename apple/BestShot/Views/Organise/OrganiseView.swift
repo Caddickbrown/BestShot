@@ -165,7 +165,7 @@ struct OrganiseView: View {
         } label: {
             HStack(spacing: 4) {
                 if added { Image(systemName: "checkmark").font(.small) }
-                Text(album.localizedTitle ?? "Album").lineLimit(1)
+                Text(album.localizedTitle ?? "Album").lineLimit(1).layoutPriority(1)
                 // Photos hides an album in its folder; the folder tells twins apart.
                 if let folder = session.folder(of: album) {
                     Text(folder).font(.small).opacity(0.55)

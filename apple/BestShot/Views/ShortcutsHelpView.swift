@@ -24,21 +24,23 @@ struct ShortcutsHelpView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Keyboard Shortcuts") {
+                TableSection("Keyboard Shortcuts") {
                     ForEach(shortcuts, id: \.1) { key, action in
                         HStack {
+                            // Keys in ink, as the monitor's hint bar sets them.
                             Text(key)
-                                .font(.callout.monospaced())
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                                .font(.mono(14, medium: true))
+                                .foregroundStyle(Theme.table.ink)
                             Spacer()
                             Text(action)
-                                .foregroundStyle(.secondary)
+                                .font(.note)
+                                .foregroundStyle(Theme.table.muted)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
                 }
             }
+            .tableForm()
             .navigationTitle("Help")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

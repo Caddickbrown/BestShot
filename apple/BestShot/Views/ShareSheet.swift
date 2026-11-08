@@ -24,10 +24,10 @@ struct ShareSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Export ready")
-                .font(.headline)
+                .font(.sectionTitle)
             Text(url.lastPathComponent)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.note)
+                .foregroundStyle(Theme.table.muted)
             HStack {
                 ShareLink(item: url) {
                     Label("Share…", systemImage: "square.and.arrow.up")
@@ -36,9 +36,12 @@ struct ShareSheet: View {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
                 Button("Done") { dismiss() }
+                    .buttonStyle(.pill)
             }
+            .buttonStyle(.text)
         }
         .padding(28)
+        .tableSurface()
         .frame(minWidth: 360)
     }
 }

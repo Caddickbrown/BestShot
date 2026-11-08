@@ -74,7 +74,7 @@ struct OrganiseView: View {
                 ForEach(session.albums, id: \.localIdentifier) { album in
                     let added = session.isAdded(album: album, to: asset)
                     Button {
-                        Task { await session.add(asset, to: album) }
+                        Task { await session.toggle(asset, in: album) }
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: added ? "checkmark" : "rectangle.stack")
@@ -89,7 +89,7 @@ struct OrganiseView: View {
                     }
                     // In it already: inked in, like the one pill on a screen.
                     .buttonStyle(AlbumChipStyle(added: added))
-                    .disabled(added)
+                    .accessibilityHint(added ? "Takes the photo out of this album" : "Adds the photo to this album")
                 }
             }
             .padding(.horizontal, Theme.Space.screen)

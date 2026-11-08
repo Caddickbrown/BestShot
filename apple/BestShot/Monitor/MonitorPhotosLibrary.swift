@@ -150,7 +150,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     func addToAlbum(_ id: String) async {
         guard let organise, let asset = organise.current,
               let album = organise.albums.first(where: { $0.localIdentifier == id }) else { return }
-        await organise.add(asset, to: album)
+        await organise.toggle(asset, in: album)
     }
 
     func newAlbum(_ title: String) async {

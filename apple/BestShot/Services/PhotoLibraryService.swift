@@ -165,6 +165,14 @@ final class PhotoLibraryService: @unchecked Sendable {
         }
     }
 
+    /// Take assets out of an album. They stay in the library.
+    func removeAssets(_ assets: [PHAsset], from collection: PHAssetCollection) async -> Bool {
+        await performChanges {
+            guard let request = PHAssetCollectionChangeRequest(for: collection) else { return }
+            request.removeAssets(assets as NSArray)
+        }
+    }
+
     /// Create a new album and return it (or nil on failure).
     func createAlbum(named title: String) async -> PHAssetCollection? {
         var placeholder: PHObjectPlaceholder?

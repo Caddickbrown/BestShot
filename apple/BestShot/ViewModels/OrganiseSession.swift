@@ -79,6 +79,19 @@ final class OrganiseSession {
         }
     }
 
+    /// Take the photo out of an album (the photo itself stays in the library).
+    func remove(_ asset: PHAsset, from album: PHAssetCollection) async {
+        guard isAdded(album: album, to: asset) else { return }
+        let ok = await library.removeAssets([asset], from: album)
+        if ok { added[asset.localIdentifier]?.remove(album.localIdentifier) }
+    }
+
+    /// A tap on an album: in if it's out, out if it's in.
+    func toggle(_ asset: PHAsset, in album: PHAssetCollection) async {
+        if isAdded(album: album, to: asset) { await remove(asset, from: album) }
+        else { await add(asset, to: album) }
+    }
+
     /// Create a new album, add the asset, and make it available for later photos.
     /// A name already in use files into that album rather than making its twin.
     func createAlbumAndAdd(name: String, asset: PHAsset) async {

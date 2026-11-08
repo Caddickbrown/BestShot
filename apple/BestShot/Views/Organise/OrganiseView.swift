@@ -19,15 +19,16 @@ struct OrganiseView: View {
                 PhotoAssetImage(asset: asset, contentMode: .fit)
                     .id(asset.localIdentifier)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(12)
+                    .padding(Theme.Space.bar)
 
+                HairlineRule()
                 albumChips(for: asset)
                 controls
             } else {
-                ContentUnavailableView("All organised", systemImage: "checkmark.circle")
-                    .frame(maxHeight: .infinity)
+                EmptyState("All organised")
             }
         }
+        .tableSurface()
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -50,12 +51,12 @@ struct OrganiseView: View {
 
     private var header: some View {
         VStack(spacing: 6) {
-            ProgressView(value: session.progress)
+            ProgressLine(value: session.progress)
             Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .font(.small)
+                .foregroundStyle(Theme.table.muted)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, Theme.Space.screen)
         .padding(.top, 8)
     }
 
@@ -66,10 +67,9 @@ struct OrganiseView: View {
                     showNewAlbum = true
                 } label: {
                     Label("New Album", systemImage: "plus")
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Theme.accent.opacity(0.2), in: Capsule())
+                        .foregroundStyle(Theme.table.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.outline)
 
                 ForEach(session.albums, id: \.localIdentifier) { album in
                     let added = session.isAdded(album: album, to: asset)
@@ -77,43 +77,60 @@ struct OrganiseView: View {
                         Task { await session.add(asset, to: album) }
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: added ? "checkmark.circle.fill" : "rectangle.stack")
+                            Image(systemName: added ? "checkmark" : "rectangle.stack")
                             Text(album.localizedTitle ?? "Album").lineLimit(1)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(added ? Color.green.opacity(0.25) : Color.secondary.opacity(0.15),
-                                    in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    // In it already: inked in, like the one pill on a screen.
+                    .buttonStyle(AlbumChipStyle(added: added))
                     .disabled(added)
                 }
             }
-            .padding()
+            .padding(.horizontal, Theme.Space.screen)
+            .padding(.vertical, Theme.Space.bar)
         }
         .frame(maxHeight: 160)
     }
 
     private var controls: some View {
-        HStack(spacing: 16) {
-            Button {
-                session.skip()
-            } label: {
-                Label("Skip", systemImage: "forward.end").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
+        BottomBar {
+            HStack(spacing: Theme.Space.actions) {
+                Button {
+                    session.skip()
+                } label: {
+                    Label("Skip", systemImage: "forward.end").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.outline)
 
-            Button {
-                session.next()
-            } label: {
-                Label("Next", systemImage: "checkmark").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
+                Button {
+                    session.next()
+                } label: {
+                    Label("Next", systemImage: "checkmark").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.pill)
 
-            Button { onFinish() } label: {
-                Text("Done")
+                Button { onFinish() } label: {
+                    Text("Done")
+                }
+                .buttonStyle(.text)
             }
         }
-        .controlSize(.large)
-        .padding()
+    }
+}
+
+/// An album to file into: a hairline capsule, filled with ink once the photo's in it.
+private struct AlbumChipStyle: ButtonStyle {
+    let added: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.note)
+            .foregroundStyle(added ? Theme.table.paper : Theme.table.ink)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(added ? Theme.table.ink : .clear, in: Capsule())
+            .overlay(Capsule().stroke(added ? .clear : Theme.table.rule, lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .contentShape(Capsule())
     }
 }

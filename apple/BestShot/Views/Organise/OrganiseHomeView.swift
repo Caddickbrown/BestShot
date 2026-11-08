@@ -21,11 +21,13 @@ struct OrganiseHomeView: View {
             if let session {
                 OrganiseView(session: session) { self.session = nil }
             } else {
-                startScreen
+                VStack(spacing: 0) {
+                    ScreenHeader(eyebrow: "Photos library", title: "Organise")
+                    startScreen
+                }
             }
         }
         .tableSurfaceList()
-        .navigationTitle("Organise")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -37,36 +39,33 @@ struct OrganiseHomeView: View {
         case .authorized, .limited:
             configForm
         case .notDetermined:
-            ContentUnavailableView {
-                Label("Access Your Photos", systemImage: "photo.stack")
-            } description: {
-                Text("BestShot needs photo library access to file photos into albums.")
-            } actions: {
+            EmptyState(title: "Access Your Photos",
+                       message: "BestShot needs photo library access to file photos into albums.") {
                 Button("Allow Access") {
                     Task { authStatus = await PhotoLibraryService.shared.requestAuthorization() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.pill)
             }
         default:
-            ContentUnavailableView("Photos Access Denied", systemImage: "lock",
-                                   description: Text("Enable photo library access in Settings."))
+            EmptyState("Photos Access Denied", message: "Enable photo library access in Settings.")
         }
     }
 
     private var configForm: some View {
         Form {
             SourceSection(source: $source, albums: albums)
-            Section {
+            TableSection("Order") {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                 }
             }
             if let emptyMessage {
-                Section { Text(emptyMessage).foregroundStyle(.secondary) }
+                TableSection { Text(emptyMessage).foregroundStyle(Theme.table.muted) }
             }
         }
+        .tableForm()
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button {
+            BottomBar { Button {
                 start()
             } label: {
                 Group {
@@ -76,11 +75,7 @@ struct OrganiseHomeView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.pill)
-            .disabled(isLoading)
-            .padding(.horizontal)
-            .padding(.vertical, 10)
-            .background(Theme.table.background)
-            .overlay(alignment: .top) { HairlineRule() }
+            .disabled(isLoading) }
         }
         .task { albums = PhotoLibraryService.shared.userAlbums() }
     }

@@ -18,13 +18,12 @@ struct OrganiseView: View {
             header
 
             if let asset = session.current {
-                PhotoAssetImage(asset: asset, contentMode: .fit)
+                // Pinch or double-tap to zoom, drag to look around; a single tap
+                // puts the keyboard away.
+                OrganisePhoto(asset: asset) { searchFocused = false }
                     .id(asset.localIdentifier)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(Theme.Space.bar)
-                    // A tap on the photo puts the keyboard away.
-                    .contentShape(Rectangle())
-                    .onTapGesture { searchFocused = false }
 
                 HairlineRule()
                 albumChips(for: asset)
@@ -223,5 +222,53 @@ private struct AlbumChipStyle: ButtonStyle {
             .overlay(Capsule().stroke(added ? .clear : Theme.table.rule, lineWidth: 1))
             .opacity(configuration.isPressed ? 0.55 : 1)
             .contentShape(Capsule())
+    }
+}
+
+/// Organise's photo, zoomable the way Triage's is (PhotoZoom), without the
+/// swipes: pinch or double-tap to zoom, one finger moves it while zoomed.
+private struct OrganisePhoto: View {
+    let asset: PHAsset
+    let onTap: () -> Void
+    @State private var zoom = PhotoZoom()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geo in
+            let box = geo.size
+            PhotoAssetImage(asset: asset, targetSize: CGSize(width: box.width * 2 * CGFloat(zoom.detail),
+                                                             height: box.height * 2 * CGFloat(zoom.detail)),
+                            contentMode: .fit)
+                .frame(width: box.width, height: box.height)
+                .scaleEffect(zoom.scale * zoom.shrink)
+                .offset(zoom.pan)
+                .frame(width: box.width, height: box.height)
+                .clipped()
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { location in
+                    animated { zoom.doubleTap(at: fromMiddle(location, box), in: box) }
+                }
+                .onTapGesture { onTap() }
+                .gesture(DragGesture(minimumDistance: 4)
+                    .onChanged { value in if zoom.isZoomed { zoom.drag(by: value.translation, in: box) } }
+                    .onEnded { _ in zoom.endDrag() },
+                    including: zoom.isZoomed ? .all : .subviews)
+                .simultaneousGesture(MagnifyGesture()
+                    .onChanged { value in
+                        zoom.pinch(by: value.magnification, around: fromMiddle(value.startLocation, box), in: box)
+                    }
+                    .onEnded { _ in animated { _ = zoom.endPinch(in: box) } })
+                .accessibilityAction(named: zoom.isZoomed ? "Zoom out" : "Zoom in") {
+                    zoom.doubleTap(at: .zero, in: box)
+                }
+        }
+    }
+
+    private func fromMiddle(_ point: CGPoint, _ box: CGSize) -> CGPoint {
+        CGPoint(x: point.x - box.width / 2, y: point.y - box.height / 2)
+    }
+
+    private func animated(_ change: () -> Void) {
+        if reduceMotion { change() } else { withAnimation(Theme.Motion.snap, change) }
     }
 }

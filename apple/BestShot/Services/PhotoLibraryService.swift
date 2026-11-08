@@ -72,13 +72,34 @@ final class PhotoLibraryService: @unchecked Sendable {
         return assets
     }
 
-    /// User-visible albums (top-level, non-smart), for the organise picker. One
-    /// per name: the fullest stands for the others, which stay in Photos untouched.
-    func userAlbums() -> [PHAssetCollection] {
+    /// User-visible albums (non-smart, in folders or not), for the organise picker.
+    /// One per name in each folder: the fullest stands for the others, which stay
+    /// in Photos untouched.
+    func userAlbums() -> [PHAssetCollection] { userAlbumsWithFolders().albums }
+
+    /// The albums, and the folder each one sits in, by album id. Albums at the top
+    /// level have none. Photos hides an album inside its folder, so the name of
+    /// the folder is what tells "Lisbon" from "Lisbon" in Imported from Google.
+    func userAlbumsWithFolders() -> (albums: [PHAssetCollection], folders: [String: String]) {
         let result = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
         var albums: [PHAssetCollection] = []
         result.enumerateObjects { collection, _, _ in albums.append(collection) }
-        return AlbumList.unique(albums, title: \.localizedTitle, count: \.estimatedAssetCount)
+        let folders = folderNames(albums)
+        let unique = AlbumList.unique(albums, title: \.localizedTitle, count: \.estimatedAssetCount,
+                                      folder: { folders[$0.localIdentifier] })
+        return (unique, folders)
+    }
+
+    /// The nearest folder of each album that's in one.
+    func folderNames(_ albums: [PHAssetCollection]) -> [String: String] {
+        var folders: [String: String] = [:]
+        for album in albums {
+            let lists = PHCollectionList.fetchCollectionListsContaining(album, options: nil)
+            if let name = lists.firstObject?.localizedTitle, !name.isEmpty {
+                folders[album.localIdentifier] = name
+            }
+        }
+        return folders
     }
 
     /// Count of assets in a collection (for album chips).

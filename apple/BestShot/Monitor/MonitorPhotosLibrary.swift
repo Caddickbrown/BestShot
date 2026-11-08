@@ -134,7 +134,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     var organiseAlbums: [(id: String, title: String, added: Bool)] {
         guard let organise, let current = organise.current else { return [] }
         return organise.albums.map {
-            ($0.localIdentifier, $0.localizedTitle ?? "Album", organise.isAdded(album: $0, to: current))
+            ($0.localIdentifier, organise.label($0), organise.isAdded(album: $0, to: current))
         }
     }
 
@@ -142,7 +142,8 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         let found = OrganiseHomeView.fetchSession(order: order, source: source, context: context)
         guard !found.isEmpty else { return "No unorganised photos found for this source." }
         for asset in found { assets[asset.localIdentifier] = asset }
-        organise = OrganiseSession(assets: found, albums: photos.userAlbums(), context: context)
+        let albums = photos.userAlbumsWithFolders()
+        organise = OrganiseSession(assets: found, albums: albums.albums, folders: albums.folders, context: context)
         return nil
     }
 

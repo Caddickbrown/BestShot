@@ -20,6 +20,9 @@ final class OrganiseSession {
     }
     /// Albums available to file into (mutable so newly created ones appear).
     private(set) var albums: [PHAssetCollection]
+    /// Album id → the folder it's in, worked out once when the session starts.
+    /// A new album is made at the top level, so it never has one.
+    private let folders: [String: String]
 
     /// assetLocalID -> set of album localIdentifiers the photo is in: the
     /// albums it was already in when it came up, plus any added this session.
@@ -28,9 +31,10 @@ final class OrganiseSession {
     private let context: ModelContext
     private let library = PhotoLibraryService.shared
 
-    init(assets: [PHAsset], albums: [PHAssetCollection], context: ModelContext) {
+    init(assets: [PHAsset], albums: [PHAssetCollection], folders: [String: String] = [:], context: ModelContext) {
         self.assets = assets
         self.albums = AlbumRecency.ordered(albums)
+        self.folders = folders
         self.context = context
         loadMembership()
     }
@@ -53,6 +57,14 @@ final class OrganiseSession {
     var progress: Double { assets.isEmpty ? 1 : Double(index) / Double(assets.count) }
     var organisedCount: Int { index }
 
+    /// The folder an album is in, if any.
+    func folder(of album: PHAssetCollection) -> String? { folders[album.localIdentifier] }
+
+    /// "Lisbon · Imported from Google", or the name alone at the top level.
+    func label(_ album: PHAssetCollection) -> String {
+        AlbumList.label(title: album.localizedTitle, folder: folder(of: album))
+    }
+
     func isAdded(album: PHAssetCollection, to asset: PHAsset) -> Bool {
         added[asset.localIdentifier]?.contains(album.localIdentifier) ?? false
     }
@@ -72,7 +84,7 @@ final class OrganiseSession {
     func createAlbumAndAdd(name: String, asset: PHAsset) async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if let same = AlbumList.existing(named: trimmed, in: albums, title: \.localizedTitle) {
+        if let same = AlbumList.existing(named: trimmed, in: albums, title: \.localizedTitle, folder: folder(of:)) {
             await add(asset, to: same)
             return
         }

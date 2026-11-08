@@ -15,6 +15,7 @@ struct TriageHomeView: View {
     @State private var waitingDeletes: [PHAsset] = []
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
+    @State private var folders: [String: String] = [:]
     /// Above this screen, so the monitor shares it and leaving doesn't lose it.
     @State private var holder = TriageHolder.shared
     private var session: TriageSession? {
@@ -81,7 +82,7 @@ struct TriageHomeView: View {
                         .buttonStyle(.text)
                 }
             }
-            SourceSection(source: $source, albums: albums)
+            SourceSection(source: $source, albums: albums, folders: folders)
 
             TableSection("Order") {
                 Picker("Order", selection: $order) {
@@ -101,7 +102,11 @@ struct TriageHomeView: View {
         }
         .tableForm()
         .safeAreaInset(edge: .bottom, spacing: 0) { startBar }
-        .task { albums = PhotoLibraryService.shared.userAlbums() }
+        .task {
+            let found = PhotoLibraryService.shared.userAlbumsWithFolders()
+            albums = found.albums
+            folders = found.folders
+        }
     }
 
     /// Always on screen, however long the list above it gets.

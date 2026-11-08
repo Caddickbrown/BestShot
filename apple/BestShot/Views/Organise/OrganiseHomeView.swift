@@ -12,6 +12,7 @@ struct OrganiseHomeView: View {
     @State private var order: SessionOrder = .newest
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
+    @State private var folders: [String: String] = [:]
     @State private var session: OrganiseSession?
     @State private var isLoading = false
     @State private var emptyMessage: String?
@@ -53,7 +54,7 @@ struct OrganiseHomeView: View {
 
     private var configForm: some View {
         Form {
-            SourceSection(source: $source, albums: albums)
+            SourceSection(source: $source, albums: albums, folders: folders)
             TableSection("Order") {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
@@ -77,7 +78,11 @@ struct OrganiseHomeView: View {
             .buttonStyle(.pill)
             .disabled(isLoading) }
         }
-        .task { albums = PhotoLibraryService.shared.userAlbums() }
+        .task {
+            let found = PhotoLibraryService.shared.userAlbumsWithFolders()
+            albums = found.albums
+            folders = found.folders
+        }
     }
 
     /// The photos a new session would go through. The monitor starts one this way.
@@ -102,13 +107,13 @@ struct OrganiseHomeView: View {
             let assets = PhotoLibraryService.shared.fetchAssets(
                 in: collection, order: chosenOrder, excluding: organisedIDs
             )
-            let currentAlbums = PhotoLibraryService.shared.userAlbums()
+            let current = PhotoLibraryService.shared.userAlbumsWithFolders()
             await MainActor.run {
                 isLoading = false
                 if assets.isEmpty {
                     emptyMessage = "No unorganised photos found for this source."
                 } else {
-                    session = OrganiseSession(assets: assets, albums: currentAlbums, context: context)
+                    session = OrganiseSession(assets: assets, albums: current.albums, folders: current.folders, context: context)
                 }
             }
         }

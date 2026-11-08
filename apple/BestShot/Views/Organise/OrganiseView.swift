@@ -79,7 +79,13 @@ struct OrganiseView: View {
                         HStack(spacing: 5) {
                             Image(systemName: added ? "checkmark" : "rectangle.stack")
                             Text(album.localizedTitle ?? "Album").lineLimit(1)
+                            // Photos hides an album in its folder; the folder tells twins apart.
+                            if let folder = session.folder(of: album) {
+                                Text("· \(folder)").opacity(0.6).lineLimit(1)
+                            }
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(session.label(album))
                     }
                     // In it already: inked in, like the one pill on a screen.
                     .buttonStyle(AlbumChipStyle(added: added))

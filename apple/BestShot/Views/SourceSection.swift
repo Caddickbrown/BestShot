@@ -6,6 +6,8 @@ import Photos
 struct SourceSection: View {
     @Binding var source: TriageSourceOption
     let albums: [PHAssetCollection]
+    /// Album id → its folder, so two albums with one name read apart.
+    var folders: [String: String] = [:]
 
     var body: some View {
         TableSection("Go through") {
@@ -20,7 +22,8 @@ struct SourceSection: View {
                 Picker(selection: album) {
                     Text("None").tag(String?.none)
                     ForEach(albums, id: \.localIdentifier) { album in
-                        Text(album.localizedTitle ?? "Album").tag(Optional(album.localIdentifier))
+                        Text(AlbumList.label(title: album.localizedTitle, folder: folders[album.localIdentifier]))
+                            .tag(Optional(album.localIdentifier))
                     }
                 } label: {
                     Label("Album", systemImage: TriageSourceOption.album("").symbol)

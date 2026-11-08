@@ -40,4 +40,34 @@ final class AlbumListTests: XCTestCase {
         XCTAssertEqual(AlbumList.existing(named: " holiday", in: albums, title: \.title)?.id, "a")
         XCTAssertNil(AlbumList.existing(named: "Dogs", in: albums, title: \.title))
     }
+
+    // MARK: Folders
+
+    private struct Filed {
+        let id: String
+        let title: String?
+        let folder: String?
+    }
+
+    func testOneNameInTwoFoldersKeepsBoth() {
+        let albums = [Filed(id: "a", title: "Lisbon", folder: nil), Filed(id: "b", title: "Lisbon", folder: "Imported from Google")]
+        let kept = AlbumList.unique(albums, title: \.title, count: { _ in 0 }, folder: \.folder).map(\.id)
+        XCTAssertEqual(kept, ["a", "b"], "the top-level one first, then by folder")
+    }
+
+    func testOneNameTwiceInOneFolderStillShowsOnce() {
+        let albums = [Filed(id: "a", title: "Lisbon", folder: "Imported from Google"), Filed(id: "b", title: "lisbon", folder: "Imported from Google")]
+        XCTAssertEqual(AlbumList.unique(albums, title: \.title, count: { _ in 0 }, folder: \.folder).map(\.id), ["a"])
+    }
+
+    func testTheLabelNamesTheFolder() {
+        XCTAssertEqual(AlbumList.label(title: "Lisbon", folder: "Imported from Google"), "Lisbon · Imported from Google")
+        XCTAssertEqual(AlbumList.label(title: "Lisbon", folder: nil), "Lisbon")
+    }
+
+    func testANewNameFilesIntoTheTopLevelTwinFirst() {
+        let albums = [Filed(id: "g", title: "Lisbon", folder: "Imported from Google"), Filed(id: "t", title: "Lisbon", folder: nil)]
+        XCTAssertEqual(AlbumList.existing(named: "lisbon", in: albums, title: \.title, folder: \.folder)?.id, "t")
+        XCTAssertEqual(AlbumList.existing(named: "lisbon", in: [albums[0]], title: \.title, folder: \.folder)?.id, "g")
+    }
 }

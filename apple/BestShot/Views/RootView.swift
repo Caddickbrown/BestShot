@@ -35,32 +35,30 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
             List(selection: $selection) {
-                Section("Review") {
-                    Label("Triage", systemImage: "rectangle.stack.badge.person.crop")
+                MenuSection("Review") {
+                    MenuRow("Triage", systemImage: "rectangle.stack.badge.person.crop")
                         .tag(SidebarSelection.triage)
-                    Label("Organise", systemImage: "folder.badge.plus")
+                    MenuRow("Organise", systemImage: "folder.badge.plus")
                         .tag(SidebarSelection.organise)
-                    Label("Rank", systemImage: "list.number")
+                    MenuRow("Rank", systemImage: "list.number")
                         .tag(SidebarSelection.rank)
                 }
                 #if os(macOS)
-                Section("Folders") {
-                    Label("Cull a folder", systemImage: "folder")
+                MenuSection("Folders") {
+                    MenuRow("Cull a folder", systemImage: "folder")
                         .tag(SidebarSelection.folders)
                 }
                 #endif
-                Section("Library") {
-                    Label("All Media", systemImage: "square.grid.2x2")
+                MenuSection("Library") {
+                    MenuRow("All Media", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.allMedia)
                 }
-                Section("Projects") {
+                MenuSection("Projects") {
                     if projects.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Nothing here yet. A project is a set of photos you import to rank together, apart from your library.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            FormNote("Nothing here yet. A project is a set of photos you import to rank together, apart from your library.")
                             Button("New Project") { showingNewProject = true }
-                                .font(.footnote)
+                                .buttonStyle(.text)
                         }
                         .padding(.vertical, 2)
                     }
@@ -77,6 +75,7 @@ struct RootView: View {
                     }
                 }
             }
+            .tableSurfaceList()
             .navigationTitle("BestShot")
             .toolbar {
                 // Both in plain sight. A secondary item folds into the bar's own
@@ -166,17 +165,77 @@ private struct ProjectRow: View {
     let project: Project
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: "folder")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.table.muted)
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.name).lineLimit(1)
+                Text(project.name).font(.row).lineLimit(1)
                 Text("\(project.itemCount) item\(project.itemCount == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.small)
+                    .foregroundStyle(Theme.table.muted)
             }
         }
+        .menuRowBackground()
     }
+}
+
+/// A heading in the main menu: Rank's small mono label.
+private struct MenuSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.content = content
+    }
+
+    var body: some View {
+        Section {
+            content()
+        } header: {
+            SheetLabel(title)
+        }
+    }
+}
+
+/// A place in the main menu: a quiet icon and the name in mono, on the table.
+private struct MenuRow: View {
+    let title: String
+    let systemImage: String
+
+    init(_ title: String, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        Label {
+            Text(title).font(.row)
+        } icon: {
+            Image(systemName: systemImage).foregroundStyle(Theme.table.muted)
+        }
+        .menuRowBackground()
+    }
+}
+
+private struct MenuRowBackground: ViewModifier {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        // On a phone the menu is a list of rows on paper. Beside the iPad's screen
+        // it's a sidebar, and the system draws which row is open.
+        if sizeClass == .compact { content.listRowBackground(Theme.table.paper) } else { content }
+        #else
+        content
+        #endif
+    }
+}
+
+private extension View {
+    func menuRowBackground() -> some View { modifier(MenuRowBackground()) }
 }
 
 /// Sheet for creating a project (name + optional description), mirroring the
@@ -190,7 +249,7 @@ struct NewProjectSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Project") {
+                TableSection("Project") {
                     EscapingField(placeholder: "Name", text: $name)
                     #if os(iOS)
                     EscapingEditor(placeholder: "Description (optional)", text: $description)
@@ -201,6 +260,7 @@ struct NewProjectSheet: View {
                     #endif
                 }
             }
+            .tableForm()
             .navigationTitle("New Project")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -253,17 +313,7 @@ extension EnvironmentValues {
 /// Beside the menu on an iPad or a Mac, before anything is chosen.
 private struct HomeDetailView: View {
     var body: some View {
-        VStack(spacing: 10) {
-            Text("BestShot")
-                .font(.display(24, weight: 800, width: 70))
-            Text("Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums.")
-                .font(.mono(13))
-                .foregroundStyle(Theme.table.muted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .tableSurface()
+        EmptyState("BestShot", message: "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums.")
+            .tableSurface()
     }
 }

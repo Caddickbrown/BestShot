@@ -13,7 +13,10 @@ final class OrganiseSession {
 
     let assets: [PHAsset]
     var index: Int = 0 {
-        didSet { loadMembership() }
+        didSet {
+            loadMembership()
+            albums = AlbumRecency.ordered(albums)   // reorder between photos, never under a finger
+        }
     }
     /// Albums available to file into (mutable so newly created ones appear).
     private(set) var albums: [PHAssetCollection]
@@ -27,7 +30,7 @@ final class OrganiseSession {
 
     init(assets: [PHAsset], albums: [PHAssetCollection], context: ModelContext) {
         self.assets = assets
-        self.albums = albums
+        self.albums = AlbumRecency.ordered(albums)
         self.context = context
         loadMembership()
     }
@@ -60,6 +63,7 @@ final class OrganiseSession {
         let ok = await library.addAssets([asset], to: album)
         if ok {
             added[asset.localIdentifier, default: []].insert(album.localIdentifier)
+            AlbumRecency.used(album.localIdentifier)
         }
     }
 
@@ -73,8 +77,8 @@ final class OrganiseSession {
             return
         }
         guard let album = await library.createAlbum(named: trimmed) else { return }
-        albums.append(album)
-        albums.sort { ($0.localizedTitle ?? "").localizedStandardCompare($1.localizedTitle ?? "") == .orderedAscending }
+        // A new album joins the front of the pool at once, ready for the next photo.
+        albums.insert(album, at: 0)
         await add(asset, to: album)
     }
 
@@ -98,5 +102,41 @@ final class OrganiseSession {
             context.insert(AssetReview(assetLocalID: id, decision: .undecided, organised: true))
         }
         try? context.save()
+    }
+}
+
+/// Albums you've filed into most recently come first, so the ones in use
+/// build up into a pool at the front; the rest follow A to Z. Kept on this
+/// device between sessions.
+enum AlbumRecency {
+    private static let key = "organise.albumRecency"
+    private static let keep = 200
+
+    /// Album id → when it was last filed into.
+    private static var stamps: [String: Double] {
+        get { UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    static func used(_ albumID: String) {
+        var s = stamps
+        s[albumID] = Date().timeIntervalSince1970
+        if s.count > keep {
+            for (id, _) in s.sorted(by: { $0.value < $1.value }).prefix(s.count - keep) { s[id] = nil }
+        }
+        stamps = s
+    }
+
+    static func ordered(_ albums: [PHAssetCollection]) -> [PHAssetCollection] {
+        let s = stamps
+        return albums.sorted { a, b in
+            switch (s[a.localIdentifier], s[b.localIdentifier]) {
+            case let (x?, y?): return x > y
+            case (.some, nil): return true
+            case (nil, .some): return false
+            case (nil, nil):
+                return (a.localizedTitle ?? "").localizedStandardCompare(b.localizedTitle ?? "") == .orderedAscending
+            }
+        }
     }
 }

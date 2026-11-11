@@ -98,9 +98,19 @@ name = "bestshot-ffi"
 version = "0.2.0"
 dependencies = [
  "bestshot-core",
+ "bestshot-media",
  "tempfile",
  "thiserror",
  "uniffi",
+]
+
+[[package]]
+name = "bestshot-media"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

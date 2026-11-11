@@ -16,6 +16,7 @@ A native photo culling and ranking app, fully on-device. It shares its look
   be culled on either machine. Stars, colour labels and keywords are standard
   XMP (see below), with filters across all of them.
 - **Organise**: file photos into Photos albums.
+- **Tools** (iPhone/iPad): join videos with cuts, crossfades or sequential black fades; remove a middle image band with Anti-Crop. Sources come from Files, Photos or projects. Exports are local and non-destructive. See [implementation notes](../docs/media-tools-implementation.md) for format, colour and memory limits.
 - **Projects / Compare**: the original web-app ranking over imported copies.
 
 ## Requirements

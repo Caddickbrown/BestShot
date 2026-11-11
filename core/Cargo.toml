@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["bestshot-core", "bestshot-ffi"]
+members = ["bestshot-core", "bestshot-ffi", "bestshot-media"]
 
 [profile.release]
 lto = true

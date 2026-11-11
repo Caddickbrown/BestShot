@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import BestShot
 
 @MainActor
@@ -14,6 +15,21 @@ final class EscapeStackTests: XCTestCase {
     func testWithNothingOnTopEscGoesHome() {
         stack().press()
         XCTAssertEqual(log, ["home"])
+    }
+
+    func testEnvironmentDefaultsToNoStackAndKeepsWindowStacksSeparate() {
+        var firstWindow = EnvironmentValues()
+        var secondWindow = EnvironmentValues()
+        XCTAssertNil(firstWindow.escapeStack)
+        XCTAssertNil(secondWindow.escapeStack)
+
+        let first = stack()
+        let second = stack()
+        firstWindow.escapeStack = first
+        secondWindow.escapeStack = second
+        XCTAssertTrue(firstWindow.escapeStack === first)
+        XCTAssertTrue(secondWindow.escapeStack === second)
+        XCTAssertFalse(firstWindow.escapeStack === secondWindow.escapeStack)
     }
 
     func testTheNewestLayerClosesFirstAndOnlyIt() {

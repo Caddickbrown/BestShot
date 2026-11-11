@@ -29,6 +29,8 @@ struct RootView: View {
         case rank
         case folders
         case allMedia
+        case joinVideos
+        case antiCrop
         case project(UUID)
     }
 
@@ -49,6 +51,12 @@ struct RootView: View {
                         .tag(SidebarSelection.folders)
                 }
                 #endif
+                MenuSection("Tools") {
+                    MenuRow("Join Videos", systemImage: "film.stack")
+                        .tag(SidebarSelection.joinVideos)
+                    MenuRow("Anti-Crop", systemImage: "rectangle.split.2x1")
+                        .tag(SidebarSelection.antiCrop)
+                }
                 MenuSection("Library") {
                     MenuRow("All Media", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.allMedia)
@@ -126,6 +134,10 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .joinVideos:
+            VideoJoinView()
+        case .antiCrop:
+            AntiCropView()
         case .allMedia:
             AllMediaView()
         case .project(let id):

@@ -911,3 +911,29 @@ mod tests {
         assert_eq!(s.order(), ["a", "b", "c"]);
     }
 }
+
+// Small JSON plans keep versioned media schemas in the portable crate. Pixel
+// buffers stay in platform-owned temporary files, never copied across UniFFI.
+#[uniffi::export]
+pub fn media_anti_crop_plan(config_json: String, width: u32, height: u32) -> Result<String, CoreError> {
+    let edit: bestshot_media::image::AntiCrop = bestshot_media::decode(&config_json).map_err(|e| io_error(e.to_string()))?;
+    bestshot_media::encode(&edit.plan(width, height).map_err(|e| io_error(e.to_string()))?).map_err(|e| io_error(e.to_string()))
+}
+#[uniffi::export]
+pub fn media_video_plan(config_json: String) -> Result<String, CoreError> {
+    let edit: bestshot_media::video::VideoJoin = bestshot_media::decode(&config_json).map_err(|e| io_error(e.to_string()))?;
+    bestshot_media::encode(&edit.plan().map_err(|e| io_error(e.to_string()))?).map_err(|e| io_error(e.to_string()))
+}
+#[derive(uniffi::Object)]
+pub struct MediaRenderJob { cancelled: std::sync::atomic::AtomicBool }
+#[uniffi::export]
+impl MediaRenderJob {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> { Arc::new(Self { cancelled: std::sync::atomic::AtomicBool::new(false) }) }
+    pub fn cancel(&self) { self.cancelled.store(true, std::sync::atomic::Ordering::Relaxed); }
+    pub fn crop_rgba(&self, config_json: String, width: u32, height: u32, source: String, destination: String) -> Result<(), CoreError> {
+        let edit = bestshot_media::decode(&config_json).map_err(|e| io_error(e.to_string()))?;
+        bestshot_media::image::crop_rgba(&edit,width,height,Path::new(&source),Path::new(&destination),&self.cancelled)
+            .map(|_| ()).map_err(|e| io_error(e.to_string()))
+    }
+}

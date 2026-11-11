@@ -26,11 +26,13 @@ import UIKit
 // not two to trade it. With no monitor it hears Esc and nothing else.
 
 private struct EscapeStackKey: EnvironmentKey {
-    @MainActor static let defaultValue = EscapeStack()
+    // Each window supplies its own stack through escapeRoot. A nil default is
+    // safe to read outside the main actor and cannot share state across windows.
+    static let defaultValue: EscapeStack? = nil
 }
 
 extension EnvironmentValues {
-    var escapeStack: EscapeStack {
+    var escapeStack: EscapeStack? {
         get { self[EscapeStackKey.self] }
         set { self[EscapeStackKey.self] = newValue }
     }
@@ -174,7 +176,7 @@ private struct EscapeLayer: ViewModifier {
     }
 
     private func sync(visible: Bool) {
-        if visible && active { stack.push(id, isSheet: isSheet, close: close) } else { stack.remove(id) }
+        if visible && active { stack?.push(id, isSheet: isSheet, close: close) } else { stack?.remove(id) }
     }
 }
 
@@ -182,7 +184,7 @@ private struct EscapeCatcherHost: View {
     @Environment(\.escapeStack) private var stack
 
     var body: some View {
-        EscapeCatcher(onEscape: stack.press)
+        EscapeCatcher(onEscape: { stack?.press() })
     }
 }
 

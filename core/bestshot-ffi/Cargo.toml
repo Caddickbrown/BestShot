@@ -16,6 +16,7 @@ name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
+bestshot-media = { path = "../bestshot-media" }
 bestshot-core = { path = "../bestshot-core" }
 uniffi = { version = "0.32", features = ["cli"] }
 thiserror = "2"

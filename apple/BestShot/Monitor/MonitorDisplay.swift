@@ -34,7 +34,7 @@ import UIKit
         // away, so every return checks what's really there.
         for name in [UIApplication.didBecomeActiveNotification, UIApplication.willEnterForegroundNotification,
                      UIApplication.willResignActiveNotification,
-                     UIScreen.didConnectNotification, UIScreen.didDisconnectNotification,
+                     UIScene.willConnectNotification,
                      UIScene.didDisconnectNotification, UIScene.didActivateNotification,
                      UIScene.willEnterForegroundNotification, UIScene.didEnterBackgroundNotification] {
             observe(name) { $0.reconcile() }
@@ -57,12 +57,13 @@ import UIKit
         desk?.onPause = { [weak self] in self?.updateIdleTimer() }
     }
 
-    /// The monitor's scene, if it's attached to a screen that's still there.
+    /// Open sessions own the current scene lifecycle, including external displays.
+    /// Disconnected sessions can remain available for restoration without a scene.
     private var monitorScene: UIWindowScene? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.session.role == .windowExternalDisplayNonInteractive
-                && $0.activationState != .unattached && UIScreen.screens.contains($0.screen) }
+        UIApplication.shared.openSessions
+            .filter { $0.role == .windowExternalDisplayNonInteractive }
+            .compactMap { $0.scene as? UIWindowScene }
+            .first { $0.activationState != .unattached }
     }
 
     /// Makes the desk's `isConnected` what's really there, whatever was or wasn't

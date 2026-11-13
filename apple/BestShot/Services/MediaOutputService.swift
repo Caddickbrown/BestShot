@@ -1,5 +1,4 @@
 import CoreTransferable
-import Photos
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -67,48 +66,6 @@ struct ToolPickedFile: Transferable {
         throw error
       }
       return Self(url: url)
-    }
-  }
-}
-
-struct MediaSettingsDocument: FileDocument {
-  static var readableContentTypes: [UTType] { [.json] }
-  var data: Data
-  init(_ data: Data) { self.data = data }
-  init(configuration: ReadConfiguration) throws {
-    data = configuration.file.regularFileContents ?? Data()
-  }
-  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-    FileWrapper(regularFileWithContents: data)
-  }
-}
-
-struct MediaResultView: View {
-  let url: URL
-  let isVideo: Bool
-  @State private var saving = false
-  @State private var message: String?
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      ShareLink(item: url) { Label("Save to Files / Share", systemImage: "square.and.arrow.up") }
-      Button("Save to Photos") {
-        saving = true
-        Task {
-          do {
-            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-            guard status == .authorized || status == .limited else {
-              throw MediaToolError.message("Allow Photos access in Settings to save this export.")
-            }
-            try await PHPhotoLibrary.shared().performChanges {
-              let request = PHAssetCreationRequest.forAsset()
-              request.addResource(with: isVideo ? .video : .photo, fileURL: url, options: nil)
-            }
-            message = "Saved to Photos."
-          } catch { message = error.localizedDescription }
-          saving = false
-        }
-      }.disabled(saving)
-      if let message { Text(message).font(.caption).accessibilityAddTraits(.updatesFrequently) }
     }
   }
 }

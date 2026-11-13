@@ -48,7 +48,12 @@ final class VideoJoinSession {
     } catch { return error.localizedDescription }
   }
   var durationText: String? {
-    (try? config.plan()).map { String(format: "%.3f seconds", Double($0.duration_ms) / 1000) }
+    (try? config.plan()).map { plan in
+      let seconds = Double(plan.duration_ms) / 1000
+      return seconds < 60
+        ? String(format: "%.1f s", seconds)
+        : String(format: "%d:%04.1f", Int(seconds) / 60, seconds.truncatingRemainder(dividingBy: 60))
+    }
   }
   func invalidate() {
     player?.pause()
@@ -225,32 +230,5 @@ final class VideoJoinSession {
     task?.cancel()
     exporter?.cancelExport()
     player?.pause()
-  }
-  func loadSettings(_ url: URL) {
-    error = nil
-    do {
-      let scoped = url.startAccessingSecurityScopedResource()
-      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-      let saved = try JSONDecoder().decode(VideoJoinConfiguration.self, from: Data(contentsOf: url))
-      _ = try saved.plan()
-      guard saved.clips.count == clips.count,
-        zip(saved.clips, clips).allSatisfy({
-          $0.source_ref == $1.name && $0.in_ms == $1.startMS
-            && $0.out_ms == $1.startMS + $1.durationMS
-        })
-      else {
-        throw MediaToolError.message(
-          "Add the saved edit’s original clips in the saved order before reopening settings.")
-      }
-      let mapping = Dictionary(uniqueKeysWithValues: zip(saved.clips, clips).map { ($0.id, $1.id) })
-      output = saved.output
-      transition = saved.default_transition
-      overrides = Dictionary(
-        uniqueKeysWithValues: saved.join_overrides.compactMap { entry in
-          mapping[entry.after_clip_id].map { ($0, entry.transition) }
-        })
-      confirmedMixedSize = true
-      invalidate()
-    } catch { self.error = error.localizedDescription }
   }
 }

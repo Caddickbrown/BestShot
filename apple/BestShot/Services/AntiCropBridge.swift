@@ -15,6 +15,7 @@ enum AntiCropBridge {
     let preview: CGImage
   }
   static let maxDecodedBytes = 256 * 1024 * 1024
+  static let tooBig = "This photo is over 67 megapixels, too big for Anti-Crop."
   static func inspect(_ url: URL) throws -> Source {
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
       let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
@@ -31,6 +32,11 @@ enum AntiCropBridge {
       throw MediaToolError.message(
         "This image could not be decoded. Choose a supported JPEG, HEIC, PNG or TIFF.")
     }
+    // Say so on opening, not after the band has been set.
+    let pixels = w.multipliedReportingOverflow(by: h)
+    guard !pixels.overflow, pixels.partialValue <= maxDecodedBytes / 4 else {
+      throw MediaToolError.message(tooBig)
+    }
     let orientation = props[kCGImagePropertyOrientation] as? Int ?? 1
     let swaps = (5...8).contains(orientation)
     return Source(url: url, width: swaps ? h : w, height: swaps ? w : h, preview: preview)
@@ -42,8 +48,7 @@ enum AntiCropBridge {
     let geometry = try edit.plan(width: source.width, height: source.height)
     let bytes = source.width.multipliedReportingOverflow(by: source.height)
     guard !bytes.overflow, bytes.partialValue <= maxDecodedBytes / 4 else {
-      throw MediaToolError.message(
-        "This image exceeds the 256 MB decoded-image limit. Choose an image below 64 megapixels.")
+      throw MediaToolError.message(tooBig)
     }
     try MediaWorkspace.requireSpace(at: workspace.directory, bytes: Int64(bytes.partialValue) * 16)
     let raw = workspace.url("rgba")

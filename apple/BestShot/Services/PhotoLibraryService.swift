@@ -207,6 +207,18 @@ final class PhotoLibraryService: @unchecked Sendable {
 
     // MARK: - Helper
 
+    /// Adds a finished file (a Tools export) to the library as a new photo or
+    /// video. Asks only for add access, so it works without full library access.
+    func saveFile(_ url: URL, isVideo: Bool) async -> Bool {
+        let status = await withCheckedContinuation { cont in
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { cont.resume(returning: $0) }
+        }
+        guard status == .authorized || status == .limited else { return false }
+        return await performChanges {
+            PHAssetCreationRequest.forAsset().addResource(with: isVideo ? .video : .photo, fileURL: url, options: nil)
+        }
+    }
+
     private func performChanges(_ changes: @escaping () -> Void) async -> Bool {
         await withCheckedContinuation { cont in
             PHPhotoLibrary.shared().performChanges(changes) { success, _ in

@@ -14,6 +14,8 @@ struct FullscreenViewerView: View {
     @State private var slideshow = false
     @State private var zoom: CGFloat = 1
     @State private var newTag = ""
+    /// The photo open in Anti-Crop, over the viewer.
+    @State private var antiCrop: AntiCropRequest?
 
     private let slideshowInterval: TimeInterval = 3
 
@@ -56,6 +58,9 @@ struct FullscreenViewerView: View {
             .opacity(0)
         }
         .escapeScreen(escape)
+        .sheet(item: $antiCrop) { request in
+            ToolSheet { AntiCropView(initial: request.url) }
+        }
         .task(id: slideshow) {
             guard slideshow else { return }
             while slideshow && !Task.isCancelled {
@@ -103,6 +108,17 @@ struct FullscreenViewerView: View {
                 Button { slideshow.toggle() } label: {
                     Image(systemName: slideshow ? "pause.fill" : "play.fill").padding(10)
                 }
+                #if os(iOS)
+                if let item = current, item.mediaType == .image {
+                    Button {
+                        slideshow = false
+                        antiCrop = AntiCropRequest(url: item.fileURL)
+                    } label: {
+                        Image(systemName: "rectangle.split.2x1").padding(10)
+                    }
+                    .accessibilityLabel("Anti-Crop")
+                }
+                #endif
                 Button { withAnimation { showInfo.toggle() } } label: {
                     Image(systemName: "info.circle").padding(10)
                 }
@@ -258,4 +274,10 @@ struct FullscreenViewerView: View {
         zoom = 1
         if index > 0 { index -= 1 }
     }
+}
+
+/// A project photo on its way into Anti-Crop.
+private struct AntiCropRequest: Identifiable {
+    let id = UUID()
+    let url: URL
 }

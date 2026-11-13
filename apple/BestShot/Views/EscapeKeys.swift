@@ -116,12 +116,14 @@ struct EscapingField: View {
     @Binding var text: String
     var bordered = false
     var autofocus = false
+    /// Whole numbers only, on the number pad: Tools' pixel sizes.
+    var numeric = false
     var onSubmit: () -> Void = {}
 
     var body: some View {
         #if os(iOS)
         EscapingFieldRepresentable(placeholder: placeholder, text: $text, bordered: bordered,
-                                   autofocus: autofocus, onSubmit: onSubmit)
+                                   autofocus: autofocus, numeric: numeric, onSubmit: onSubmit)
         #else
         if bordered {
             TextField(placeholder, text: $text).textFieldStyle(.roundedBorder).onSubmit(onSubmit)
@@ -332,6 +334,7 @@ private struct EscapingFieldRepresentable: UIViewRepresentable {
     @Binding var text: String
     let bordered: Bool
     let autofocus: Bool
+    var numeric = false
     let onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -345,6 +348,7 @@ private struct EscapingFieldRepresentable: UIViewRepresentable {
         field.adjustsFontForContentSizeCategory = true
         field.borderStyle = bordered ? .roundedRect : .none
         field.returnKeyType = .done
+        if numeric { field.keyboardType = .numberPad }
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)

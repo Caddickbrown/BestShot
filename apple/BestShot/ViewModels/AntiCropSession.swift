@@ -15,6 +15,8 @@ final class AntiCropSession {
   private var job: MediaRenderJob?
   private var undoEdits: [AntiCropConfiguration] = []
   private var applyingUndo = false
+  /// The band before a drag began: one drag is one step of Undo, not one per pixel.
+  private var adjustStart: AntiCropConfiguration?
 
   var geometry: CropGeometry? {
     guard let source else { return nil }
@@ -38,6 +40,17 @@ final class AntiCropSession {
       applyingUndo = false
       return
     }
+    if adjustStart != nil { return }
+    push(old)
+  }
+  func beginAdjusting() {
+    if adjustStart == nil { adjustStart = edit }
+  }
+  func endAdjusting() {
+    if let start = adjustStart, start != edit { push(start) }
+    adjustStart = nil
+  }
+  private func push(_ old: AntiCropConfiguration) {
     undoEdits.append(old)
     if undoEdits.count > 100 { undoEdits.removeFirst() }
   }
@@ -143,23 +156,5 @@ final class AntiCropSession {
   func cancel() {
     job?.cancel()
     task?.cancel()
-  }
-  func loadSettings(_ url: URL) {
-    error = nil
-    do {
-      let scoped = url.startAccessingSecurityScopedResource()
-      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-      let saved = try JSONDecoder().decode(AntiCropConfiguration.self, from: Data(contentsOf: url))
-      guard let source else {
-        throw MediaToolError.message("Open the original image before reopening settings.")
-      }
-      guard saved.source_ref == edit.source_ref else {
-        throw MediaToolError.message(
-          "These settings refer to \(saved.source_ref). Open that original image before reopening the settings."
-        )
-      }
-      _ = try saved.plan(width: source.width, height: source.height)
-      edit = saved
-    } catch { self.error = error.localizedDescription }
   }
 }

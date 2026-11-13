@@ -51,12 +51,15 @@ struct RootView: View {
                         .tag(SidebarSelection.folders)
                 }
                 #endif
+                #if os(iOS)
+                // iPhone and iPad only for now: the Mac and the other apps don't have them.
                 MenuSection("Tools") {
                     MenuRow("Join Videos", systemImage: "film.stack")
                         .tag(SidebarSelection.joinVideos)
                     MenuRow("Anti-Crop", systemImage: "rectangle.split.2x1")
                         .tag(SidebarSelection.antiCrop)
                 }
+                #endif
                 MenuSection("Library") {
                     MenuRow("All Media", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.allMedia)
@@ -135,9 +138,17 @@ struct RootView: View {
             EmptyView()
             #endif
         case .joinVideos:
+            #if os(iOS)
             VideoJoinView()
+            #else
+            EmptyView()
+            #endif
         case .antiCrop:
+            #if os(iOS)
             AntiCropView()
+            #else
+            EmptyView()
+            #endif
         case .allMedia:
             AllMediaView()
         case .project(let id):
@@ -325,7 +336,12 @@ extension EnvironmentValues {
 /// Beside the menu on an iPad or a Mac, before anything is chosen.
 private struct HomeDetailView: View {
     var body: some View {
+        #if os(iOS)
+        EmptyState("BestShot", message: "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums. Tools join videos and cut bands out of photos.")
+            .tableSurface()
+        #else
         EmptyState("BestShot", message: "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums.")
             .tableSurface()
+        #endif
     }
 }

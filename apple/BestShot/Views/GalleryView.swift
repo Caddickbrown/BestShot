@@ -31,6 +31,9 @@ struct GalleryView: View {
     // Viewer
     @State private var viewerItem: MediaItem?
 
+    // Tools: the chosen videos, in the grid's order, going into Join Videos.
+    @State private var joining: JoinRequest?
+
     // Comparison
     @State private var showingCompareSelection = false
     @State private var session: ComparisonSession?
@@ -72,6 +75,7 @@ struct GalleryView: View {
                 if selectionMode {
                     BulkActionBar(
                         count: selectedIDs.count,
+                        onJoin: joinableVideos.count >= 2 ? { joinSelected() } : nil,
                         onTag: { showingBulkTag = true },
                         onDownload: bulkDownload,
                         onDelete: bulkDelete,
@@ -89,6 +93,9 @@ struct GalleryView: View {
             ) { result in importFromFiles(result) }
             .fullScreenCoverCompat(item: $viewerItem) { item in
                 FullscreenViewerView(items: displayedItems, initial: item)
+            }
+            .sheet(item: $joining) { request in
+                ToolSheet { VideoJoinView(initial: request.urls) }
             }
             .sheet(isPresented: $showingCompareSelection) {
                 ComparisonSelectionView(
@@ -390,6 +397,20 @@ struct GalleryView: View {
         project.items.filter { selectedIDs.contains($0.uuid) }
     }
 
+    /// The chosen videos in the order they're shown. Tools are iPhone and iPad only.
+    private var joinableVideos: [MediaItem] {
+        #if os(iOS)
+        displayedItems.filter { selectedIDs.contains($0.uuid) && $0.mediaType == .video }
+        #else
+        []
+        #endif
+    }
+
+    private func joinSelected() {
+        joining = JoinRequest(urls: joinableVideos.map(\.fileURL))
+        exitSelection()
+    }
+
     private func applyBulkTag() {
         let tag = bulkTagText.trimmingCharacters(in: .whitespaces)
         bulkTagText = ""
@@ -473,4 +494,10 @@ private struct GalleryEscapes: ViewModifier {
 struct ShareableURL: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+/// Videos chosen in a project, on their way into Join Videos.
+private struct JoinRequest: Identifiable {
+    let id = UUID()
+    let urls: [URL]
 }

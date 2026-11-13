@@ -1,6 +1,6 @@
 # BestShot — Media Tools Expansion
 
-**Status:** Proposed implementation specification<br>
+**Status:** Proposal, partly built. What shipped (iPhone and iPad only, no saved-settings files, Tools in the main menu plus entry points from a project's selection bar and the viewer) is described in [media-tools-implementation.md](media-tools-implementation.md); where the two differ, that document is right.<br>
 **Version:** 1.0 · 11 November 2026<br>
 **Feature IDs:** BS-MT-001 (Video Join), BS-MT-002 (Anti-Crop)<br>
 **Primary targets:** Apple (iOS, iPadOS, macOS), Linux (Tauri); web as a subsequent target<br>
@@ -356,7 +356,7 @@ apple/BestShot/
     └── AntiCropConfiguration.swift
 ```
 
-These names are suggestions, not an assertion that these files already exist. Avoid duplicating Rust configuration structures by generating bindings where practical.
+These names were suggestions. As built there is no `ToolsHomeView` (the menu lists the two tools directly), the row and transition editor live in `VideoJoinView.swift`, the canvas in `AntiCropView.swift`, shared parts in `ToolParts.swift`, and both configurations in `Models/MediaToolConfiguration.swift`. Avoid duplicating Rust configuration structures by generating bindings where practical.
 
 ## 6. Non-functional requirements
 

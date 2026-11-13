@@ -217,30 +217,26 @@ final class MediaToolsTests: XCTestCase {
     XCTAssertEqual(try source.resourceValues(forKeys: [.fileSizeKey]).fileSize, originalSize)
   }
   @MainActor
-  func testImageSettingsRequireOriginalSourceAndRestoreGeometry() throws {
+  func testOneDragOfAHandleIsOneStepOfUndo() throws {
     let workspace = try MediaWorkspace()
     let image = workspace.url("png")
     try writeImage([UInt8](repeating: 255, count: 8 * 6 * 4), width: 8, height: 6, to: image)
     let session = AntiCropSession()
     session.source = try AntiCropBridge.inspect(image)
-    session.edit.source_ref = "original.png"
-    var saved = AntiCropConfiguration()
-    saved.source_ref = "different.png"
-    saved.axis = "vertical"
-    saved.remove_start_px = 2
-    saved.remove_end_px = 4
-    let settings = workspace.url("json")
-    try JSONEncoder().encode(saved).write(to: settings)
-    session.loadSettings(settings)
-    XCTAssertNotNil(session.error)
-    XCTAssertEqual(session.edit.source_ref, "original.png")
-    saved.source_ref = "original.png"
-    try JSONEncoder().encode(saved).write(to: settings)
-    session.loadSettings(settings)
-    XCTAssertNil(session.error)
-    XCTAssertEqual(session.edit, saved)
-    XCTAssertEqual(session.geometry?.width, 6)
-    XCTAssertEqual(session.geometry?.height, 6)
+    session.reset()
+    let before = session.edit
+    session.beginAdjusting()
+    for end in [4, 5] {
+      let old = session.edit
+      session.edit.remove_end_px = end
+      session.record(old)
+    }
+    session.endAdjusting()
+    XCTAssertTrue(session.canUndo)
+    session.undo()
+    session.record(session.edit)
+    XCTAssertEqual(session.edit, before)
+    XCTAssertFalse(session.canUndo)
   }
 
   private func withAudio(_ movie: URL, workspace: MediaWorkspace, rate: Int, channels: Int)

@@ -22,6 +22,11 @@ struct RootView: View {
     @State private var projectName = ""
     @State private var projectDescription = ""
     @State private var labelDrafts: [LabelColour: String] = [:]
+    // A project being renamed or deleted, from the menu or its own screen.
+    @State private var renaming: Project?
+    @State private var newName = ""
+    @State private var deleting: Project?
+    @State private var projectProblem: String?
 
     enum SidebarSelection: Hashable {
         case triage
@@ -74,21 +79,22 @@ struct RootView: View {
                         .padding(.vertical, 2)
                     }
                     ForEach(projects) { project in
-                        ProjectRow(project: project)
-                            .tag(SidebarSelection.project(project.uuid))
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    delete(project)
-                                } label: {
-                                    Label("Delete Project", systemImage: "trash")
-                                }
-                            }
+                        projectRow(project)
                     }
                 }
             }
             .tableSurfaceList()
+            // The mark and the name head the menu, as a screen's header heads it.
+            .safeAreaInset(edge: .top, spacing: 0) { BrandHeader() }
             .navigationTitle("BestShot")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
+                #if os(iOS)
+                // The header says BestShot; the bar needn't say it again.
+                ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+                #endif
                 // Both in plain sight. A secondary item folds into the bar's own
                 // overflow button, which put one More menu inside another.
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -114,6 +120,31 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
+        .sheet(item: $renaming) { project in
+            TextPromptSheet(title: "Rename Project", placeholder: "Name", action: "Rename", text: $newName) {
+                ProjectLibrary.rename(project, to: newName, context: context)
+                newName = ""
+            }
+        }
+        .alert("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
+            get: { deleting != nil }, set: { if !$0 { deleting = nil } }
+        ), presenting: deleting) { project in
+            Button("Delete Project", role: .destructive) { delete(project) }
+            Button("Cancel", role: .cancel) { deleting = nil }
+        } message: { project in
+            Text(ProjectLibrary.removalMessage(for: project))
+        }
+        .alert("Couldn't delete the project", isPresented: Binding(
+            get: { projectProblem != nil }, set: { if !$0 { projectProblem = nil } }
+        ), presenting: projectProblem) { _ in
+            Button("OK") { projectProblem = nil }
+        } message: { Text($0) }
+        .escapeCloses(when: deleting != nil) { deleting = nil }
+        .escapeCloses(when: projectProblem != nil) { projectProblem = nil }
+        // Choosing a place in the menu opens it, on a phone too.
+        .onChange(of: selection) { _, new in
+            if new != nil { compactColumn = .detail }
+        }
         // Esc's last step is the main menu. A Triage session waits behind Resume.
         .escapeRoot(escapes) {
             selection = nil
@@ -153,7 +184,9 @@ struct RootView: View {
             AllMediaView()
         case .project(let id):
             if let project = projects.first(where: { $0.uuid == id }) {
-                GalleryView(project: project)
+                GalleryView(project: project,
+                            onRename: { startRenaming(project) },
+                            onDelete: { deleting = project })
                     .id(project.uuid)
             } else {
                 EmptyState("Select a Project").tableSurface()
@@ -176,11 +209,54 @@ struct RootView: View {
         selection = .project(project.uuid)
     }
 
+    /// A project in the menu: tap to open; swipe or long-press to rename or delete.
+    private func projectRow(_ project: Project) -> some View {
+        ProjectRow(project: project)
+            .contextMenu { projectMenu(project) }
+            .swipeActions(edge: .trailing) {
+                Button { deleting = project } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .tint(Theme.table.accent)
+                Button { startRenaming(project) } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                .tint(Theme.table.muted)
+            }
+            .tag(SidebarSelection.project(project.uuid))
+    }
+
+    @ViewBuilder
+    private func projectMenu(_ project: Project) -> some View {
+        Button { selection = .project(project.uuid) } label: {
+            Label("Open", systemImage: "folder")
+        }
+        Button { startRenaming(project) } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+        Button(role: .destructive) { deleting = project } label: {
+            Label("Delete Project…", systemImage: "trash")
+        }
+    }
+
+    private func startRenaming(_ project: Project) {
+        newName = project.name
+        renaming = project
+    }
+
+    /// The project only: its photos move to Files, never deleted.
     private func delete(_ project: Project) {
-        MediaStore.shared.deleteProjectFolder(projectID: project.uuid)
-        context.delete(project)
-        try? context.save()
-        if selection == .project(project.uuid) { selection = .allMedia }
+        deleting = nil
+        let id = project.uuid
+        do {
+            try ProjectLibrary.remove(project, context: context)
+            if selection == .project(id) {
+                selection = nil
+                compactColumn = .sidebar
+            }
+        } catch {
+            projectProblem = "Its photos couldn't be moved to Files, so it's been kept. \(error.localizedDescription)"
+        }
     }
 }
 
@@ -336,12 +412,19 @@ extension EnvironmentValues {
 /// Beside the menu on an iPad or a Mac, before anything is chosen.
 private struct HomeDetailView: View {
     var body: some View {
+        VStack(spacing: 0) {
+            BrandMark().frame(width: 88, height: 88)
+            EmptyState("BestShot", message: message).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tableSurface()
+    }
+
+    private var message: String {
         #if os(iOS)
-        EmptyState("BestShot", message: "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums. Tools join videos and cut bands out of photos.")
-            .tableSurface()
+        "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums. Tools join videos and cut bands out of photos."
         #else
-        EmptyState("BestShot", message: "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums.")
-            .tableSurface()
+        "Triage to keep or delete, Rank to put the keepers in order, Organise to file them into albums."
         #endif
     }
 }

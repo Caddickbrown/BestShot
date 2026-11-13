@@ -32,8 +32,12 @@ struct TriageCardView: View {
                 .clipped()
                 .background(Color.black)
                 .contentShape(Rectangle())
-                .overlay { stamp(.keep, Theme.viewfinder.ink, ink: Theme.viewfinder.accentInk, visible: offset.width > 20) }
-                .overlay { stamp(.bin, Theme.viewfinder.accent, ink: Theme.viewfinder.accentInk, visible: offset.width < -20) }
+                .overlay(alignment: .topLeading) {
+                    stamp(.keep, Theme.viewfinder.ink, visible: offset.width > 20)
+                }
+                .overlay(alignment: .topTrailing) {
+                    stamp(.bin, Theme.viewfinder.accent, visible: offset.width < -20)
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if isFavourited {
                         Image(systemName: "heart.fill")
@@ -43,7 +47,7 @@ struct TriageCardView: View {
                     }
                 }
                 .offset(offset)
-                .rotationEffect(.degrees(Double(offset.width / 22)))
+                .rotationEffect(tilt)
                 .onTapGesture(count: 2) { location in
                     animated { zoom.doubleTap(at: fromMiddle(location, box), in: box) }
                 }
@@ -105,17 +109,34 @@ struct TriageCardView: View {
         if reduceMotion { change() } else { withAnimation(Theme.Motion.snap, change) }
     }
 
-    /// The icon of what letting go will do, fading in with the drag.
-    private func stamp(_ control: TriageControl, _ fill: Color, ink: Color, visible: Bool) -> some View {
+    /// How far the card leans as it's dragged.
+    private var tilt: Angle { .degrees(Double(offset.width / 22)) }
+
+    /// What letting go will do, as a label in the corner the photo is leaving:
+    /// Keep in ink, Bin in the accent, set like the red pill. It stays level
+    /// while the card leans, and fades in with the drag.
+    private func stamp(_ control: TriageControl, _ fill: Color, visible: Bool) -> some View {
         let progress = visible ? min(1, abs(offset.width) / threshold) : 0
-        return Image(systemName: control.symbol)
-            .font(.system(size: 40, weight: .semibold))
-            .foregroundStyle(ink)
-            .frame(width: 96, height: 96)
-            .background(fill, in: Circle())
-            .scaleEffect(0.75 + 0.25 * progress)
+        return Label(control.title, systemImage: control.symbol)
+            .labelStyle(StampLabelStyle())
+            .foregroundStyle(Theme.viewfinder.accentInk)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(fill, in: Capsule())
+            .rotationEffect(-tilt)
+            .padding(Theme.Space.screen)
             .opacity(progress)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// The symbol and the word side by side, both in the pill's mono.
+private struct StampLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.icon.font(.system(size: 15, weight: .semibold))
+            configuration.title.font(.mono(16, medium: true)).textCase(.uppercase).tracking(1.6)
+        }
     }
 }

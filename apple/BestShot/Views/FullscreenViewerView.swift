@@ -11,6 +11,8 @@ struct FullscreenViewerView: View {
     let items: [MediaItem]
     @State private var index: Int
     @State private var showInfo = false
+    /// The top bar's height: the info panel opens below it.
+    @State private var topBarHeight: CGFloat = 0
     @State private var slideshow = false
     @State private var zoom: CGFloat = 1
     @State private var newTag = ""
@@ -40,7 +42,9 @@ struct FullscreenViewerView: View {
             controlsOverlay
 
             if showInfo, let item = current {
+                // Below the top bar, so its buttons (Info among them) stay in reach.
                 infoPanel(item)
+                    .padding(.top, topBarHeight)
                     .transition(.move(edge: .trailing))
             }
         }
@@ -126,6 +130,7 @@ struct FullscreenViewerView: View {
             .padding(.horizontal, 6)
             .background(Color.black.opacity(0.6))
             .overlay(alignment: .bottom) { HairlineRule(palette: Theme.viewfinder) }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topBarHeight = $0 }
 
             Spacer()
 

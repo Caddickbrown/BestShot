@@ -100,7 +100,9 @@ extension View {
             .background(Theme.table.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).stroke(Theme.table.rule, lineWidth: 1))
             .padding(.horizontal, Theme.Space.screen)
-            .padding(.vertical, 6) }
+            .padding(.vertical, 6)
+            // Solid, so the photos scrolling up don't show round the field.
+            .background(Theme.table.background) }
         }
         #else
         if shown { searchable(text: text, prompt: prompt) } else { self }

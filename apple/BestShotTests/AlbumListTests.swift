@@ -71,3 +71,57 @@ final class AlbumListTests: XCTestCase {
         XCTAssertEqual(AlbumList.existing(named: "lisbon", in: [albums[0]], title: \.title, folder: \.folder)?.id, "g")
     }
 }
+
+/// Choosing an album to go through by typing: empty albums never show, and ↵
+/// starts only with the album named or the only one that matches.
+final class AlbumSourceTests: XCTestCase {
+    private struct Album {
+        let id: String
+        let title: String
+        var folder: String? = nil
+        var count: Int? = 3
+    }
+
+    private let albums = [
+        Album(id: "a", title: "Lisbon"),
+        Album(id: "b", title: "Lisbon", folder: "Imported from Google"),
+        Album(id: "c", title: "Lisbon trams"),
+        Album(id: "d", title: "Empty", count: 0),
+        Album(id: "e", title: "Counting", count: nil),
+        Album(id: "f", title: "Porto", folder: "Trips"),
+    ]
+
+    private func sources(_ q: String) -> [String] {
+        AlbumList.sources(albums, query: q, title: \.title, folder: \.folder, count: \.count).map(\.id)
+    }
+
+    private func start(_ q: String) -> String? {
+        AlbumList.sourceToStart(albums, query: q, title: \.title, folder: \.folder, count: \.count)?.id
+    }
+
+    func testEmptyAlbumsAndUncountedOnesCantBeChosen() {
+        XCTAssertEqual(sources(""), ["a", "b", "c", "f"])
+        XCTAssertEqual(sources("Empty"), [])
+    }
+
+    func testTypingFiltersByNameOrFolder() {
+        XCTAssertEqual(sources("lis"), ["a", "b", "c"])
+        XCTAssertEqual(sources("trips"), ["f"])
+    }
+
+    func testReturnStartsWithTheExactNameAtTheTopLevelFirst() {
+        XCTAssertEqual(start("lisbon"), "a")
+    }
+
+    func testReturnStartsWithTheOnlyMatch() {
+        XCTAssertEqual(start("tram"), "c")
+        XCTAssertEqual(start("porto"), "f")
+        XCTAssertNil(start("port"))  // also in "Imported from Google": two albums match
+    }
+
+    func testReturnNeverGuessesBetweenSeveral() {
+        XCTAssertNil(start("lis"))
+        XCTAssertNil(start(""))
+        XCTAssertNil(start("Empty"))
+    }
+}

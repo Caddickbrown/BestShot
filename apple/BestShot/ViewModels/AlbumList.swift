@@ -46,4 +46,32 @@ enum AlbumList {
         guard let folder, !folder.trimmingCharacters(in: .whitespaces).isEmpty else { return name }
         return "\(name) · \(folder)"
     }
+
+    // MARK: Choosing an album to go through
+
+    /// The albums Triage or Organise can go through: never an empty one, and
+    /// only those whose name or folder holds what's typed. An album whose count
+    /// isn't known yet is left out until it is.
+    static func sources<Album>(_ albums: [Album], query: String, title: (Album) -> String?,
+                               folder: (Album) -> String? = { _ in nil }, count: (Album) -> Int?) -> [Album] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return albums.filter { album in
+            guard let n = count(album), n > 0 else { return false }
+            guard !q.isEmpty else { return true }
+            return (title(album) ?? "").localizedCaseInsensitiveContains(q)
+                || (folder(album) ?? "").localizedCaseInsensitiveContains(q)
+        }
+    }
+
+    /// What ↵ starts with: the album with exactly the name typed (one outside any
+    /// folder first), or else the only one that matches. Never a guess between
+    /// several.
+    static func sourceToStart<Album>(_ albums: [Album], query: String, title: (Album) -> String?,
+                                     folder: (Album) -> String? = { _ in nil }, count: (Album) -> Int?) -> Album? {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return nil }
+        let matches = sources(albums, query: q, title: title, folder: folder, count: count)
+        if let exact = existing(named: q, in: matches, title: title, folder: folder) { return exact }
+        return matches.count == 1 ? matches[0] : nil
+    }
 }

@@ -128,7 +128,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
 
     var organiseProgress: String {
         guard let organise else { return "" }
-        return "\(min(organise.index + 1, organise.assets.count)) / \(organise.assets.count)"
+        return "\(min(organise.index + 1, organise.items.count)) / \(organise.items.count)"
     }
 
     var organiseAlbums: [(id: String, title: String, added: Bool)] {

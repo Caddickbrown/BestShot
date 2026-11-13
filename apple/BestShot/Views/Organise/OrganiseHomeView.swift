@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Photos
+import UniformTypeIdentifiers
 
 /// Entry point for Organise mode: permission gate + source/order config, then
 /// steps through unorganised photos filing them into albums.
@@ -13,9 +14,11 @@ struct OrganiseHomeView: View {
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
     @State private var folders: [String: String] = [:]
+    @State private var counts: [String: Int]?
     @State private var session: OrganiseSession?
     @State private var isLoading = false
     @State private var emptyMessage: String?
+    @State private var choosingFolder = false
 
     var body: some View {
         Group {
@@ -54,17 +57,34 @@ struct OrganiseHomeView: View {
 
     private var configForm: some View {
         Form {
-            SourceSection(source: $source, albums: albums, folders: folders)
+            SourceSection(source: $source, albums: albums, folders: folders, counts: counts, onStart: start)
             TableSection("Order") {
                 Picker("Order", selection: $order) {
                     ForEach(SessionOrder.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                 }
+            }
+            TableSection(title: "Or a folder in Files") {
+                Button {
+                    choosingFolder = true
+                } label: {
+                    Label("Choose a Folder…", systemImage: "folder")
+                }
+                .disabled(isLoading)
+            } footer: {
+                FormNote("iCloud Drive, a camera import or anywhere else in Files. A photo is added to your library when you first file it into an album; the file stays where it is.")
             }
             if let emptyMessage {
                 TableSection { Text(emptyMessage).foregroundStyle(Theme.table.muted) }
             }
         }
         .tableForm()
+        .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
+            switch result {
+            case .success(let folder): startFromFolder(folder)
+            case .failure(let error): emptyMessage = error.localizedDescription
+            }
+        }
+        .escapeCloses(when: choosingFolder) { choosingFolder = false }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomBar { Button {
                 start()
@@ -82,6 +102,8 @@ struct OrganiseHomeView: View {
             let found = PhotoLibraryService.shared.userAlbumsWithFolders()
             albums = found.albums
             folders = found.folders
+            let all = found.albums
+            counts = await Task.detached { PhotoLibraryService.shared.photoCounts(all) }.value
         }
     }
 
@@ -95,7 +117,34 @@ struct OrganiseHomeView: View {
         )
     }
 
+    /// Organise the photo files in a folder from Files (and the folders in it),
+    /// leaving out any Next has already been pressed on.
+    private func startFromFolder(_ folder: URL) {
+        emptyMessage = nil
+        guard folder.startAccessingSecurityScopedResource() else {
+            emptyMessage = "BestShot couldn't open that folder."
+            return
+        }
+        isLoading = true
+        let chosenOrder = order
+        let done = OrganisedFiles.done
+        Task {
+            let files = await Task.detached { FolderPhotos.list(in: folder, order: chosenOrder, excluding: done) }.value
+            let current = PhotoLibraryService.shared.userAlbumsWithFolders()
+            isLoading = false
+            if files.isEmpty {
+                folder.stopAccessingSecurityScopedResource()
+                emptyMessage = "No photos left to organise in \(folder.lastPathComponent)."
+            } else {
+                // The session keeps the folder open until it ends.
+                session = OrganiseSession(files: files, folder: folder, albums: current.albums,
+                                          folders: current.folders, context: context)
+            }
+        }
+    }
+
     private func start() {
+        guard !isLoading else { return }
         isLoading = true
         emptyMessage = nil
         // Skip already-organised assets.

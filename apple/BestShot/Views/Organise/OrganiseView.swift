@@ -17,16 +17,16 @@ struct OrganiseView: View {
         VStack(spacing: 0) {
             header
 
-            if let asset = session.current {
+            if let item = session.currentItem {
                 // Pinch or double-tap to zoom, drag to look around; a single tap
                 // puts the keyboard away.
-                OrganisePhoto(asset: asset) { searchFocused = false }
-                    .id(asset.localIdentifier)
+                OrganisePhoto(item: item) { searchFocused = false }
+                    .id(item.id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(Theme.Space.bar)
 
                 HairlineRule()
-                albumChips(for: asset)
+                albumChips(for: item)
                 controls
             } else {
                 EmptyState("All organised")
@@ -42,10 +42,10 @@ struct OrganiseView: View {
         }
         .sheet(isPresented: $showNewAlbum) {
             TextPromptSheet(title: "New Album", placeholder: "Album name", action: "Create", text: $newAlbumName) {
-                if let asset = session.current {
+                if let item = session.currentItem {
                     let name = newAlbumName
                     newAlbumName = ""
-                    Task { await session.createAlbumAndAdd(name: name, asset: asset) }
+                    Task { await session.createAlbumAndAdd(name: name, item: item) }
                 }
             }
         }
@@ -57,9 +57,11 @@ struct OrganiseView: View {
         VStack(spacing: 6) {
             ProgressLine(value: session.progress)
             HStack {
-                Text("\(min(session.index + 1, session.assets.count)) / \(session.assets.count)")
+                Text(position)
                     .font(.small)
                     .foregroundStyle(Theme.table.muted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 // One album per photo: a tap files it and moves on.
                 Toggle("One album, then next", isOn: $session.singleAlbum)
@@ -71,6 +73,14 @@ struct OrganiseView: View {
         }
         .padding(.horizontal, Theme.Space.screen)
         .padding(.top, 8)
+    }
+
+    /// "3 / 40", and for a folder from Files, its name and the file's.
+    private var position: String {
+        let n = session.items.count
+        let count = "\(min(session.index + 1, n)) / \(n)"
+        guard let folder = session.folderName else { return count }
+        return [count, folder, session.currentItem?.name].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// Albums matching what's typed (all of them when nothing is).
@@ -91,7 +101,7 @@ struct OrganiseView: View {
     /// ↵ files into the album with exactly the name typed (one outside any
     /// folder first), or makes it. It never guesses from part of a name: that
     /// filed Dan's photo into a different album than the one he was typing.
-    private func submitQuery(_ asset: PHAsset) {
+    private func submitQuery(_ asset: OrganiseItem) {
         let q = albumQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
         let exact = session.albums.filter {
@@ -100,14 +110,14 @@ struct OrganiseView: View {
         if let album = exact.first(where: { session.folder(of: $0) == nil }) ?? exact.first {
             Task { await session.pick(asset, album: album) }
         } else {
-            Task { await session.createAlbumAndAdd(name: q, asset: asset) }
+            Task { await session.createAlbumAndAdd(name: q, item: asset) }
         }
         albumQuery = ""
     }
 
     /// One search box that finds an album or makes a new one, the five in use
     /// in a row of their own, then every other album, small enough to scan.
-    private func albumChips(for asset: PHAsset) -> some View {
+    private func albumChips(for asset: OrganiseItem) -> some View {
         let recentIDs = Set(AlbumRecency.recentIDs(AlbumRecency.settled))
         let searching = !albumQuery.trimmingCharacters(in: .whitespaces).isEmpty
         let albums = shownAlbums
@@ -138,6 +148,10 @@ struct OrganiseView: View {
             .frame(height: 40)
             .overlay(Capsule().stroke(Theme.table.rule, lineWidth: 1))
 
+            if let problem = session.problem {
+                Text(problem).font(.eyebrow).foregroundStyle(Theme.table.accent)
+            }
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     // The five in use wrap like the rest (a sideways row looked
@@ -166,7 +180,7 @@ struct OrganiseView: View {
         .frame(maxHeight: 300)
     }
 
-    private func chip(_ album: PHAssetCollection, _ asset: PHAsset) -> some View {
+    private func chip(_ album: PHAssetCollection, _ asset: OrganiseItem) -> some View {
         let added = session.isAdded(album: album, to: asset)
         return Button {
             Task { await session.pick(asset, album: album) }
@@ -236,7 +250,7 @@ private struct AlbumChipStyle: ButtonStyle {
 /// Organise's photo, zoomable the way Triage's is (PhotoZoom), without the
 /// swipes: pinch or double-tap to zoom, one finger moves it while zoomed.
 private struct OrganisePhoto: View {
-    let asset: PHAsset
+    let item: OrganiseItem
     let onTap: () -> Void
     @State private var zoom = PhotoZoom()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -244,9 +258,7 @@ private struct OrganisePhoto: View {
     var body: some View {
         GeometryReader { geo in
             let box = geo.size
-            PhotoAssetImage(asset: asset, targetSize: CGSize(width: box.width * 2 * CGFloat(zoom.detail),
-                                                             height: box.height * 2 * CGFloat(zoom.detail)),
-                            contentMode: .fit)
+            image(box)
                 .frame(width: box.width, height: box.height)
                 .scaleEffect(zoom.scale * zoom.shrink)
                 .offset(zoom.pan)
@@ -269,6 +281,20 @@ private struct OrganisePhoto: View {
                 .accessibilityAction(named: zoom.isZoomed ? "Zoom out" : "Zoom in") {
                     zoom.doubleTap(at: .zero, in: box)
                 }
+        }
+    }
+
+    /// The library's photo at the size shown (more when zoomed), or a file
+    /// read at three times the box, enough to zoom into.
+    @ViewBuilder
+    private func image(_ box: CGSize) -> some View {
+        switch item {
+        case .asset(let asset):
+            PhotoAssetImage(asset: asset, targetSize: CGSize(width: box.width * 2 * CGFloat(zoom.detail),
+                                                             height: box.height * 2 * CGFloat(zoom.detail)),
+                            contentMode: .fit)
+        case .file(let url):
+            AsyncFileImage(url: url, downsampleTo: max(box.width, box.height) * 3, contentMode: .fit)
         }
     }
 

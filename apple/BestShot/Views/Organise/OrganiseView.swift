@@ -118,11 +118,14 @@ struct OrganiseView: View {
     /// One search box that finds an album or makes a new one, the five in use
     /// in a row of their own, then every other album, small enough to scan.
     private func albumChips(for asset: OrganiseItem) -> some View {
-        let recentIDs = Set(AlbumRecency.recentIDs(AlbumRecency.settled))
+        let slots = AlbumRecency.slotIDs
+        let slotSet = Set(slots)
         let searching = !albumQuery.trimmingCharacters(in: .whitespaces).isEmpty
         let albums = shownAlbums
-        let recent = searching ? [] : albums.filter { recentIDs.contains($0.localIdentifier) }
-        let rest = searching ? albums : albums.filter { !recentIDs.contains($0.localIdentifier) }
+        // The grid in its fixed order, not by recency: places never shuffle.
+        let byID = Dictionary(albums.map { ($0.localIdentifier, $0) }, uniquingKeysWith: { a, _ in a })
+        let recent = searching ? [] : slots.compactMap { byID[$0] }
+        let rest = searching ? albums : albums.filter { !slotSet.contains($0.localIdentifier) }
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Theme.table.muted)

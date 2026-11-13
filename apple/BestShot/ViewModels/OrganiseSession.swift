@@ -64,6 +64,7 @@ final class OrganiseSession {
     init(assets: [PHAsset], albums: [PHAssetCollection], folders: [String: String] = [:], context: ModelContext) {
         self.items = assets.map(OrganiseItem.asset)
         self.albums = AlbumRecency.ordered(albums)
+        AlbumRecency.forgetMissing(Set(albums.map(\.localIdentifier)))
         self.folders = folders
         self.context = context
         self.scopedFolder = nil
@@ -76,6 +77,7 @@ final class OrganiseSession {
     init(files: [URL], folder: URL, albums: [PHAssetCollection], folders: [String: String] = [:], context: ModelContext) {
         self.items = files.map(OrganiseItem.file)
         self.albums = AlbumRecency.ordered(albums)
+        AlbumRecency.forgetMissing(Set(albums.map(\.localIdentifier)))
         self.folders = folders
         self.context = context
         self.scopedFolder = folder
@@ -302,25 +304,47 @@ enum AlbumRecency {
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 
-    /// Albums this near the front stay where they are when used again, so
-    /// the ones you're working with don't shuffle under your finger.
-    /// Six: three rows of two in Organise's grid (Dan, 13 Nov).
+    /// How many albums sit in Organise's grid: three rows of two (Dan, 13 Nov).
     static let settled = 6
+    private static let slotsKey = "organise.albumSlots"
+
+    /// The grid's albums in their fixed places. A new album takes the place
+    /// of the one used longest ago; the others never move, so each stays
+    /// where the thumb expects it (Dan, 13 Nov).
+    static var slotIDs: [String] {
+        if let saved = UserDefaults.standard.stringArray(forKey: slotsKey) { return saved }
+        // First run with slots: seed from the most recent, as the grid was.
+        return Array(stamps.sorted { $0.value > $1.value }.prefix(settled).map(\.key))
+    }
 
     static func used(_ albumID: String) {
         var s = stamps
-        let front = s.sorted { $0.value > $1.value }.prefix(settled).map(\.key)
-        guard !front.contains(albumID) else { return }
         s[albumID] = Date().timeIntervalSince1970
         if s.count > keep {
-            for (id, _) in s.sorted(by: { $0.value < $1.value }).prefix(s.count - keep) { s[id] = nil }
+            let inGrid = Set(slotIDs)
+            for (id, _) in s.sorted(by: { $0.value < $1.value }) where s.count > keep && !inGrid.contains(id) {
+                s[id] = nil
+            }
         }
+        UserDefaults.standard.set(place(albumID, in: slotIDs, lastUsed: s, size: settled), forKey: slotsKey)
         stamps = s
     }
 
-    /// The albums used most recently, newest first.
-    static func recentIDs(_ limit: Int) -> [String] {
-        stamps.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
+    /// Where `albumID` goes in the grid: left alone if it's there already,
+    /// added if there's room, else swapped in for the least recently used.
+    static func place(_ albumID: String, in slots: [String], lastUsed: [String: Double], size: Int) -> [String] {
+        guard !slots.contains(albumID) else { return slots }
+        if slots.count < size { return slots + [albumID] }
+        guard let oldest = slots.indices.min(by: { (lastUsed[slots[$0]] ?? 0) < (lastUsed[slots[$1]] ?? 0) }) else { return slots }
+        var out = slots
+        out[oldest] = albumID
+        return out
+    }
+
+    /// An album gone from Photos leaves its place empty for the next new one.
+    static func forgetMissing(_ present: Set<String>) {
+        let kept = slotIDs.filter(present.contains)
+        if kept != slotIDs { UserDefaults.standard.set(kept, forKey: slotsKey) }
     }
 
     static func ordered(_ albums: [PHAssetCollection]) -> [PHAssetCollection] {

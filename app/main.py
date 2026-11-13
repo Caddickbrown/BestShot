@@ -130,7 +130,7 @@ def create_app() -> Flask:
     def _list_projects() -> List[dict]:
         projects = []
         for folder in sorted(project_root.iterdir()):
-            if not folder.is_dir():
+            if not folder.is_dir() or folder.name.startswith("."):
                 continue
             all_media = _list_media_files(folder, "all")
             images = [f for f in all_media if f.suffix.lower() in IMAGE_EXTENSIONS]
@@ -944,12 +944,22 @@ def create_app() -> Flask:
 
     @app.delete("/api/projects/<project_name>")
     def delete_project(project_name: str):
-        """Delete a project and all its contents."""
+        """Take a project out of the app. Its files are moved, never deleted:
+        into `.removed/<name> <time>` under the project root, as the Apple app
+        moves a deleted project's photos into Files."""
         folder = _project_path(project_name)
         if not folder.exists():
             abort(404, description="Project not found")
-        shutil.rmtree(folder)
-        return jsonify({"deleted": project_name}), 200
+        removed = project_root / ".removed"
+        removed.mkdir(exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d %H%M%S")
+        destination = removed / f"{folder.name} {stamp}"
+        n = 1
+        while destination.exists():
+            destination = removed / f"{folder.name} {stamp} ({n})"
+            n += 1
+        shutil.move(str(folder), str(destination))
+        return jsonify({"deleted": project_name, "keptAt": str(destination.relative_to(project_root))}), 200
 
     @app.delete("/api/projects/<project_name>/files/<path:filename>")
     def delete_media_file(project_name: str, filename: str):
@@ -1079,7 +1089,7 @@ def create_app() -> Flask:
         
         all_media = []
         for folder in sorted(project_root.iterdir()):
-            if not folder.is_dir():
+            if not folder.is_dir() or folder.name.startswith("."):
                 continue
             items = _serialize_media(folder, media_type, sort_by)
             for item in items:

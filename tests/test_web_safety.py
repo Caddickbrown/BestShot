@@ -48,6 +48,18 @@ def test_the_app_itself_can_still_delete(client):
     assert not (root / "keep").exists()
 
 
+def test_deleting_a_project_moves_its_files_aside_and_hides_them(client):
+    c, root = client
+    (root / "keep" / "a.jpg").write_bytes(b"\xff\xd8\xff")
+    r = c.delete("/api/projects/keep")
+    assert r.status_code == 200
+    kept = root / r.get_json()["keptAt"]
+    assert (kept / "a.jpg").read_bytes() == b"\xff\xd8\xff"
+    assert not (root / "keep").exists()
+    assert [p["name"] for p in c.get("/api/projects").get_json()["projects"]] == []
+    assert c.get("/api/all-media").status_code == 200
+
+
 def test_a_tool_with_no_origin_still_works(client):
     c, _ = client
     assert c.delete("/api/projects/keep").status_code != 403

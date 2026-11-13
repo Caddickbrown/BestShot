@@ -9,6 +9,8 @@
     <meta name="theme-color" content="#efebe1" />
     <title>BestShot</title>
     <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}" />
   </head>
@@ -82,7 +84,6 @@
       <div class="mobile-project-bar">
         <button id="mobile-project-toggle" class="mobile-project-toggle">
           <span class="mobile-project-toggle__label">
-            <span class="mobile-project-toggle__icon">📁</span>
             <span id="mobile-project-name">Select album</span>
           </span>
           <span class="mobile-project-toggle__arrow">▼</span>
@@ -427,7 +428,7 @@
       <div class="delete-modal__backdrop"></div>
       <div class="delete-modal__content">
         <h3>Delete Album?</h3>
-        <p>Are you sure you want to delete <strong id="delete-project-name"></strong>? This will remove all media files and cannot be undone.</p>
+        <p>Delete <strong id="delete-project-name"></strong>? Its files aren't deleted: they're moved to the <code>.removed</code> folder in the projects folder, where you can get them back.</p>
         <div class="delete-modal__actions">
           <button id="confirm-delete" class="primary danger">Delete</button>
           <button id="cancel-delete" class="ghost">Cancel</button>
@@ -536,7 +537,7 @@
     <div id="duplicate-modal" class="duplicate-modal" hidden>
       <div class="duplicate-modal__backdrop"></div>
       <div class="duplicate-modal__content">
-        <h3>⚠️ Duplicate Files Detected</h3>
+        <h3>Duplicate Files Detected</h3>
         <p>Some files you're uploading already exist in this project:</p>
         <div id="duplicate-list" class="duplicate-list"></div>
         <div class="duplicate-modal__actions">

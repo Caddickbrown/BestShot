@@ -1,7 +1,7 @@
 {
-  "name": "BestShot Darkroom",
+  "name": "BestShot",
   "short_name": "BestShot",
-  "description": "Drop, rank, and file your selects in a dockerized studio",
+  "description": "Rank and file your photos: light table to sort, viewfinder to judge.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#efebe1",
@@ -12,14 +12,18 @@
       "src": "/static/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/static/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ],
-  "categories": ["photography", "utilities", "productivity"]
+  "categories": [
+    "photography",
+    "utilities",
+    "productivity"
+  ]
 }

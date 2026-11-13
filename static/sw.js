@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bestshot-v1.2.0';
+const CACHE_NAME = 'bestshot-v1.2.1';
 const STATIC_ASSETS = [
   '/',
   '/static/styles.css',

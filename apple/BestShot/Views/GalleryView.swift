@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 /// with import, drag-to-rank, comparison mode, bulk selection, and export.
 struct GalleryView: View {
     @Bindable var project: Project
+    /// Rename and Delete are asked for here and carried out by the menu.
+    var onRename: () -> Void = {}
+    var onDelete: () -> Void = {}
     @Environment(\.modelContext) private var context
 
     // Display controls
@@ -278,6 +281,13 @@ struct GalleryView: View {
                 exportMenu
                 Button(role: .destructive) { showingClearConfirm = true } label: {
                     Label("Clear Rankings", systemImage: "arrow.uturn.backward")
+                }
+                Divider()
+                Button(action: onRename) {
+                    Label("Rename Project…", systemImage: "pencil")
+                }
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete Project…", systemImage: "trash")
                 }
             } label: {
                 Label("Options", systemImage: "ellipsis.circle")

@@ -12,13 +12,27 @@ final class MediaStore {
 
     let mediaRoot: URL
     let thumbRoot: URL
+    /// Where a removed project's photos are kept: Files → On My iPhone →
+    /// BestShot → Removed Projects.
+    let removedRoot: URL
+    /// On the Mac, a removed project's photos go on to the Trash. Off in tests.
+    let usesTrash: Bool
 
     private let fm = FileManager.default
 
-    private init() {
-        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    private convenience init() {
+        let fm = FileManager.default
+        self.init(base: fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!,
+                  documents: fm.urls(for: .documentDirectory, in: .userDomainMask).first!,
+                  usesTrash: true)
+    }
+
+    /// Roots of its own, for tests.
+    init(base: URL, documents: URL, usesTrash: Bool = false) {
+        self.usesTrash = usesTrash
         mediaRoot = base.appendingPathComponent("BestShotMedia", isDirectory: true)
         thumbRoot = base.appendingPathComponent("BestShotThumbs", isDirectory: true)
+        removedRoot = documents.appendingPathComponent("Removed Projects", isDirectory: true)
         try? fm.createDirectory(at: mediaRoot, withIntermediateDirectories: true)
         try? fm.createDirectory(at: thumbRoot, withIntermediateDirectories: true)
     }
@@ -81,6 +95,38 @@ final class MediaStore {
         if let t = thumbnailRelativePath {
             try? fm.removeItem(at: absoluteThumbURL(for: t))
         }
+    }
+
+    /// Moves a project's photos out of the app's own storage into a folder named
+    /// after it under `removedRoot`, where Files can see them, and drops its
+    /// thumbnails. Returns that folder, or nil if the project had no files.
+    /// Throws, having moved nothing, if the photos can't be moved: the caller
+    /// then keeps the project.
+    @discardableResult
+    func setAsideProjectFolder(projectID: UUID, name: String) throws -> URL? {
+        let folder = mediaRoot.appendingPathComponent(projectID.uuidString, isDirectory: true)
+        let files = (try? fm.contentsOfDirectory(atPath: folder.path)) ?? []
+        var kept: URL?
+        if !files.isEmpty {
+            try fm.createDirectory(at: removedRoot, withIntermediateDirectories: true)
+            let safe = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let destination = removedRoot.appendingPathComponent(
+                uniqueName(for: safe.isEmpty ? "Project" : safe, in: removedRoot), isDirectory: true)
+            try fm.moveItem(at: folder, to: destination)
+            kept = destination
+            #if os(macOS)
+            // The Mac has a Trash, so they go on from there to it.
+            var trashed: NSURL?
+            if usesTrash, (try? fm.trashItem(at: destination, resultingItemURL: &trashed)) != nil {
+                kept = trashed as URL?
+            }
+            #endif
+        } else {
+            try? fm.removeItem(at: folder)
+        }
+        try? fm.removeItem(at: thumbRoot.appendingPathComponent(projectID.uuidString))
+        return kept
     }
 
     func deleteProjectFolder(projectID: UUID) {

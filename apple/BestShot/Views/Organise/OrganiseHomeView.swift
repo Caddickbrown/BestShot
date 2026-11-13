@@ -121,24 +121,13 @@ struct OrganiseHomeView: View {
     /// leaving out any Next has already been pressed on.
     private func startFromFolder(_ folder: URL) {
         emptyMessage = nil
-        guard folder.startAccessingSecurityScopedResource() else {
-            emptyMessage = "BestShot couldn't open that folder."
-            return
-        }
         isLoading = true
-        let chosenOrder = order
-        let done = OrganisedFiles.done
         Task {
-            let files = await Task.detached { FolderPhotos.list(in: folder, order: chosenOrder, excluding: done) }.value
-            let current = PhotoLibraryService.shared.userAlbumsWithFolders()
+            let result = await OrganiseSession.fromFolder(folder, order: order, context: context)
             isLoading = false
-            if files.isEmpty {
-                folder.stopAccessingSecurityScopedResource()
-                emptyMessage = "No photos left to organise in \(folder.lastPathComponent)."
-            } else {
-                // The session keeps the folder open until it ends.
-                session = OrganiseSession(files: files, folder: folder, albums: current.albums,
-                                          folders: current.folders, context: context)
+            switch result {
+            case .success(let started): session = started
+            case .failure(let problem): emptyMessage = problem.message
             }
         }
     }

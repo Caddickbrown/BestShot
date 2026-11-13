@@ -21,7 +21,7 @@ enum MonitorRowAction: Equatable {
     case order(SessionOrder), source(TriageSourceOption), startTriage, resumeTriage
     case status(MonitorFilter.Status), stars(Int), tag(String), clearFilters
     case compare(RankScope), saveAlbum
-    case organiseOrder(SessionOrder), organiseSource(TriageSourceOption), startOrganise
+    case organiseOrder(SessionOrder), organiseSource(TriageSourceOption), organiseFolder, startOrganise
     case album(String), newAlbum
     case project(UUID), allMedia, mediaItem
     case rename(LabelColour), textSize, pause
@@ -127,6 +127,9 @@ protocol MonitorLibrary: AnyObject {
     var organiseProgress: String { get }
     var organiseAlbums: [(id: String, title: String, added: Bool)] { get }
     func startOrganise(order: SessionOrder, source: TriageSourceOption) async -> String?
+    /// The photo files in a folder chosen in Files on the phone, as the phone's
+    /// own Organise screen starts them. Nil when it started, or what to tell the user.
+    func startOrganise(folder: URL, order: SessionOrder) async -> String?
     func addToAlbum(_ id: String) async
     func newAlbum(_ title: String) async
     func nextOrganised()
@@ -186,6 +189,13 @@ final class MonitorDesk {
     private(set) var source = TriageSourceOption.allPhotos
     private(set) var organiseOrder = SessionOrder.newest
     private(set) var organiseSource = TriageSourceOption.allPhotos
+    /// Organise from a folder in Files instead of Photos. The folder is chosen on
+    /// the phone, since a picker can't show on the monitor.
+    private(set) var organiseFolder: URL?
+    private(set) var organiseFromFolder = false
+    /// The phone is to show its folder picker. Its window watches this.
+    private(set) var wantsFolder = false
+    static let folderPrompt = "Choose the folder on your phone."
 
     // Looking at photos
     private(set) var filter = MonitorFilter()
@@ -341,7 +351,7 @@ final class MonitorDesk {
     }
 
     func perform(_ action: MonitorAction) {
-        notice = nil
+        notice = wantsFolder ? Self.folderPrompt : nil
         // The monitor's own: they work whatever's up.
         switch action {
         case .pause:
@@ -572,7 +582,8 @@ final class MonitorDesk {
         case .compare(let scope): startCompare(scope)
         case .saveAlbum: saveAlbum()
         case .organiseOrder(let new): organiseOrder = new
-        case .organiseSource(let new): organiseSource = new
+        case .organiseSource(let new): organiseSource = new; organiseFromFolder = false
+        case .organiseFolder: askForFolder()
         case .startOrganise: spawn { await self.startOrganise() }
         case .album(let id): spawn { [library] in await library.addToAlbum(id) }
         case .newAlbum: beginEntry(.album, title: "New album")
@@ -686,7 +697,15 @@ final class MonitorDesk {
         guard library.hasPhotoAccess else { return triageRows }
         var rows = choiceRows(order: organiseOrder, source: organiseSource, orderAction: MonitorRowAction.organiseOrder,
                               sourceAction: MonitorRowAction.organiseSource)
-        rows.append(MonitorRow(id: "start-organise", title: "Start Organising", group: "Go", action: .startOrganise))
+        if organiseFromFolder {
+            for i in rows.indices where rows[i].group == "Source" { rows[i].isOn = false }
+        }
+        rows.append(MonitorRow(id: "source-folder", title: organiseFolder?.lastPathComponent ?? "A folder in Files…",
+                               detail: organiseFolder == nil ? "Chosen on the phone" : "A folder in Files · ↵ to choose another",
+                               group: "Folder", isOn: organiseFromFolder, action: .organiseFolder))
+        rows.append(MonitorRow(id: "start-organise", title: "Start Organising",
+                               detail: organiseFromFolder ? organiseFolder?.lastPathComponent : nil,
+                               group: "Go", action: .startOrganise))
         return rows
     }
 
@@ -1009,9 +1028,41 @@ final class MonitorDesk {
 
     // MARK: - Organise
 
+    /// ↵ on "A folder in Files…": the phone shows its picker, and the monitor
+    /// says so until it goes.
+    private func askForFolder() {
+        wantsFolder = true
+        notice = Self.folderPrompt
+    }
+
+    /// The phone's picker went, picked or not. The result follows.
+    func folderPickerClosed() {
+        wantsFolder = false
+        if notice == Self.folderPrompt { notice = nil }
+    }
+
+    /// Picked on the phone: Organise starts on it, as the phone's own screen does.
+    func folderPicked(_ folder: URL) {
+        wantsFolder = false
+        organiseFolder = folder
+        organiseFromFolder = true
+        notice = nil
+        spawn { await self.startOrganise() }
+    }
+
+    /// Cancelled on the phone, or the picker failed: the monitor stays put.
+    func folderNotPicked(_ problem: String? = nil) {
+        wantsFolder = false
+        notice = problem ?? "No folder chosen."
+    }
+
     private func startOrganise() async {
-        notice = await library.startOrganise(order: organiseOrder, source: organiseSource)
-        if library.organisePhoto != nil { stack = [.home, .organise] }
+        if organiseFromFolder, let folder = organiseFolder {
+            notice = await library.startOrganise(folder: folder, order: organiseOrder)
+        } else {
+            notice = await library.startOrganise(order: organiseOrder, source: organiseSource)
+        }
+        if notice == nil, library.organisePhoto != nil { stack = [.home, .organise] }
     }
 
     // MARK: - Typing

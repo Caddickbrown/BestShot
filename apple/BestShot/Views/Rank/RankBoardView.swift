@@ -6,6 +6,7 @@ struct RankBoardView: View {
     @Bindable var board: RankBoard
     /// Extra toolbar action, e.g. "Save as album" for the Photos library.
     var extraAction: (title: String, run: () -> Void)?
+    @State private var confirmingClear = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +38,13 @@ struct RankBoardView: View {
             }
         }
         .tableSurface()
+        .alert("Clear the ranking?", isPresented: $confirmingClear) {
+            Button("Clear", role: .destructive) { board.clear() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every photo goes back to Not ranked yet.")
+        }
+        .escapeCloses(when: confirmingClear) { confirmingClear = false }
         #if os(iOS)
         .fullScreenCover(item: $board.compare) { run in
             CompareRunView(board: board, run: run)
@@ -90,8 +98,9 @@ struct RankBoardView: View {
                     .buttonStyle(.text)
                     .disabled(board.ranked.isEmpty)
             }
-            Button("Clear ranking") { board.clear() }
-                .buttonStyle(.text)
+            // Red, like every removal, and it asks first.
+            Button("Clear ranking") { confirmingClear = true }
+                .buttonStyle(TextButtonStyle(destructive: true))
                 .disabled(board.ranked.isEmpty)
             if board.unranked.isEmpty {
                 Button("Compare all") { board.startCompare(scope: .all) }

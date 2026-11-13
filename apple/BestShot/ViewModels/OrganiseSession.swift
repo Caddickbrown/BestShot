@@ -89,6 +89,28 @@ final class OrganiseSession {
         scopedFolder?.stopAccessingSecurityScopedResource()
     }
 
+    /// A session on the photo files in a folder chosen in Files (and the folders
+    /// in it), leaving out any Next has already been pressed on. The phone's
+    /// Organise screen and the monitor both start one this way. A session that
+    /// starts keeps the folder open until it ends.
+    static func fromFolder(_ folder: URL, order: SessionOrder,
+                           context: ModelContext) async -> Result<OrganiseSession, FolderProblem> {
+        guard folder.startAccessingSecurityScopedResource() else {
+            return .failure(FolderProblem(message: "BestShot couldn't open that folder."))
+        }
+        let done = OrganisedFiles.done
+        let files = await Task.detached { FolderPhotos.list(in: folder, order: order, excluding: done) }.value
+        guard !files.isEmpty else {
+            folder.stopAccessingSecurityScopedResource()
+            return .failure(FolderProblem(message: "No photos left to organise in \(folder.lastPathComponent)."))
+        }
+        let current = PhotoLibraryService.shared.userAlbumsWithFolders()
+        return .success(OrganiseSession(files: files, folder: folder, albums: current.albums,
+                                        folders: current.folders, context: context))
+    }
+
+    struct FolderProblem: Error { let message: String }
+
     /// Ticks the albums the current photo (and the next, so it's ready) is
     /// already in, read from Photos once per photo. A file not yet in the
     /// library is in none.

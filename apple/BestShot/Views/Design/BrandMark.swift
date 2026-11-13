@@ -66,6 +66,8 @@ struct BrandHeader: View {
             HairlineRule(palette: palette)
         }
         .background(palette.background)
-        .padding(.top, Theme.Space.intoBar)
+        // Not pulled into the bar's row like a screen header: this one is pinned
+        // under the bar, and the bar clips anything reaching into it, which cut
+        // the name off (13 Nov).
     }
 }

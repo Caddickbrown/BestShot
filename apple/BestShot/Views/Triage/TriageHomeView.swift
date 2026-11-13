@@ -16,6 +16,7 @@ struct TriageHomeView: View {
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
     @State private var folders: [String: String] = [:]
+    @State private var counts: [String: Int]?
     /// Above this screen, so the monitor shares it and leaving doesn't lose it.
     @State private var holder = TriageHolder.shared
     private var session: TriageSession? {
@@ -28,6 +29,9 @@ struct TriageHomeView: View {
     }
     @State private var isLoading = false
     @State private var emptyMessage: String?
+    /// Tags for every photo kept in the next run, as typed.
+    @State private var tagText = ""
+    private var marks: PhotoMarkStore { .shared }
 
     var body: some View {
         Group {
@@ -82,7 +86,7 @@ struct TriageHomeView: View {
                         .buttonStyle(.text)
                 }
             }
-            SourceSection(source: $source, albums: albums, folders: folders)
+            SourceSection(source: $source, albums: albums, folders: folders, counts: counts, onStart: start)
 
             TableSection("Order") {
                 Picker("Order", selection: $order) {
@@ -91,6 +95,8 @@ struct TriageHomeView: View {
                     }
                 }
             }
+
+            tagSection
 
             if let emptyMessage {
                 TableSection { Text(emptyMessage).foregroundStyle(Theme.table.muted) }
@@ -106,6 +112,8 @@ struct TriageHomeView: View {
             let found = PhotoLibraryService.shared.userAlbumsWithFolders()
             albums = found.albums
             folders = found.folders
+            let all = found.albums
+            counts = await Task.detached { PhotoLibraryService.shared.photoCounts(all) }.value
         }
     }
 
@@ -177,9 +185,42 @@ struct TriageHomeView: View {
         EmptyState("Photos Access Denied", message: "Enable photo library access in Settings to use triage.")
     }
 
+    // MARK: - Tags for the run
+
+    /// Tags to give everything kept in the run, typed or picked from those in use.
+    private var tagSection: some View {
+        let typed = TriageTags.parse(tagText)
+        let known = marks.knownTags.filter { tag in !typed.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+        return TableSection(title: "Tag what you keep") {
+            HStack(spacing: 8) {
+                Image(systemName: "tag").foregroundStyle(Theme.table.muted)
+                EscapingField(placeholder: "Tags, with commas between", text: $tagText, onSubmit: start)
+            }
+            if !known.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(known.prefix(12), id: \.self) { tag in
+                        Button(tag) { addTag(tag) }
+                            .buttonStyle(.outline)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        } footer: {
+            FormNote(typed.isEmpty
+                     ? "Optional. Every photo you keep in this run gets these tags, the ones the monitor shows and filters by."
+                     : "Every photo you keep gets \(typed.joined(separator: ", ")). Undo takes them off again.")
+        }
+    }
+
+    private func addTag(_ tag: String) {
+        let trimmed = tagText.trimmingCharacters(in: .whitespaces)
+        tagText = trimmed.isEmpty || trimmed.hasSuffix(",") ? trimmed + (trimmed.isEmpty ? "" : " ") + tag : trimmed + ", " + tag
+    }
+
     // MARK: - Start a session
 
     private func start() {
+        guard !isLoading else { return }
         isLoading = true
         emptyMessage = nil
         let reviewedIDs = Self.reviewedIDs(reviews)
@@ -196,7 +237,8 @@ struct TriageHomeView: View {
                     emptyMessage = "No unreviewed photos found for this source. Try another source or order."
                 } else {
                     paused = false
-                    session = TriageSession(assets: assets, context: context)
+                    session = TriageSession(assets: assets, context: context,
+                                            tags: TriageTags.parse(tagText), marks: marks)
                 }
             }
         }

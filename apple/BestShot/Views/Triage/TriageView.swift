@@ -83,6 +83,15 @@ struct TriageView: View {
                         .font(.small)
                         .foregroundStyle(Theme.viewfinder.muted)
                 }
+                if !session.tags.isEmpty {
+                    // What a keep adds, so it's never a surprise.
+                    Label(session.tags.joined(separator: " · "), systemImage: "tag")
+                        .font(.small)
+                        .foregroundStyle(Theme.viewfinder.muted)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel("Keeping tags: \(session.tags.joined(separator: ", "))")
+                }
             }
 
             Button {

@@ -53,7 +53,7 @@ import UIKit
     /// touch it. The first scene to connect brings on `reconcile`.
     func start(container: ModelContainer) {
         guard desk == nil else { return }
-        desk = MonitorDesk(library: MonitorPhotosLibrary(context: container.mainContext), marks: PhotoMarkStore())
+        desk = MonitorDesk(library: MonitorPhotosLibrary(context: container.mainContext), marks: PhotoMarkStore.shared)
         desk?.onPause = { [weak self] in self?.updateIdleTimer() }
     }
 

@@ -55,6 +55,10 @@ final class PhotoMarkStore {
         var marks: [String: PhotoMark]
     }
 
+    /// The one store for the app: Triage on the phone and the monitor share it,
+    /// so neither writes over the other's file.
+    static let shared = PhotoMarkStore()
+
     private(set) var marks: [String: PhotoMark] = [:]
     /// Something went wrong reading or saving, in words for the screen.
     private(set) var warning: String?

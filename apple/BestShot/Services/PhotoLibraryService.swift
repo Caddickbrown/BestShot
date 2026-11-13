@@ -102,6 +102,19 @@ final class PhotoLibraryService: @unchecked Sendable {
         return folders
     }
 
+    /// How many photos (not videos) each album holds, by album id: what Triage
+    /// and Organise would go through. Slow with hundreds of albums, so call it
+    /// off the main thread.
+    func photoCounts(_ albums: [PHAssetCollection]) -> [String: Int] {
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        var counts: [String: Int] = [:]
+        for album in albums {
+            counts[album.localIdentifier] = PHAsset.fetchAssets(in: album, options: options).count
+        }
+        return counts
+    }
+
     /// Count of assets in a collection (for album chips).
     func assetCount(in collection: PHAssetCollection) -> Int {
         PHAsset.fetchAssets(in: collection, options: nil).count
@@ -217,6 +230,40 @@ final class PhotoLibraryService: @unchecked Sendable {
         return await performChanges {
             PHAssetCreationRequest.forAsset().addResource(with: isVideo ? .video : .photo, fileURL: url, options: nil)
         }
+    }
+
+    /// Adds a photo file from Files to the library and returns the new photo.
+    /// The file is copied first under coordinated access, which brings it down
+    /// from iCloud if it isn't on the device yet; the original isn't changed.
+    func importPhoto(from url: URL) async -> PHAsset? {
+        let copy = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(url.lastPathComponent)
+        let copied = await Task.detached { Self.coordinatedCopy(url, to: copy) }.value
+        defer { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
+        guard copied else { return nil }
+        var placeholder: PHObjectPlaceholder?
+        let ok = await performChanges {
+            let request = PHAssetCreationRequest.forAsset()
+            let options = PHAssetResourceCreationOptions()
+            options.originalFilename = url.lastPathComponent
+            request.addResource(with: .photo, fileURL: copy, options: options)
+            placeholder = request.placeholderForCreatedAsset
+        }
+        guard ok, let id = placeholder?.localIdentifier else { return nil }
+        return PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
+    }
+
+    static func coordinatedCopy(_ source: URL, to destination: URL) -> Bool {
+        let fm = FileManager.default
+        guard (try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)) != nil
+        else { return false }
+        var error: NSError?
+        var ok = false
+        NSFileCoordinator().coordinate(readingItemAt: source, options: [.withoutChanges], error: &error) { readable in
+            ok = (try? fm.copyItem(at: readable, to: destination)) != nil
+        }
+        return ok && error == nil
     }
 
     private func performChanges(_ changes: @escaping () -> Void) async -> Bool {

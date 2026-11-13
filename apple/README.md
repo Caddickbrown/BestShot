@@ -6,6 +6,8 @@ A native photo culling and ranking app, fully on-device. It shares its look
 
 - **Triage**: blast through your **Photos library**. Swipe right to keep, left
   to delete (batched into one system confirmation, then Recently Deleted).
+  Tags typed on the start screen go on every photo kept in that run (the same
+  tags the monitor shows); Undo takes them off.
 - **Rank**: put your Triage keepers in order, best first. Use **Compare**
   (two photos side by side; pick the better one) or drag photos into place.
   **Save as album** writes the order to a "BestShot · Ranked" album in Photos.
@@ -15,9 +17,16 @@ A native photo culling and ranking app, fully on-device. It shares its look
   `.bestshot-cull.json`, **the same file the Linux app uses**, so a folder can
   be culled on either machine. Stars, colour labels and keywords are standard
   XMP (see below), with filters across all of them.
-- **Organise**: file photos into Photos albums.
+- **Organise**: file photos into Photos albums, from the library or from a
+  folder in Files (iCloud Drive, a camera import). A file joins the library
+  when it's first filed into an album; the file itself is left alone. On both
+  start screens an album to go through is found by typing its name, empty
+  albums aren't listed, and ↵ starts.
 - **Tools** (iPhone/iPad): join videos with cuts, crossfades or sequential black fades; remove a middle image band with Anti-Crop. They're under Tools in the main menu; in a project, select videos and tap Join Videos, or open a photo and tap Anti-Crop. Sources come from Files, Photos or projects. Exports are local and non-destructive. See [implementation notes](../docs/media-tools-implementation.md) for format, colour and memory limits.
 - **Projects / Compare**: the original web-app ranking over imported copies.
+  Tap one to open it; rename or delete it by swiping its row, long-pressing
+  it, or from its ⋯ menu. Deleting asks first and never deletes photos: the
+  copies move to Files → BestShot → Removed Projects (the Trash on the Mac).
 
 ## Requirements
 

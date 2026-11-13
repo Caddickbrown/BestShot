@@ -23,15 +23,22 @@ final class TriageSession {
     /// Local IDs favourited during this session (for the running tally + badges).
     private(set) var favourited: Set<String> = []
 
-    /// Undo stack of (index, previousDecision, wasFavourited).
-    private var history: [(index: Int, previous: ReviewDecision, wasFav: Bool)] = []
+    /// Undo stack of (index, previousDecision, wasFavourited, tags this step added).
+    private var history: [(index: Int, previous: ReviewDecision, wasFav: Bool, tagged: [String])] = []
+
+    /// Tags given to every photo kept in this run, chosen at the start. They go
+    /// in the same marks the monitor shows and filters by.
+    let tags: [String]
+    private let marks: PhotoMarkStore?
 
     private let context: ModelContext
     private let library = PhotoLibraryService.shared
 
-    init(assets: [PHAsset], context: ModelContext) {
+    init(assets: [PHAsset], context: ModelContext, tags: [String] = [], marks: PhotoMarkStore? = nil) {
         self.assets = assets
         self.context = context
+        self.tags = tags
+        self.marks = tags.isEmpty ? nil : marks
     }
 
     // MARK: - Derived
@@ -66,7 +73,7 @@ final class TriageSession {
     /// Skip advances without persisting, so the photo resurfaces next time.
     func skip() {
         guard let asset = current else { return }
-        history.append((index, decisions[asset.localIdentifier] ?? .undecided, favourited.contains(asset.localIdentifier)))
+        history.append((index, decisions[asset.localIdentifier] ?? .undecided, favourited.contains(asset.localIdentifier), []))
         decisions[asset.localIdentifier] = .skipped
         index += 1
     }
@@ -82,10 +89,29 @@ final class TriageSession {
     private func record(_ decision: ReviewDecision) {
         guard let asset = current else { return }
         let id = asset.localIdentifier
-        history.append((index, decisions[id] ?? .undecided, favourited.contains(id)))
+        let tagged = decision == .kept ? addTags(to: id) : []
+        history.append((index, decisions[id] ?? .undecided, favourited.contains(id), tagged))
         decisions[id] = decision
         persist(id: id, decision: decision)
         index += 1
+    }
+
+    /// Gives the photo the run's tags it doesn't have yet, and says which.
+    private func addTags(to id: String) -> [String] {
+        guard let marks else { return [] }
+        var mark = marks.mark(id)
+        let new = tags.filter { !mark.has(tag: $0) }
+        guard !new.isEmpty else { return [] }
+        mark.tags += new
+        marks.set(mark, for: id)
+        return new
+    }
+
+    private func removeTags(_ tagged: [String], from id: String) {
+        guard let marks, !tagged.isEmpty else { return }
+        var mark = marks.mark(id)
+        mark.tags.removeAll { tag in tagged.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+        marks.set(mark, for: id)
     }
 
     /// Jump the focus to a specific index (used when tapping a gallery tile).
@@ -98,6 +124,7 @@ final class TriageSession {
     /// moving the focus.
     func setDecision(_ decision: ReviewDecision, for asset: PHAsset) {
         let id = asset.localIdentifier
+        if decision == .kept { _ = addTags(to: id) }
         decisions[id] = decision
         if decision == .skipped || decision == .undecided {
             removePersisted(id: id)
@@ -113,6 +140,7 @@ final class TriageSession {
         index = last.index
         if let asset = assets[safe: last.index] {
             let id = asset.localIdentifier
+            removeTags(last.tagged, from: id)
             if last.previous == .undecided {
                 decisions.removeValue(forKey: id)
                 removePersisted(id: id)
@@ -172,6 +200,19 @@ final class TriageSession {
         var descriptor = FetchDescriptor<AssetReview>(predicate: #Predicate { $0.assetLocalID == id })
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first
+    }
+}
+
+/// What's typed for a run's tags: split at commas, trimmed, each once
+/// whatever its case, in the order typed.
+enum TriageTags {
+    static func parse(_ text: String) -> [String] {
+        var seen = Set<String>()
+        return text.split(separator: ",").compactMap { part in
+            let tag = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tag.isEmpty, seen.insert(tag.lowercased()).inserted else { return nil }
+            return tag
+        }
     }
 }
 

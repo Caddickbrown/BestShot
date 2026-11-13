@@ -11,6 +11,7 @@ struct VideoJoinView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var session = VideoJoinSession()
     @State private var photos: [PhotosPickerItem] = []
+    @State private var previewing = false
     @State private var choosingPhotos = false
     @State private var choosingFiles = false
     @State private var choosingProject = false
@@ -35,6 +36,11 @@ struct VideoJoinView: View {
                     progress: session.phase == "Exporting MP4…" ? session.progress : nil,
                     cancel: session.cancel, result: session.result, isVideo: true
                 ) {
+                    // A failed preview or export says so here, where the buttons are,
+                    // not at the foot of a form that may be scrolled away.
+                    if let error = session.error, !session.busy, !session.clips.isEmpty {
+                        ToolError(text: error)
+                    }
                     HStack(spacing: Theme.Space.actions) {
                         Button("Preview") { session.render(export: false) }
                             .buttonStyle(.text)
@@ -45,6 +51,27 @@ struct VideoJoinView: View {
                     }
                     .disabled(session.validation != nil)
                 }
+            }
+        }
+        // The preview opens in front of everything. In the form it sat at the top,
+        // out of sight once the clips were scrolled to, so Preview seemed to do nothing.
+        .onChange(of: session.player) { _, player in previewing = player != nil }
+        .sheet(isPresented: $previewing, onDismiss: { session.player?.pause() }) {
+            if let player = session.player {
+                NavigationStack {
+                    VideoPlayer(player: player)
+                        .ignoresSafeArea(edges: .bottom)
+                        .navigationTitle("Preview")
+                        #if os(iOS)
+                        .navigationBarTitleDisplayMode(.inline)
+                        #endif
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { previewing = false }
+                            }
+                        }
+                }
+                .presentationDetents([.large])
             }
         }
         .photosPicker(isPresented: $choosingPhotos, selection: $photos, maxSelectionCount: 30,
@@ -114,14 +141,6 @@ struct VideoJoinView: View {
     private var editor: some View {
         @Bindable var session = session
         return Form {
-            if let player = session.player {
-                Section {
-                    VideoPlayer(player: player)
-                        .frame(height: 220)
-                        .listRowInsets(EdgeInsets())
-                }
-            }
-
             TableSection(title: "Clips") {
                 ForEach(Array(session.clips.enumerated()), id: \.element.id) { index, clip in
                     VideoClipRow(clip: clip, index: index)

@@ -134,17 +134,21 @@ struct ScreenHeader<Accessory: View>: View {
     var status: String?
     var palette: Theme.Palette = Theme.table
     @ViewBuilder var accessory: () -> Accessory
+    /// Pushed onto a navigation stack, so the bar above holds a Back button.
+    @Environment(\.isPresented) private var pushed
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: Theme.Space.stack) {
                 HStack(alignment: .lastTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Theme.Space.eyebrowGap) {
                         if let eyebrow {
                             Text(eyebrow)
                                 .font(.eyebrow)
                                 .lineLimit(1)
                                 .foregroundStyle(palette.muted)
+                                // Beside the Back button rather than under it.
+                                .padding(.leading, pushed ? Theme.Space.besideBack : 0)
                         }
                         Text(title)
                             .font(.screenTitle)
@@ -167,6 +171,8 @@ struct ScreenHeader<Accessory: View>: View {
             .padding(.bottom, Theme.Space.headerBottom)
             HairlineRule(palette: palette)
         }
+        // Up into the navigation bar's row, so there's no empty band under it (Dan, 13 Nov).
+        .padding(.top, Theme.Space.intoBar)
     }
 }
 

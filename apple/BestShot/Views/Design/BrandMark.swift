@@ -49,7 +49,7 @@ struct BrandHeader: View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
                 BrandMark(palette: palette).frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Space.eyebrowGap) {
                     Text("Photo triage")
                         .font(.eyebrow)
                         .foregroundStyle(palette.muted)
@@ -66,5 +66,6 @@ struct BrandHeader: View {
             HairlineRule(palette: palette)
         }
         .background(palette.background)
+        .padding(.top, Theme.Space.intoBar)
     }
 }

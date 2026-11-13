@@ -152,8 +152,10 @@ struct OrganiseView: View {
                 Text(problem).font(.eyebrow).foregroundStyle(Theme.table.accent)
             }
 
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
+                    Color.clear.frame(height: 0).id(Self.chipsTop)
                     // The five in use wrap like the rest (a sideways row looked
                     // cut off), set apart by a hairline.
                     // The five in use sit in a fixed two-column grid of tall,
@@ -161,15 +163,16 @@ struct OrganiseView: View {
                     // quick to hit without reading (Dan, 13 Nov).
                     if !recent.isEmpty {
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                            ForEach(recent, id: \.localIdentifier) { chip($0, asset, wide: true) }
+                            ForEach(recent, id: \.localIdentifier) { chip($0, asset, wide: true, proxy: proxy) }
                         }
                         HairlineRule()
                     }
                     FlowLayout(spacing: 8) {
-                        ForEach(rest, id: \.localIdentifier) { chip($0, asset) }
+                        ForEach(rest, id: \.localIdentifier) { chip($0, asset, proxy: proxy) }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
             }
             .overlay {
                 if albums.isEmpty && searching {
@@ -183,10 +186,20 @@ struct OrganiseView: View {
         .frame(maxHeight: 340)
     }
 
-    private func chip(_ album: PHAssetCollection, _ asset: OrganiseItem, wide: Bool = false) -> some View {
+    private static let chipsTop = "chips-top"
+
+    private func chip(_ album: PHAssetCollection, _ asset: OrganiseItem, wide: Bool = false, proxy: ScrollViewProxy) -> some View {
         let added = session.isAdded(album: album, to: asset)
         return Button {
             Task { await session.pick(asset, album: album) }
+            // An album from further down: back to the top, search cleared, as a
+            // reset for the next photo (Dan, 13 Nov).
+            if !wide {
+                albumQuery = ""
+                Theme.Motion.run(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(Self.chipsTop, anchor: .top)
+                }
+            }
         } label: {
             HStack(spacing: 4) {
                 if added { Image(systemName: "checkmark").font(.small) }

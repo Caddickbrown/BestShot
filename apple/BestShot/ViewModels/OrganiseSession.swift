@@ -304,7 +304,8 @@ enum AlbumRecency {
 
     /// Albums this near the front stay where they are when used again, so
     /// the ones you're working with don't shuffle under your finger.
-    static let settled = 5
+    /// Six: three rows of two in Organise's grid (Dan, 13 Nov).
+    static let settled = 6
 
     static func used(_ albumID: String) {
         var s = stamps

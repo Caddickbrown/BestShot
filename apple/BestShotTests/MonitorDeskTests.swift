@@ -54,7 +54,21 @@ final class FakeMonitorLibrary: MonitorLibrary {
     var organisePhoto: String?
     var organiseProgress = ""
     var organiseAlbums: [(id: String, title: String, added: Bool)] = []
-    func startOrganise(order: SessionOrder, source: TriageSourceOption) async -> String? { nil }
+    var organisedFrom: [String] = []
+    var organiseSources: [TriageSourceOption] = []
+    func startOrganise(order: SessionOrder, source: TriageSourceOption) async -> String? {
+        organiseSources.append(source)
+        organisedFrom.append("photos")
+        organisePhoto = "asset-1"
+        return nil
+    }
+    var folderPhotos = ["a.jpg", "b.jpg"]
+    func startOrganise(folder: URL, order: SessionOrder) async -> String? {
+        organisedFrom.append(folder.lastPathComponent)
+        guard let first = folderPhotos.first else { return "No photos left to organise in \(folder.lastPathComponent)." }
+        organisePhoto = "file:" + folder.appendingPathComponent(first).path
+        return nil
+    }
     func addToAlbum(_ id: String) async {}
     func newAlbum(_ title: String) async {}
     func nextOrganised() {}
@@ -571,6 +585,177 @@ final class MonitorDeskTests: XCTestCase {
     func testTriageEndedOnThePhoneFallsBackToHome() {
         library.triageIDs = []
         XCTAssertEqual(desk.pane, .triage)
+    }
+}
+
+@MainActor
+final class MonitorOrganiseFolderTests: XCTestCase {
+    private var library: FakeMonitorLibrary!
+    private var desk: MonitorDesk!
+    private let folder = URL(fileURLWithPath: "/tmp/Camera Import", isDirectory: true)
+
+    override func setUp() async throws {
+        library = FakeMonitorLibrary()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("marks.json")
+        desk = MonitorDesk(library: library, marks: PhotoMarkStore(url: url))
+        desk.isConnected = true
+        desk.setLocked(false)
+        press(.char("3"), .command)
+    }
+
+    private func press(_ key: KeyName, _ mods: KeyMods = []) {
+        desk.handle(MonitorPress(key, mods))
+    }
+
+    /// Esc from a session steps back to Organise's start screen.
+    private func backToTheStart() {
+        press(.escape)
+        XCTAssertEqual(desk.pane, .organiseHome)
+    }
+
+    /// Down to the folder row: it sits just above Start Organising.
+    private func litFolderRow() {
+        press(.end)
+        press(.up)
+    }
+
+    func testOrganiseOffersAFolderInFiles() {
+        XCTAssertEqual(desk.pane, .organiseHome)
+        let row = desk.rows.first { $0.id == "source-folder" }
+        XCTAssertEqual(row?.title, "A folder in Files…")
+        XCTAssertEqual(row?.action, .organiseFolder)
+        XCTAssertEqual(desk.rows.last?.action, .startOrganise)
+    }
+
+    func testEnterOnTheFolderAsksThePhone() {
+        litFolderRow()
+        XCTAssertEqual(desk.litRowID, "source-folder")
+        press(.enter)
+        XCTAssertTrue(desk.wantsFolder)
+        XCTAssertEqual(desk.notice, MonitorDesk.folderPrompt)
+        XCTAssertEqual(desk.pane, .organiseHome)
+        press(.up)
+        XCTAssertEqual(desk.notice, MonitorDesk.folderPrompt, "the prompt stays up while the picker is")
+    }
+
+    func testAPickedFolderStartsOrganising() async {
+        litFolderRow()
+        press(.enter)
+        desk.folderPickerClosed()
+        desk.folderPicked(folder)
+        await desk.work?.value
+        XCTAssertFalse(desk.wantsFolder)
+        XCTAssertNil(desk.notice)
+        XCTAssertEqual(library.organisedFrom, ["Camera Import"])
+        XCTAssertEqual(desk.stack, [.home, .organiseHome, .organise])
+        XCTAssertNotNil(library.organisePhoto)
+        XCTAssertTrue(desk.situation.organising, "the album keys work as for Photos")
+    }
+
+    func testStartOrganisingUsesTheChosenFolder() async {
+        litFolderRow()
+        press(.enter)
+        desk.folderPicked(folder)
+        await desk.work?.value
+        backToTheStart()
+        XCTAssertEqual(desk.pane, .organiseHome)
+        let row = desk.rows.first { $0.id == "source-folder" }
+        XCTAssertEqual(row?.title, "Camera Import")
+        XCTAssertEqual(row?.isOn, true)
+        XCTAssertFalse(desk.rows.contains { $0.group == "Source" && $0.isOn == true }, "Photos sources aren't chosen too")
+        XCTAssertEqual(desk.rows.last?.detail, "Camera Import · \(desk.organiseOrder.title)")
+        press(.end)
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.organisedFrom, ["Camera Import", "Camera Import"])
+        XCTAssertEqual(desk.pane, .organise)
+    }
+
+    func testAPhotosSourceTakesOverFromTheFolder() async {
+        desk.folderPicked(folder)
+        await desk.work?.value
+        backToTheStart()
+        press(.home)
+        for _ in 0..<SessionOrder.allCases.count { press(.down) }   // the first source, All Photos
+        press(.enter)
+        XCTAssertEqual(desk.rows.first { $0.id == "source-folder" }?.isOn, false)
+        press(.end)
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.organisedFrom.last, "photos")
+    }
+
+    func testCancellingLeavesTheMonitorWhereItWas() {
+        litFolderRow()
+        press(.enter)
+        desk.folderPickerClosed()
+        desk.folderNotPicked()
+        XCTAssertFalse(desk.wantsFolder)
+        XCTAssertEqual(desk.pane, .organiseHome)
+        XCTAssertEqual(desk.litRowID, "source-folder")
+        XCTAssertEqual(desk.notice, "No folder chosen.")
+        XCTAssertTrue(library.organisedFrom.isEmpty)
+    }
+
+    // Dan, 13 Nov: "I was trying to select Screenshots and it didn't work."
+
+    private func lightRow(titled title: String) {
+        press(.home)
+        for _ in 0..<desk.rows.count where desk.litRow?.title != title { press(.down) }
+        XCTAssertEqual(desk.litRow?.title, title)
+    }
+
+    func testEnterChoosesScreenshotsAndStartUsesIt() async {
+        lightRow(titled: "Screenshots")
+        press(.enter)
+        XCTAssertEqual(desk.organiseSource, .screenshots)
+        XCTAssertEqual(desk.rows.first { $0.title == "Screenshots" }?.isOn, true)
+        XCTAssertEqual(desk.rows.first { $0.title == "All Photos" }?.isOn, false)
+        XCTAssertEqual(desk.rows.last?.detail, "Screenshots · \(desk.organiseOrder.title)")
+        press(.end)
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.organiseSources, [.screenshots])
+        XCTAssertEqual(desk.pane, .organise)
+    }
+
+    func testAnOpenSessionLeavesTheSourcesInReach() async {
+        press(.end)
+        press(.enter)   // All Photos
+        await desk.work?.value
+        press(.escape)
+        press(.escape)
+        XCTAssertEqual(desk.pane, .home)
+        press(.char("3"), .command)
+        XCTAssertEqual(desk.pane, .organise, "Organise resumes an open session")
+        press(.escape)
+        XCTAssertEqual(desk.pane, .organiseHome, "and Esc reaches its sources")
+        XCTAssertEqual(desk.litRowID, "resume-organise")
+        lightRow(titled: "Screenshots")
+        press(.enter)
+        lightRow(titled: "Start Again")
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.organiseSources, [.allPhotos, .screenshots])
+        XCTAssertEqual(desk.pane, .organise)
+    }
+
+    func testResumeGoesBackToTheSameSession() async {
+        press(.end)
+        press(.enter)
+        await desk.work?.value
+        press(.escape)
+        press(.enter)   // Resume, lit by default
+        XCTAssertEqual(desk.pane, .organise)
+        XCTAssertEqual(library.organiseSources.count, 1)
+    }
+
+    func testAnEmptyFolderSaysSoAndStays() async {
+        library.folderPhotos = []
+        desk.folderPicked(folder)
+        await desk.work?.value
+        XCTAssertEqual(desk.pane, .organiseHome)
+        XCTAssertEqual(desk.notice, "No photos left to organise in Camera Import.")
     }
 }
 

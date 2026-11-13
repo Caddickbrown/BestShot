@@ -21,7 +21,7 @@ enum MonitorRowAction: Equatable {
     case order(SessionOrder), source(TriageSourceOption), startTriage, resumeTriage
     case status(MonitorFilter.Status), stars(Int), tag(String), clearFilters
     case compare(RankScope), saveAlbum
-    case organiseOrder(SessionOrder), organiseSource(TriageSourceOption), organiseFolder, startOrganise
+    case organiseOrder(SessionOrder), organiseSource(TriageSourceOption), organiseFolder, startOrganise, resumeOrganise
     case album(String), newAlbum
     case project(UUID), allMedia, mediaItem
     case rename(LabelColour), textSize, pause
@@ -475,7 +475,9 @@ final class MonitorDesk {
             stack = [.home, .rank]
             spawn { await self.loadBoard() }
         case .organise:
-            stack = [.home, library.organisePhoto == nil ? .organiseHome : .organise]
+            // An open session comes straight up, with its start screen under it so
+            // Esc reaches the sources and a new start.
+            if library.organisePhoto == nil { stack = [.home, .organiseHome] } else { openOrganise() }
         case .allMedia:
             stack = [.home, .media(project: nil)]
             mediaItems = library.media(project: nil)
@@ -515,7 +517,7 @@ final class MonitorDesk {
     var litRow: MonitorRow? {
         let rows = rows
         if let id = selection[pane], let row = rows.first(where: { $0.id == id }) { return row }
-        return rows.first { $0.action == .startTriage || $0.action == .resumeTriage } ?? rows.first
+        return rows.first { [.startTriage, .resumeTriage, .resumeOrganise].contains($0.action) } ?? rows.first
     }
 
     private func select(_ row: MonitorRow?) {
@@ -585,6 +587,7 @@ final class MonitorDesk {
         case .organiseSource(let new): organiseSource = new; organiseFromFolder = false
         case .organiseFolder: askForFolder()
         case .startOrganise: spawn { await self.startOrganise() }
+        case .resumeOrganise: openOrganise()
         case .album(let id): spawn { [library] in await library.addToAlbum(id) }
         case .newAlbum: beginEntry(.album, title: "New album")
         case .project(let id):
@@ -703,10 +706,20 @@ final class MonitorDesk {
         rows.append(MonitorRow(id: "source-folder", title: organiseFolder?.lastPathComponent ?? "A folder in Files…",
                                detail: organiseFolder == nil ? "Chosen on the phone" : "A folder in Files · ↵ to choose another",
                                group: "Folder", isOn: organiseFromFolder, action: .organiseFolder))
-        rows.append(MonitorRow(id: "start-organise", title: "Start Organising",
-                               detail: organiseFromFolder ? organiseFolder?.lastPathComponent : nil,
-                               group: "Go", action: .startOrganise))
+        if library.organisePhoto != nil {
+            rows.append(MonitorRow(id: "resume-organise", title: "Resume Organising", detail: library.organiseProgress,
+                                   group: "Go", action: .resumeOrganise))
+        }
+        rows.append(MonitorRow(id: "start-organise", title: library.organisePhoto == nil ? "Start Organising" : "Start Again",
+                               detail: organiseStartDetail, group: "Go", action: .startOrganise))
         return rows
+    }
+
+    /// What Start would go through, so the choice is plain before ↵.
+    private var organiseStartDetail: String {
+        let from = organiseFromFolder ? organiseFolder?.lastPathComponent
+            : library.sources.first { $0.option == organiseSource }?.title
+        return [from ?? organiseSource.title, organiseOrder.title].joined(separator: " · ")
     }
 
     private var organiseRows: [MonitorRow] {
@@ -1062,7 +1075,13 @@ final class MonitorDesk {
         } else {
             notice = await library.startOrganise(order: organiseOrder, source: organiseSource)
         }
-        if notice == nil, library.organisePhoto != nil { stack = [.home, .organise] }
+        if notice == nil, library.organisePhoto != nil { openOrganise() }
+    }
+
+    /// Into the session, with its start screen under it. Back there, Resume is lit.
+    private func openOrganise() {
+        selection[.organiseHome] = nil
+        stack = [.home, .organiseHome, .organise]
     }
 
     // MARK: - Typing

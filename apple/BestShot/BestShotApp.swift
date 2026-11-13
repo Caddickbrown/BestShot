@@ -40,6 +40,9 @@ struct BestShotApp: App {
                 // The table follows this; judging screens are always the viewfinder.
                 .preferredColorScheme(appearance.scheme)
                 .tint(Theme.accent)
+                #if os(iOS)
+                .monitorFolderPicker()
+                #endif
         }
         .modelContainer(container)
         #if os(macOS)

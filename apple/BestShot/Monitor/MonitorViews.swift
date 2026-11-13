@@ -129,7 +129,7 @@ private struct MonitorScreen: View {
                         .padding(metrics.padding)
                 }
                 Rectangle().fill(palette.rule).frame(width: 1)
-                MonitorList(desk: desk, title: "Organise", caption: desk.library.organiseProgress, palette: palette, metrics: metrics)
+                MonitorList(desk: desk, title: "Organise", caption: desk.notice ?? desk.library.organiseProgress, palette: palette, metrics: metrics)
                     .frame(width: size.width * 0.32)
             }
         default:

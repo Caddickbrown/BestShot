@@ -2,6 +2,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import UniformTypeIdentifiers
 
 // Plug the phone into a monitor and BestShot gets a window of its own there
 // instead of a mirror: the external-display scene declared in Support/Info-iOS.plist
@@ -140,6 +141,35 @@ final class MonitorSceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillEnterForeground(_ scene: UIScene) {
         MonitorDisplay.shared.reconcile()
     }
+}
+
+/// The monitor can't show a picker, so ↵ on Organise's "A folder in Files…"
+/// there brings Files' folder picker up on the phone, and what's picked goes
+/// back to the desk.
+private struct MonitorFolderPicker: ViewModifier {
+    func body(content: Content) -> some View {
+        if let desk = MonitorDisplay.shared.desk {
+            content.fileImporter(
+                isPresented: Binding(get: { desk.wantsFolder }, set: { if !$0 { desk.folderPickerClosed() } }),
+                allowedContentTypes: [.folder], allowsMultipleSelection: false,
+                onCompletion: { result in
+                    switch result {
+                    case .success(let urls):
+                        if let folder = urls.first { desk.folderPicked(folder) } else { desk.folderNotPicked() }
+                    case .failure(let error):
+                        desk.folderNotPicked(error.localizedDescription)
+                    }
+                },
+                onCancellation: { desk.folderNotPicked() })
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    /// On the phone's window, for the monitor's folder picker.
+    func monitorFolderPicker() -> some View { modifier(MonitorFolderPicker()) }
 }
 
 /// The desk is made in the app's init, ahead of any scene.

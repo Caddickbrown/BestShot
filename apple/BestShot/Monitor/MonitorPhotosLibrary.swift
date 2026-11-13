@@ -124,15 +124,18 @@ final class MonitorPhotosLibrary: MonitorLibrary {
 
     // MARK: Organise
 
-    var organisePhoto: String? { organise?.current?.localIdentifier }
+    /// A file from Files isn't in Photos until it's filed, so it goes by the item.
+    var organisePhoto: String? { organise?.currentItem?.id }
 
     var organiseProgress: String {
         guard let organise else { return "" }
-        return "\(min(organise.index + 1, organise.items.count)) / \(organise.items.count)"
+        let count = "\(min(organise.index + 1, organise.items.count)) / \(organise.items.count)"
+        let problem = organise.fromFiles ? organise.problem : nil
+        return [count, organise.folderName, organise.currentItem?.name, problem].compactMap { $0 }.joined(separator: " · ")
     }
 
     var organiseAlbums: [(id: String, title: String, added: Bool)] {
-        guard let organise, let current = organise.current else { return [] }
+        guard let organise, let current = organise.currentItem else { return [] }
         return organise.albums.map {
             ($0.localIdentifier, organise.label($0), organise.isAdded(album: $0, to: current))
         }
@@ -147,15 +150,29 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         return nil
     }
 
+    func startOrganise(folder: URL, order: SessionOrder) async -> String? {
+        switch await OrganiseSession.fromFolder(folder, order: order, context: context) {
+        case .success(let started):
+            for case .file(let url) in started.items { files[OrganiseItem.file(url).id] = url }
+            organise = started
+            return nil
+        case .failure(let problem):
+            return problem.message
+        }
+    }
+
+    /// Photo files from Files, by their item id, for their pictures.
+    @ObservationIgnored private var files: [String: URL] = [:]
+
     func addToAlbum(_ id: String) async {
-        guard let organise, let asset = organise.current,
+        guard let organise, let item = organise.currentItem,
               let album = organise.albums.first(where: { $0.localIdentifier == id }) else { return }
-        await organise.pick(asset, album: album)
+        await organise.pick(item, album: album)
     }
 
     func newAlbum(_ title: String) async {
-        guard let organise, let asset = organise.current else { return }
-        await organise.createAlbumAndAdd(name: title, asset: asset)
+        guard let organise, let item = organise.currentItem else { return }
+        await organise.createAlbumAndAdd(name: title, item: item)
     }
 
     func nextOrganised() { organise?.next() }
@@ -213,7 +230,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     // MARK: Pictures
 
     func picture(_ id: String, longEdge: CGFloat, fill: Bool) -> AnyView {
-        if let url = longEdge > 500 ? fullSize[id] : items[id] {
+        if let url = files[id] ?? (longEdge > 500 ? fullSize[id] : items[id]) {
             return AnyView(AsyncFileImage(url: url, downsampleTo: longEdge, contentMode: fill ? .fill : .fit))
         }
         guard let asset = asset(id) else { return AnyView(Color.clear) }

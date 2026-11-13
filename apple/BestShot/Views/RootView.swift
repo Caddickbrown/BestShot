@@ -92,8 +92,8 @@ struct RootView: View {
             #endif
             .toolbar {
                 #if os(iOS)
-                // The header says BestShot; the bar needn't say it again.
-                ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+                // The mark and the name, centred in the bar's own row.
+                ToolbarItem(placement: .principal) { BrandBarTitle() }
                 #endif
                 // Both in plain sight. A secondary item folds into the bar's own
                 // overflow button, which put one More menu inside another.

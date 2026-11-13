@@ -46,18 +46,18 @@ struct BrandHeader: View {
     var palette: Theme.Palette = Theme.table
 
     var body: some View {
+        #if os(iOS)
+        // The mark and the name sit centred in the navigation bar (see
+        // BrandBarTitle); under the bar, only the rule that ends the header.
+        HairlineRule(palette: palette)
+        #else
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
                 BrandMark(palette: palette).frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: Theme.Space.eyebrowGap) {
-                    Text("Photo triage")
-                        .font(.eyebrow)
-                        .foregroundStyle(palette.muted)
-                    Text("BestShot")
-                        .font(.screenTitle)
-                        .foregroundStyle(palette.ink)
-                        .accessibilityAddTraits(.isHeader)
-                }
+                Text("BestShot")
+                    .font(.screenTitle)
+                    .foregroundStyle(palette.ink)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding(.horizontal, Theme.Space.screen)
@@ -66,8 +66,21 @@ struct BrandHeader: View {
             HairlineRule(palette: palette)
         }
         .background(palette.background)
-        // Not pulled into the bar's row like a screen header: this one is pinned
-        // under the bar, and the bar clips anything reaching into it, which cut
-        // the name off (13 Nov).
+        #endif
+    }
+}
+
+/// The app's mark and name, centred in the home screen's navigation bar.
+struct BrandBarTitle: View {
+    var palette: Theme.Palette = Theme.table
+
+    var body: some View {
+        HStack(spacing: 8) {
+            BrandMark(palette: palette).frame(width: 26, height: 26)
+            Text("BestShot")
+                .font(.barTitle)
+                .foregroundStyle(palette.ink)
+                .accessibilityAddTraits(.isHeader)
+        }
     }
 }

@@ -88,15 +88,6 @@ enum Theme {
         static let headerTop: CGFloat = 4
         /// Between a header's small line and its title, which has a tall face.
         static let eyebrowGap: CGFloat = 8
-        /// A header moves up this far into the navigation bar's row (iOS only:
-        /// the bar there has no background, only its buttons).
-        #if os(iOS)
-        static let intoBar: CGFloat = -40
-        #else
-        static let intoBar: CGFloat = 0
-        #endif
-        /// Clears the Back button, for a line sharing its row.
-        static let besideBack: CGFloat = 52
         static let headerBottom: CGFloat = 8
         /// Between the lines of a header, and the rows of a short stack.
         static let stack: CGFloat = 10

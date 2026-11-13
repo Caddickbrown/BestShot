@@ -156,13 +156,16 @@ struct OrganiseView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     // The five in use wrap like the rest (a sideways row looked
                     // cut off), set apart by a hairline.
+                    // The five in use sit in a fixed two-column grid of tall,
+                    // equal buttons, so they're in the same place every time and
+                    // quick to hit without reading (Dan, 13 Nov).
                     if !recent.isEmpty {
-                        FlowLayout(spacing: 6) {
-                            ForEach(recent, id: \.localIdentifier) { chip($0, asset) }
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            ForEach(recent, id: \.localIdentifier) { chip($0, asset, wide: true) }
                         }
                         HairlineRule()
                     }
-                    FlowLayout(spacing: 6) {
+                    FlowLayout(spacing: 8) {
                         ForEach(rest, id: \.localIdentifier) { chip($0, asset) }
                     }
                 }
@@ -177,10 +180,10 @@ struct OrganiseView: View {
         }
         .padding(.horizontal, Theme.Space.screen)
         .padding(.vertical, Theme.Space.bar)
-        .frame(maxHeight: 300)
+        .frame(maxHeight: 340)
     }
 
-    private func chip(_ album: PHAssetCollection, _ asset: OrganiseItem) -> some View {
+    private func chip(_ album: PHAssetCollection, _ asset: OrganiseItem, wide: Bool = false) -> some View {
         let added = session.isAdded(album: album, to: asset)
         return Button {
             Task { await session.pick(asset, album: album) }
@@ -199,7 +202,7 @@ struct OrganiseView: View {
             .accessibilityLabel(session.label(album))
         }
         // In it already: inked in, like the one pill on a screen.
-        .buttonStyle(AlbumChipStyle(added: added))
+        .buttonStyle(AlbumChipStyle(added: added, wide: wide))
         .accessibilityHint(session.singleAlbum ? "Files the photo here and moves to the next"
                            : added ? "Takes the photo out of this album" : "Adds the photo to this album")
     }
@@ -233,17 +236,22 @@ struct OrganiseView: View {
 /// An album to file into: a hairline capsule, filled with ink once the photo's in it.
 private struct AlbumChipStyle: ButtonStyle {
     let added: Bool
+    /// One of the five in use: fills its grid cell, taller still.
+    var wide = false
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.note)
+        // At least 44 points to tap (they were about 30, and fiddly to hit fast).
+        let shape = RoundedRectangle(cornerRadius: wide ? 12 : 20, style: .continuous)
+        return configuration.label
+            .font(wide ? .row : .note)
             .foregroundStyle(added ? Theme.table.paper : Theme.table.ink)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(added ? Theme.table.ink : .clear, in: Capsule())
-            .overlay(Capsule().stroke(added ? .clear : Theme.table.rule, lineWidth: 1))
+            .padding(.horizontal, wide ? 12 : 14)
+            .frame(maxWidth: wide ? .infinity : nil, minHeight: wide ? 48 : 40)
+            .background(added ? Theme.table.ink : .clear, in: shape)
+            .overlay(shape.stroke(added ? .clear : Theme.table.rule, lineWidth: 1))
+            .padding(.vertical, wide ? 0 : 2)
+            .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.55 : 1)
-            .contentShape(Capsule())
     }
 }
 

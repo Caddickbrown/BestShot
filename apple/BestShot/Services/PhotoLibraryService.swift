@@ -52,6 +52,8 @@ final class PhotoLibraryService: @unchecked Sendable {
             options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: order == .oldest)]
         }
 
+        // Hidden photos only come back when asked for (and only from the Hidden album).
+        if collection?.assetCollectionSubtype == .smartAlbumAllHidden { options.includeHiddenAssets = true }
         let result: PHFetchResult<PHAsset>
         if let collection {
             result = PHAsset.fetchAssets(in: collection, options: options)

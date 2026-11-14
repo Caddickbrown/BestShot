@@ -48,6 +48,7 @@ targets:
         "INFOPLIST_FILE[sdk=iphonesimulator*]": Support/Info-iOS.plist
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "BestShot imports photos and videos you choose so you can rank them."
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "BestShot can save exported media back to your photo library."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "BestShot uses Face ID to open your Hidden photos."
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.photography"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"

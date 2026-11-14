@@ -227,6 +227,11 @@ struct TriageHomeView: View {
         let chosenOrder = order
         let chosenSource = source
         Task {
+            // Hidden locks again in the background, so a fresh session asks again.
+            guard await HiddenGate.shared.allows(chosenSource) else {
+                await MainActor.run { isLoading = false }
+                return
+            }
             let collection = Self.resolveCollection(chosenSource)
             let assets = PhotoLibraryService.shared.fetchAssets(
                 in: collection, order: chosenOrder, excluding: reviewedIDs

@@ -2,7 +2,7 @@ import Photos
 
 /// The sets Photos keeps for itself that are worth going through on their own.
 enum SmartSource: String, CaseIterable, Hashable {
-    case screenshots, selfies, favourites, livePhotos, portraits
+    case screenshots, selfies, favourites, livePhotos, portraits, hidden
 
     var subtype: PHAssetCollectionSubtype {
         switch self {
@@ -11,6 +11,7 @@ enum SmartSource: String, CaseIterable, Hashable {
         case .favourites: return .smartAlbumFavorites
         case .livePhotos: return .smartAlbumLivePhotos
         case .portraits: return .smartAlbumDepthEffect
+        case .hidden: return .smartAlbumAllHidden
         }
     }
 }
@@ -35,6 +36,7 @@ enum TriageSourceOption: Hashable {
         case .smart(.favourites): return "Favourites"
         case .smart(.livePhotos): return "Live Photos"
         case .smart(.portraits): return "Portraits"
+        case .smart(.hidden): return "Hidden"
         case .album: return "Album"
         }
     }
@@ -47,7 +49,13 @@ enum TriageSourceOption: Hashable {
         case .smart(.favourites): return "heart"
         case .smart(.livePhotos): return "livephoto"
         case .smart(.portraits): return "person.and.background.dotted"
+        case .smart(.hidden): return "eye.slash"
         case .album: return "rectangle.stack"
         }
     }
+}
+
+extension TriageSourceOption {
+    /// Photos' Hidden album: behind Face ID, as it is in Photos.
+    var isHidden: Bool { self == .smart(.hidden) }
 }

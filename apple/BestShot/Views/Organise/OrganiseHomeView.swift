@@ -141,6 +141,10 @@ struct OrganiseHomeView: View {
         let chosenOrder = order
         let chosenSource = source
         Task {
+            guard await HiddenGate.shared.allows(chosenSource) else {
+                await MainActor.run { isLoading = false }
+                return
+            }
             let collection = TriageHomeView.resolveCollection(chosenSource)
             let assets = PhotoLibraryService.shared.fetchAssets(
                 in: collection, order: chosenOrder, excluding: organisedIDs

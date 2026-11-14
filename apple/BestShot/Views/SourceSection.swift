@@ -69,6 +69,12 @@ struct SourceSection: View {
             }
             .pickerStyle(.inline)
             .labelsHidden()
+            // Hidden asks for Touch ID first; turned down, the choice goes back.
+            .onChange(of: source) { old, new in
+                guard new.isHidden, !HiddenGate.shared.isUnlocked else { return }
+                source = old
+                Task { if await HiddenGate.shared.unlock() { source = new } }
+            }
         }
         albumSection
         #endif
@@ -164,6 +170,11 @@ struct SourceSection: View {
     }
 
     private func choose(_ option: TriageSourceOption) {
+        // Hidden asks for Face ID first; turned down, nothing changes.
+        if option.isHidden && !HiddenGate.shared.isUnlocked {
+            Task { if await HiddenGate.shared.unlock() { choose(option) } }
+            return
+        }
         source = option
         query = ""
         Theme.Motion.run(Theme.Motion.settle) { fold.choose() }
@@ -181,7 +192,9 @@ struct SourceSection: View {
             case .smart(let smart):
                 if let set = PHAssetCollection.fetchAssetCollections(
                     with: .smartAlbum, subtype: smart.subtype, options: nil).firstObject {
-                    out[option] = PHAsset.fetchAssets(in: set, options: options).count
+                    let counting = options.copy() as! PHFetchOptions
+                    counting.includeHiddenAssets = smart == .hidden
+                    out[option] = PHAsset.fetchAssets(in: set, options: counting).count
                 }
             case .album:
                 break

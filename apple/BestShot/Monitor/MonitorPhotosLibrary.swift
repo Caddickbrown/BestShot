@@ -88,6 +88,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
 
     func startTriage(order: SessionOrder, source: TriageSourceOption) async -> String? {
         guard triage.session == nil else { return nil }
+        guard await HiddenGate.shared.allows(source) else { return "Hidden stays locked without Face ID." }
         let found = TriageHomeView.fetchSession(order: order, source: source, context: context)
         guard !found.isEmpty else {
             return "No unreviewed photos found for this source. Try another source or order."
@@ -142,6 +143,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     }
 
     func startOrganise(order: SessionOrder, source: TriageSourceOption) async -> String? {
+        guard await HiddenGate.shared.allows(source) else { return "Hidden stays locked without Face ID." }
         let found = OrganiseHomeView.fetchSession(order: order, source: source, context: context)
         guard !found.isEmpty else { return "No unorganised photos found for this source." }
         for asset in found { assets[asset.localIdentifier] = asset }

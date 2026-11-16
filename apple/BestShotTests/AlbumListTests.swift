@@ -124,4 +124,38 @@ final class AlbumSourceTests: XCTestCase {
         XCTAssertNil(start(""))
         XCTAssertNil(start("Empty"))
     }
+
+    // MARK: Albums like a new name
+
+    private let names = ["Lisbon 2023", "Grandkids", "Receipts", "Café Trips", "Dogs"]
+
+    private func like(_ typed: String) -> [String] {
+        AlbumList.similar(to: typed, in: names, title: { $0 })
+    }
+
+    func testAlbumsLikeANameAreFound() {
+        XCTAssertEqual(like("lisbon"), ["Lisbon 2023"])
+        XCTAssertEqual(like("Grand Kids"), ["Grandkids"], "spaces don't count")
+        XCTAssertEqual(like("Lisbn"), ["Lisbon 2023"], "a slip in a word")
+        XCTAssertEqual(like("cafe"), ["Café Trips"], "accents don't count")
+        XCTAssertEqual(like("reciepts"), ["Receipts"])
+        XCTAssertEqual(like("trip"), ["Café Trips"])
+    }
+
+    func testUnlikeNamesFindNothing() {
+        XCTAssertEqual(like("Paris"), [])
+        XCTAssertEqual(like("x"), [], "one letter is too little to go on")
+        XCTAssertEqual(like(""), [])
+    }
+
+    func testTheSameNameComesFirst() {
+        let found = AlbumList.similar(to: "dogs", in: ["Dogs at the beach", "Dogs"], title: { $0 })
+        XCTAssertEqual(found, ["Dogs", "Dogs at the beach"])
+    }
+
+    func testDistance() {
+        XCTAssertEqual(AlbumList.distance("lisbn", "lisbon"), 1)
+        XCTAssertEqual(AlbumList.distance("abc", "abc"), 0)
+        XCTAssertEqual(AlbumList.distance("", "ab"), 2)
+    }
 }

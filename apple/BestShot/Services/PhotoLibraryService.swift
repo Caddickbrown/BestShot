@@ -188,6 +188,13 @@ final class PhotoLibraryService: @unchecked Sendable {
         }
     }
 
+    /// Delete an album (never the photos in it). iOS asks first; true if it went.
+    func deleteAlbum(_ collection: PHAssetCollection) async -> Bool {
+        await performChanges {
+            PHAssetCollectionChangeRequest.deleteAssetCollections([collection] as NSArray)
+        }
+    }
+
     /// Create a new album and return it (or nil on failure).
     func createAlbum(named title: String) async -> PHAssetCollection? {
         var placeholder: PHObjectPlaceholder?

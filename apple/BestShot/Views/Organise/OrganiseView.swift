@@ -63,6 +63,15 @@ struct OrganiseView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
+                // Takes back the last tap, Next or Skip, in Photos too.
+                Button {
+                    Task { await session.undo() }
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward").font(.small)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(session.canUndo ? Theme.table.ink : Theme.table.muted.opacity(0.5))
+                .disabled(!session.canUndo)
                 // One album per photo: a tap files it and moves on.
                 Toggle("One album, then next", isOn: $session.singleAlbum)
                     .font(.small)
@@ -83,11 +92,17 @@ struct OrganiseView: View {
         return [count, folder, session.currentItem?.name].compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// Albums matching what's typed (all of them when nothing is).
+    /// Albums matching what's typed (all of them when nothing is), then ones
+    /// with names like it ("Lisbn", "grand kids"), so one that's there already
+    /// isn't made again.
     private var shownAlbums: [PHAssetCollection] {
         let q = albumQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return session.albums }
-        return session.albums.filter { ($0.localizedTitle ?? "").localizedCaseInsensitiveContains(q) }
+        let holding = session.albums.filter { ($0.localizedTitle ?? "").localizedCaseInsensitiveContains(q) }
+        let ids = Set(holding.map(\.localIdentifier))
+        let like = AlbumList.similar(to: q, in: session.albums.filter { !ids.contains($0.localIdentifier) },
+                                     title: \.localizedTitle)
+        return holding + like
     }
 
     /// What's typed names no album yet, so ↵ or + makes one.

@@ -53,6 +53,23 @@ final class OrganiseSession {
     /// Why the last file couldn't be added to the library.
     var problem: String?
 
+    /// One change to Photos or to where the session is, kept so Undo can put it back.
+    enum Change: Equatable {
+        /// Filed into an album. `imported`: this filing first added the file's
+        /// photo to the library.
+        case added(item: String, album: String, imported: Bool)
+        case removed(item: String, album: String)
+        /// An album made for this photo.
+        case created(album: String)
+        /// On from photo `from`; `marked` when Next marked it organised.
+        case moved(from: Int, marked: Bool)
+    }
+
+    /// What Undo takes back, newest last. A step is everything one tap or key did:
+    /// in single album mode, the filing and the move on together.
+    private(set) var history: [[Change]] = []
+    var canUndo: Bool { !history.isEmpty }
+
     /// The folder chosen in Files, kept open while the session runs.
     private let scopedFolder: URL?
     /// The folder's name, for the header.
@@ -178,11 +195,15 @@ final class OrganiseSession {
 
     /// Add the item to an existing album (idempotent per session).
     func add(_ item: OrganiseItem, to album: PHAssetCollection) async {
+        let wasImported = imported[item.id] != nil
         guard !isAdded(album: album, to: item), let asset = await libraryAsset(for: item) else { return }
         let ok = await library.addAssets([asset], to: album)
         if ok {
             added[item.id, default: []].insert(album.localIdentifier)
             AlbumRecency.used(album.localIdentifier)
+            let isFile: Bool
+            if case .file = item { isFile = true } else { isFile = false }
+            history.append([.added(item: item.id, album: album.localIdentifier, imported: isFile && !wasImported)])
         }
     }
 
@@ -195,7 +216,10 @@ final class OrganiseSession {
         if case .asset(let a) = item { asset = a } else { asset = imported[item.id] }
         guard let asset else { return }
         let ok = await library.removeAssets([asset], from: album)
-        if ok { added[item.id]?.remove(album.localIdentifier) }
+        if ok {
+            added[item.id]?.remove(album.localIdentifier)
+            history.append([.removed(item: item.id, album: album.localIdentifier)])
+        }
     }
 
     /// Single album mode: one tap files the photo and moves straight on.
@@ -208,10 +232,20 @@ final class OrganiseSession {
     /// the next photo (after a beat, so the tick is seen); otherwise toggle.
     func pick(_ item: OrganiseItem, album: PHAssetCollection) async {
         guard singleAlbum else { await toggle(item, in: album); return }
+        let before = history.count
         await add(item, to: album)
         guard isAdded(album: album, to: item) else { return }   // the add failed: stay put
         try? await Task.sleep(for: .milliseconds(250))
         if currentItem?.id == item.id { next() }
+        joinSteps(from: before)
+    }
+
+    /// The steps since `start` undo as one.
+    private func joinSteps(from start: Int) {
+        guard history.count - start > 1 else { return }
+        let joined = history[start...].flatMap { $0 }
+        history.removeSubrange(start...)
+        history.append(joined)
     }
 
     func pick(_ asset: PHAsset, album: PHAssetCollection) async { await pick(.asset(asset), album: album) }
@@ -238,27 +272,113 @@ final class OrganiseSession {
         guard let album = await library.createAlbum(named: trimmed) else { return }
         // A new album joins the front of the pool at once, ready for the next photo.
         albums.insert(album, at: 0)
+        let before = history.count
+        history.append([.created(album: album.localIdentifier)])
         await pick(item, album: album)
+        joinSteps(from: before)
     }
 
     /// Advance, marking the current asset organised so it's skipped next time.
     func next() {
-        if case .file(let url) = currentItem { OrganisedFiles.mark(url) }
-        if let asset = current { markOrganised(asset.localIdentifier) }
+        guard !isComplete else { return }
+        var marked = false
+        if case .file(let url) = currentItem { OrganisedFiles.mark(url); marked = true }
+        if let asset = current { markOrganised(asset.localIdentifier, true); marked = true }
+        history.append([.moved(from: index, marked: marked)])
         index += 1
     }
 
     /// Advance without marking (revisit later).
-    func skip() { index += 1 }
+    func skip() {
+        guard !isComplete else { return }
+        history.append([.moved(from: index, marked: false)])
+        index += 1
+    }
+
+    // MARK: - Undo
+
+    /// Takes back the last step, in Photos as well as here: a photo filed comes
+    /// out of the album, one taken out goes back in, Next or Skip goes back to
+    /// the photo (no longer marked organised). An album made for the photo is
+    /// deleted again, and a file's photo added to the library by that filing is
+    /// taken out of it, to Recently Deleted; iOS asks on the phone for both, and
+    /// if that's turned down they stay. The photos in the library are never
+    /// deleted otherwise. Says what was undone, or why it couldn't be.
+    @discardableResult
+    func undo() async -> String? {
+        guard let step = history.popLast() else { return nil }
+        var said: [String] = []
+        var failed = false
+        for change in step.reversed() {
+            switch change {
+            case .moved(let from, let marked):
+                guard items.indices.contains(from) else { continue }
+                if marked { unmark(items[from]) }
+                index = from
+                said.append("back to the photo")
+            case .added(let itemID, let albumID, let wasImport):
+                guard let asset = libraryAsset(id: itemID), let album = album(albumID) else { continue }
+                if await library.removeAssets([asset], from: album) {
+                    added[itemID]?.remove(albumID)
+                    said.append("out of \(album.localizedTitle ?? "the album")")
+                } else {
+                    failed = true
+                }
+                if wasImport, !failed, await library.deleteAssets([asset]) {
+                    imported[itemID] = nil
+                    added[itemID] = []
+                }
+            case .removed(let itemID, let albumID):
+                guard let asset = libraryAsset(id: itemID), let album = album(albumID) else { continue }
+                if await library.addAssets([asset], to: album) {
+                    added[itemID, default: []].insert(albumID)
+                    said.append("back in \(album.localizedTitle ?? "the album")")
+                } else {
+                    failed = true
+                }
+            case .created(let albumID):
+                guard let album = album(albumID),
+                      PHAsset.fetchAssets(in: album, options: nil).count == 0 else { continue }
+                if await library.deleteAlbum(album) {
+                    albums.removeAll { $0.localIdentifier == albumID }
+                    said.append("\(album.localizedTitle ?? "the album") deleted")
+                }
+            }
+        }
+        if failed { return "Couldn't undo that in Photos." }
+        return said.isEmpty ? "Undone" : "Undone: " + said.joined(separator: ", ")
+    }
+
+    private func album(_ id: String) -> PHAssetCollection? {
+        albums.first { $0.localIdentifier == id }
+            ?? PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [id], options: nil).firstObject
+    }
+
+    private func libraryAsset(id: String) -> PHAsset? {
+        if let done = imported[id] { return done }
+        for case .asset(let asset) in items where asset.localIdentifier == id { return asset }
+        return nil
+    }
+
+    /// Next is taken back: the photo comes up in Organise again another time.
+    private func unmark(_ item: OrganiseItem) {
+        switch item {
+        case .file(let url):
+            OrganisedFiles.unmark(url)
+            if let asset = imported[item.id] { markOrganised(asset.localIdentifier, false) }
+        case .asset(let asset):
+            markOrganised(asset.localIdentifier, false)
+        }
+    }
 
     // MARK: - Persistence
 
-    private func markOrganised(_ id: String) {
+    private func markOrganised(_ id: String, _ organised: Bool) {
         var descriptor = FetchDescriptor<AssetReview>(predicate: #Predicate { $0.assetLocalID == id })
         descriptor.fetchLimit = 1
         if let existing = try? context.fetch(descriptor).first {
-            existing.organised = true
-        } else {
+            existing.organised = organised
+        } else if organised {
             context.insert(AssetReview(assetLocalID: id, decision: .undecided, organised: true))
         }
         try? context.save()
@@ -275,6 +395,12 @@ enum OrganisedFiles {
 
     static var done: Set<String> {
         Set((UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]).keys)
+    }
+
+    static func unmark(_ url: URL) {
+        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+        all[key(for: url)] = nil
+        UserDefaults.standard.set(all, forKey: key)
     }
 
     static func mark(_ url: URL) {

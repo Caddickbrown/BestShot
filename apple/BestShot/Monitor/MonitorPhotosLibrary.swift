@@ -14,6 +14,10 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     private let labels = LabelStore.shared
     private var access = PhotoLibraryService.shared.status
     private var albums: [PHAssetCollection] = []
+    /// Photos in each album, by id, counted off the main thread. An album
+    /// isn't offered until it's counted, and never when it's empty.
+    private var albumCounts: [String: Int] = [:]
+    @ObservationIgnored private var counting: Task<Void, Never>?
     /// Filled in as photos are looked up, which a redraw mustn't trigger.
     @ObservationIgnored private var assets: [String: PHAsset] = [:]
     @ObservationIgnored private var idCache: (session: ObjectIdentifier, ids: [String])?
@@ -78,12 +82,21 @@ final class MonitorPhotosLibrary: MonitorLibrary {
 
     var sources: [(option: TriageSourceOption, title: String)] {
         TriageSourceOption.quick.map { ($0, $0.title) }
-            + albums.map { (.album($0.localIdentifier), $0.localizedTitle ?? "Album") }
+            + AlbumList.sources(albums, query: "", title: \.localizedTitle, count: { self.albumCounts[$0.localIdentifier] })
+                .map { (.album($0.localIdentifier), $0.localizedTitle ?? "Album") }
     }
 
     func reloadSources() {
         access = photos.status
-        if hasPhotoAccess { albums = photos.userAlbums() }
+        guard hasPhotoAccess else { return }
+        albums = photos.userAlbums()
+        let all = albums
+        counting?.cancel()
+        counting = Task { [weak self] in
+            let counts = await Task.detached { PhotoLibraryService.shared.photoCounts(all) }.value
+            guard !Task.isCancelled else { return }
+            self?.albumCounts = counts
+        }
     }
 
     func startTriage(order: SessionOrder, source: TriageSourceOption) async -> String? {
@@ -175,6 +188,13 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     func newAlbum(_ title: String) async {
         guard let organise, let item = organise.currentItem else { return }
         await organise.createAlbumAndAdd(name: title, item: item)
+    }
+
+    var organiseCanUndo: Bool { organise?.canUndo ?? false }
+
+    func undoOrganise() async -> String? {
+        guard let organise else { return nil }
+        return await organise.undo()
     }
 
     func nextOrganised() { organise?.next() }

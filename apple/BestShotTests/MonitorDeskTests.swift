@@ -69,8 +69,17 @@ final class FakeMonitorLibrary: MonitorLibrary {
         organisePhoto = "file:" + folder.appendingPathComponent(first).path
         return nil
     }
-    func addToAlbum(_ id: String) async {}
-    func newAlbum(_ title: String) async {}
+    var filedInto: [String] = []
+    func addToAlbum(_ id: String) async { filedInto.append(id) }
+    var madeAlbums: [String] = []
+    func newAlbum(_ title: String) async { madeAlbums.append(title) }
+    var organiseCanUndo = false
+    var undos = 0
+    func undoOrganise() async -> String? {
+        undos += 1
+        organiseCanUndo = false
+        return "Undone: out of Lisbon"
+    }
     func nextOrganised() {}
     func skipOrganised() {}
     func leaveOrganise() {}
@@ -619,6 +628,17 @@ final class MonitorOrganiseFolderTests: XCTestCase {
         press(.up)
     }
 
+    func testTheMenuStartsFromASourceByName() async {
+        press(.char("k"), .command)
+        for c in "organise screen" { desk.handle(.typed(c)) }
+        guard case .palette(let menu) = desk.overlay else { return XCTFail("no menu") }
+        XCTAssertEqual(menu.lit?.action, .start(.screenshots))
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.organiseSources, [.screenshots])
+        XCTAssertEqual(desk.pane, .organise)
+    }
+
     func testOrganiseOffersAFolderInFiles() {
         XCTAssertEqual(desk.pane, .organiseHome)
         let row = desk.rows.first { $0.id == "source-folder" }
@@ -756,6 +776,114 @@ final class MonitorOrganiseFolderTests: XCTestCase {
         await desk.work?.value
         XCTAssertEqual(desk.pane, .organiseHome)
         XCTAssertEqual(desk.notice, "No photos left to organise in Camera Import.")
+    }
+}
+
+/// Organise on the monitor: new albums from ⌘K, albums like the name, Undo.
+@MainActor
+final class MonitorOrganiseAlbumTests: XCTestCase {
+    private var library: FakeMonitorLibrary!
+    private var desk: MonitorDesk!
+
+    override func setUp() async throws {
+        library = FakeMonitorLibrary()
+        library.organiseAlbums = [("a1", "Lisbon 2023", false), ("a2", "Grandkids", true), ("a3", "Receipts", false)]
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("marks.json")
+        desk = MonitorDesk(library: library, marks: PhotoMarkStore(url: url))
+        desk.isConnected = true
+        desk.setLocked(false)
+        press(.char("3"), .command)
+        press(.end)
+        press(.enter)   // Start Organising
+        await desk.work?.value
+        XCTAssertEqual(desk.pane, .organise)
+    }
+
+    private func press(_ key: KeyName, _ mods: KeyMods = []) {
+        desk.handle(MonitorPress(key, mods))
+    }
+
+    private func type(_ text: String) {
+        for character in text { desk.handle(.typed(character)) }
+    }
+
+    private var entry: MonitorEntry? {
+        if case .entry(let entry) = desk.overlay { return entry }
+        return nil
+    }
+
+    func testTheMenuMakesANewAlbum() {
+        press(.char("k"), .command)
+        type("new alb")
+        guard case .palette(let menu) = desk.overlay else { return XCTFail("no menu") }
+        XCTAssertEqual(menu.lit?.action, .newAlbum)
+        press(.enter)
+        XCTAssertEqual(entry?.kind, .album)
+        type("Paris")
+        press(.enter)
+        XCTAssertNil(desk.overlay)
+    }
+
+    func testTheMenuHasNoNewAlbumOutsideOrganise() {
+        press(.escape)
+        press(.char("k"), .command)
+        guard case .palette(let menu) = desk.overlay else { return XCTFail("no menu") }
+        XCTAssertFalse(menu.rows.contains { $0.action == .newAlbum })
+    }
+
+    func testANewNameMakesExactlyWhatsTyped() async {
+        press(.char("n"))
+        type("lisbon")
+        XCTAssertEqual(entry?.suggestionIDs, ["a1"], "the album that's there already is offered")
+        XCTAssertNil(entry?.chosen, "but nothing is lit, so ↵ doesn't guess")
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.madeAlbums, ["lisbon"])
+        XCTAssertTrue(library.filedInto.isEmpty)
+    }
+
+    func testChoosingALikeAlbumFilesThere() async {
+        press(.char("n"))
+        type("grand kids")
+        XCTAssertEqual(entry?.suggestionIDs.first, "a2")
+        XCTAssertEqual(entry?.suggestions.first, "Grandkids ✓", "one the photo's in is ticked")
+        press(.down)
+        XCTAssertEqual(entry?.chosenID, "a2")
+        XCTAssertTrue(desk.situation.entryHasChoice)
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.filedInto, ["a2"])
+        XCTAssertTrue(library.madeAlbums.isEmpty)
+    }
+
+    func testUpPastTheTopLightsNothingAgain() {
+        press(.char("n"))
+        type("lisbn")
+        XCTAssertEqual(entry?.suggestionIDs, ["a1"])
+        press(.down)
+        XCTAssertEqual(entry?.chosen, 0)
+        press(.up)
+        XCTAssertNil(entry?.chosen)
+    }
+
+    func testUndoGoesToTheLibrary() async {
+        XCTAssertFalse(desk.keys.contains { $0.label == "Undo" }, "nothing to undo yet")
+        library.organiseCanUndo = true
+        XCTAssertTrue(desk.keys.contains { $0.keys == "⌘Z" })
+        press(.char("z"), .command)
+        await desk.work?.value
+        XCTAssertEqual(library.undos, 1)
+        XCTAssertEqual(desk.notice, "Undone: out of Lisbon")
+        XCTAssertFalse(desk.situation.canUndo)
+    }
+
+    func testUndoFromTheMenu() async {
+        library.organiseCanUndo = true
+        press(.char("k"), .command)
+        type("undo")
+        press(.enter)
+        await desk.work?.value
+        XCTAssertEqual(library.undos, 1)
     }
 }
 

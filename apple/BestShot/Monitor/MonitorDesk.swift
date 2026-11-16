@@ -54,8 +54,16 @@ struct MonitorEntry: Equatable {
     let kind: Kind
     let title: String
     var text: String
-    /// What's known that starts with the text.
+    /// What's known that starts with the text. For a new album, the albums
+    /// already there with names like it.
     var suggestions: [String] = []
+    /// A new album's suggestions are albums, by id, in the same order.
+    var suggestionIDs: [String] = []
+    /// The suggestion ↑↓ has lit. Nothing is to start with, so ↵ makes exactly
+    /// what's typed.
+    var chosen: Int?
+
+    var chosenID: String? { chosen.flatMap { suggestionIDs.indices.contains($0) ? suggestionIDs[$0] : nil } }
 }
 
 /// The way out of Triage. Nothing starts lit, so a stray ↵ does nothing, and the
@@ -132,6 +140,10 @@ protocol MonitorLibrary: AnyObject {
     func startOrganise(folder: URL, order: SessionOrder) async -> String?
     func addToAlbum(_ id: String) async
     func newAlbum(_ title: String) async
+    /// The last step in Organise can be taken back.
+    var organiseCanUndo: Bool { get }
+    /// Takes it back, in Photos too. What to tell the user.
+    func undoOrganise() async -> String?
     func nextOrganised()
     func skipOrganised()
     func leaveOrganise()
@@ -268,7 +280,7 @@ final class MonitorDesk {
         }
         s.canStepBack = pane != .home
         s.hasPhoto = current != nil
-        s.canUndo = !undoStack.isEmpty
+        s.canUndo = pane == .organise ? library.organiseCanUndo : !undoStack.isEmpty
         s.inTriage = !library.triageIDs.isEmpty
         switch overlay {
         case .palette:
@@ -279,6 +291,8 @@ final class MonitorDesk {
             s.surface = .entry
             s.entryHasText = !entry.text.trimmingCharacters(in: .whitespaces).isEmpty
             s.entryCanComplete = !entry.suggestions.isEmpty
+            s.entryChooses = entry.kind == .album && !entry.suggestionIDs.isEmpty
+            s.entryHasChoice = entry.chosenID != nil
         case .finish(let finish):
             s.surface = .finish
             s.finishChosen = finish.chosen != nil
@@ -388,7 +402,8 @@ final class MonitorDesk {
             helpRow = 0
             overlay = .help
         case .section(let section): go(to: section)
-        case .undo: undo()
+        case .undo:
+            if pane == .organise { spawn { [library] in self.notice = await library.undoOrganise() } } else { undo() }
         case .move(let by): move(by)
         case .moveRow(let by): moveRanked(by)
         case .page(let by): page(by)
@@ -1088,9 +1103,24 @@ final class MonitorDesk {
 
     private func beginEntry(_ kind: MonitorEntry.Kind, title: String, text: String = "") {
         guard kind != .tag || current != nil else { return }
+        guard kind != .album || library.organisePhoto != nil else { return }
         var entry = MonitorEntry(kind: kind, title: title, text: drafts[kind] ?? text)
-        entry.suggestions = suggestions(for: entry)
+        suggest(&entry)
         overlay = .entry(entry)
+    }
+
+    /// A new album's: the albums with names like what's typed, so one that's
+    /// there already isn't made again. Kept lit by id as the list changes.
+    private func suggest(_ entry: inout MonitorEntry) {
+        guard entry.kind == .album else {
+            entry.suggestions = suggestions(for: entry)
+            return
+        }
+        let lit = entry.chosenID
+        let found = AlbumList.similar(to: entry.text, in: library.organiseAlbums, title: \.title)
+        entry.suggestions = found.map { $0.added ? "\($0.title) ✓" : $0.title }
+        entry.suggestionIDs = found.map(\.id)
+        entry.chosen = lit.flatMap { entry.suggestionIDs.firstIndex(of: $0) }
     }
 
     /// Autocomplete, from the tags already in use, minus what's on the photo.
@@ -1108,6 +1138,16 @@ final class MonitorDesk {
         case .type(let text): entry.text += text.filter { !$0.isNewline }
         case .deleteLetter: if !entry.text.isEmpty { entry.text.removeLast() }
         case .complete: if let first = entry.suggestions.first { entry.text = first }
+        case .move(let by):
+            guard !entry.suggestionIDs.isEmpty else { return }
+            let n = entry.suggestionIDs.count
+            // From nothing lit, ↓ lights the first and ↑ the last; past either end, nothing again.
+            if let at = entry.chosen {
+                let next = at + by
+                entry.chosen = (0..<n).contains(next) ? next : nil
+            } else {
+                entry.chosen = by > 0 ? 0 : n - 1
+            }
         case .submit:
             commitEntry(entry)
             return
@@ -1116,7 +1156,7 @@ final class MonitorDesk {
             return
         default: return
         }
-        entry.suggestions = suggestions(for: entry)
+        suggest(&entry)
         overlay = .entry(entry)
     }
 
@@ -1132,6 +1172,12 @@ final class MonitorDesk {
     }
 
     private func commitEntry(_ entry: MonitorEntry) {
+        if entry.kind == .album, let id = entry.chosenID {
+            drafts[entry.kind] = nil
+            overlay = nil
+            spawn { [library] in await library.addToAlbum(id) }
+            return
+        }
         let text = entry.text.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         drafts[entry.kind] = nil
@@ -1173,6 +1219,22 @@ final class MonitorDesk {
                 MonitorMenuRow(id: "status-\($0.rawValue)", title: "Show \($0.title.lowercased())", action: .status($0))
             }
             rows += marks.knownTags.map { MonitorMenuRow(id: "tag-\($0)", title: "Show tag \($0)", action: .tag($0)) }
+        }
+        // On a start screen, every source by name: type a few letters of the album, ↵ starts.
+        let starting = pane == .organiseHome || (pane == .triage && library.triageIDs.isEmpty)
+        if starting, library.hasPhotoAccess {
+            let verb = pane == .organiseHome ? "Organise" : "Triage"
+            rows += library.sources.map {
+                MonitorMenuRow(id: "start-\($0.option)", title: "\(verb) \($0.title)",
+                               detail: { if case .album = $0 { return "Album" } else { return nil } }($0.option),
+                               action: .start($0.option))
+            }
+        }
+        if pane == .organise, library.organisePhoto != nil {
+            rows.append(MonitorMenuRow(id: "new-album", title: "New album", detail: "n", action: .newAlbum))
+            if library.organiseCanUndo {
+                rows.append(MonitorMenuRow(id: "undo", title: "Undo", detail: "⌘Z", action: .undo))
+            }
         }
         rows.append(MonitorMenuRow(id: "keys", title: "All keys", detail: "?", action: .help))
         rows.append(MonitorMenuRow(id: "pause", title: "Pause monitor", detail: "⌥⌘P", action: .pause))
@@ -1222,6 +1284,17 @@ final class MonitorDesk {
             held = nil
             stackForPhotos()
         case .finish: openFinish()
+        case .newAlbum: beginEntry(.album, title: "New album")
+        case .undo: pageAction(.undo)
+        case .start(let option):
+            if pane == .organiseHome {
+                organiseSource = option
+                organiseFromFolder = false
+                spawn { await self.startOrganise() }
+            } else if pane == .triage {
+                source = option
+                spawn { await self.startTriage() }
+            }
         }
     }
 

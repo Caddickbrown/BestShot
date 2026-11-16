@@ -116,6 +116,9 @@ struct MonitorSituation: Equatable {
     /// The entry has something to add, and a suggestion to complete to.
     var entryHasText = false
     var entryCanComplete = false
+    /// A new album's entry lists albums like the name, and ↑↓ choose one.
+    var entryChooses = false
+    var entryHasChoice = false
     /// In the finish panel, a row has been chosen with the keys.
     var finishChosen = false
     /// Deleting: the phone is asking, and no key does anything until it's answered.
@@ -237,11 +240,21 @@ enum MonitorKeymap {
 
     private static func entry(_ s: MonitorSituation) -> [MonitorBinding] {
         var keys: [MonitorBinding] = []
-        if s.entryCanComplete {
+        if s.entryChooses {
+            keys.append(MonitorBinding("↑↓ ⇥", "Albums like it") { k in
+                if k.matches(.down) || k.matches(.tab) { return .move(1) }
+                if k.matches(.up) || k.matches(.tab, .shift) { return .move(-1) }
+                return nil
+            })
+        } else if s.entryCanComplete {
             keys.append(MonitorBinding("⇥", "Complete", .complete) { $0.matches(.tab) })
         }
-        if s.entryHasText {
+        if s.entryHasChoice {
+            keys.append(MonitorBinding("↵", "File it there", .submit) { $0.matches(.enter) })
+        } else if s.entryHasText {
             keys.append(MonitorBinding("↵", "Save", .submit) { $0.matches(.enter) })
+        }
+        if s.entryHasText {
             keys.append(MonitorBinding("⌫", "Delete a letter", .deleteLetter) { $0.matches(.backspace) })
         }
         keys.append(MonitorBinding("Type", "A word") { $0.isText ? .type($0.text) : nil })
@@ -293,6 +306,9 @@ enum MonitorKeymap {
             keys.append(MonitorBinding("→", "Next photo", .nextPhoto) { $0.matches(.right) })
             keys.append(MonitorBinding("Space", "Skip", .skipPhoto) { $0.matches(.char(" ")) })
             keys.append(MonitorBinding("n", "New album", .newAlbum) { $0.matches(.char("n")) })
+            if s.canUndo {
+                keys.append(MonitorBinding("⌫", "Undo", .undo) { $0.matches(.backspace) })
+            }
         }
         return keys
     }

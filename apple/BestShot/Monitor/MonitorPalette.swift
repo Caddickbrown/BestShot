@@ -48,6 +48,11 @@ enum MonitorMenuAction: Equatable {
     case tag(String)
     /// Opens the finish panel, with nothing chosen in it.
     case finish
+    /// Organise: the new album entry, and taking back the last step.
+    case newAlbum, undo
+    /// A start screen: start straight away from this source, so an album is
+    /// typed for rather than scrolled to.
+    case start(TriageSourceOption)
 }
 
 struct MonitorMenuRow: Identifiable, Equatable {

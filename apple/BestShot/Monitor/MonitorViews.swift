@@ -510,13 +510,21 @@ private struct MonitorOverlayView: View {
         }
     }
 
+    @ViewBuilder
     private func entryView(_ entry: MonitorEntry) -> some View {
         VStack(alignment: .leading, spacing: metrics.caption) {
             Text(entry.title).font(.mono(metrics.caption)).foregroundStyle(sheet.muted)
             Text(entry.text.isEmpty ? " " : entry.text + "▏")
                 .font(.mono(metrics.title))
                 .foregroundStyle(sheet.ink)
-            if !entry.suggestions.isEmpty {
+            if entry.kind == .album {
+                if !entry.suggestions.isEmpty {
+                    Text(entry.chosen == nil ? "Already there? ↓ to choose one, or ↵ uses \u{201C}\(entry.text.trimmingCharacters(in: .whitespaces))\u{201D} as typed"
+                         : "↵ files it there")
+                        .font(.mono(metrics.caption))
+                        .foregroundStyle(sheet.muted)
+                }
+            } else if !entry.suggestions.isEmpty {
                 Text(entry.suggestions.joined(separator: "   "))
                     .font(.mono(metrics.caption))
                     .foregroundStyle(sheet.muted)
@@ -524,6 +532,13 @@ private struct MonitorOverlayView: View {
             }
         }
         .padding(metrics.text)
+        if entry.kind == .album, !entry.suggestions.isEmpty {
+            HairlineRule(palette: sheet)
+            ForEach(Array(entry.suggestions.enumerated()), id: \.offset) { i, title in
+                line(title, isLit: i == entry.chosen)
+            }
+            Spacer().frame(height: metrics.caption * 0.5)
+        }
     }
 
     private func finishView(_ finish: MonitorFinish) -> some View {

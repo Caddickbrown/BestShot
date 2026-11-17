@@ -240,7 +240,7 @@ struct TriageHomeView: View {
             await MainActor.run {
                 isLoading = false
                 if assets.isEmpty {
-                    emptyMessage = "No unreviewed photos found for this source. Try another source or order."
+                    emptyMessage = chosenSource.nothingFound("No unreviewed photos found for this source. Try another source or order.")
                 } else {
                     paused = false
                     session = TriageSession(assets: assets, context: context,

@@ -59,3 +59,29 @@ extension TriageSourceOption {
     /// Photos' Hidden album: behind Face ID, as it is in Photos.
     var isHidden: Bool { self == .smart(.hidden) }
 }
+
+extension TriageSourceOption {
+    /// Since iOS 16 Photos gives apps no hidden photo while Settings › Apps ›
+    /// Photos › Use Face ID is on (the default), even when asked with
+    /// includeHiddenAssets, and doesn't say so: Hidden just counts 0.
+    static let hiddenLockedNote =
+        "Photos keeps hidden photos from apps while Settings › Apps › Photos › Use Face ID is on. Turn it off to go through Hidden here."
+
+    /// The count beside a source. Hidden at 0 shows none: it's more likely
+    /// locked by Photos than empty, and BestShot can't tell which.
+    func countText(_ n: Int?) -> String? {
+        guard let n else { return nil }
+        if isHidden && n == 0 { return nil }
+        return "\(n)"
+    }
+
+    /// Why Hidden shows no count, when it doesn't.
+    func countNote(_ n: Int?) -> String? {
+        isHidden && n == 0 ? Self.hiddenLockedNote : nil
+    }
+
+    /// The message for a session that found nothing.
+    func nothingFound(_ fallback: String) -> String {
+        isHidden ? "Nothing to go through in Hidden. " + Self.hiddenLockedNote : fallback
+    }
+}

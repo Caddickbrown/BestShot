@@ -111,7 +111,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         guard await HiddenGate.shared.allows(source) else { return "Hidden stays locked without Face ID." }
         let found = TriageHomeView.fetchSession(order: order, source: source, context: context)
         guard !found.isEmpty else {
-            return "No unreviewed photos found for this source. Try another source or order."
+            return source.nothingFound("No unreviewed photos found for this source. Try another source or order.")
         }
         assets = Dictionary(found.map { ($0.localIdentifier, $0) }, uniquingKeysWith: { first, _ in first })
         triage.paused = false
@@ -165,7 +165,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     func startOrganise(order: SessionOrder, source: TriageSourceOption) async -> String? {
         guard await HiddenGate.shared.allows(source) else { return "Hidden stays locked without Face ID." }
         let found = OrganiseHomeView.fetchSession(order: order, source: source, context: context)
-        guard !found.isEmpty else { return "No unorganised photos found for this source." }
+        guard !found.isEmpty else { return source.nothingFound("No unorganised photos found for this source.") }
         for asset in found { assets[asset.localIdentifier] = asset }
         let albums = photos.userAlbumsWithFolders()
         organiseHolder.start(OrganiseSession(assets: found, albums: albums.albums, folders: albums.folders, context: context))

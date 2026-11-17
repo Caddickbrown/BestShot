@@ -130,8 +130,8 @@ struct SourceSection: View {
                 Label(chosenTitle, systemImage: source.symbol)
                     .lineLimit(1)
                 Spacer()
-                if let n = chosenCount {
-                    Text("\(n)").font(.small).foregroundStyle(Theme.table.muted)
+                if let n = chosenAlbum == nil ? source.countText(chosenCount) : chosenCount.map(String.init) {
+                    Text(n).font(.small).foregroundStyle(Theme.table.muted)
                 }
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.semibold))
@@ -152,11 +152,18 @@ struct SourceSection: View {
             choose(option)
         } label: {
             HStack(spacing: 10) {
-                Label(option.title, systemImage: option.symbol)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(option.title, systemImage: option.symbol)
+                        .lineLimit(1)
+                    // Hidden at 0 is most likely Photos keeping it from apps: say so.
+                    if let note = option.countNote(quickCounts[option]) {
+                        Text(note).font(.small).foregroundStyle(Theme.table.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Spacer()
-                if let n = quickCounts[option] {
-                    Text("\(n)").font(.small).foregroundStyle(Theme.table.muted)
+                if let n = option.countText(quickCounts[option]) {
+                    Text(n).font(.small).foregroundStyle(Theme.table.muted)
                 }
                 Image(systemName: "checkmark")
                     .foregroundStyle(Theme.table.accent)

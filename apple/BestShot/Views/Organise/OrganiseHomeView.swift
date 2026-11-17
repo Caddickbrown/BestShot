@@ -168,7 +168,7 @@ struct OrganiseHomeView: View {
             await MainActor.run {
                 isLoading = false
                 if assets.isEmpty {
-                    emptyMessage = "No unorganised photos found for this source."
+                    emptyMessage = chosenSource.nothingFound("No unorganised photos found for this source.")
                 } else {
                     begin(OrganiseSession(assets: assets, albums: current.albums, folders: current.folders, context: context))
                 }

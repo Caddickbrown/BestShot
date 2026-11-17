@@ -14,6 +14,16 @@ struct CompareRunView: View {
     private let stacked = false
     #endif
 
+    /// The Photos board is the monitor's too, so with one plugged in it shows this
+    /// same pair and keeps the keys; the phone is the remote.
+    private var monitorShowsIt: Bool {
+        #if os(iOS)
+        MonitorDisplay.shared.desk?.isConnected == true && board === RankHolder.shared.board
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             bar
@@ -40,7 +50,7 @@ struct CompareRunView: View {
             }
             return .handled
         }
-        .escapeScreen { board.finishCompare(save: true) }
+        .escapeScreen(isSheet: !monitorShowsIt) { board.finishCompare(save: true) }
         #if os(iOS)
         // On iOS onKeyPress needs Full Keyboard Access, and Esc's catcher holds
         // first responder: these are key commands, heard along its chain.

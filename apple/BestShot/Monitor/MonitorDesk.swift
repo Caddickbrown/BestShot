@@ -146,7 +146,11 @@ protocol MonitorLibrary: AnyObject {
     func undoOrganise() async -> String?
     func nextOrganised()
     func skipOrganised()
+    /// Back to the start without finishing: the place and Undo wait to be resumed.
     func leaveOrganise()
+    /// The session is up on the phone and here, not waiting on a start screen.
+    var organiseOpen: Bool { get }
+    func resumeOrganise()
 
     // Imported media
     var projects: [(id: UUID, name: String, count: Int)] { get }
@@ -252,6 +256,10 @@ final class MonitorDesk {
         let top = stack.last ?? .home
         if library.triageIDs.isEmpty, top == .loupe || top == .grid || top == .filters { return .triage }
         if top == .rankCompare, board?.compare == nil { return .rank }
+        // The board is the phone's too: a Compare started there is up here.
+        if top == .rank, board?.compare != nil { return .rankCompare }
+        // Left or finished on the phone: back to its start screen, as there.
+        if top == .organise, !library.organiseOpen { return .organiseHome }
         return top
     }
 
@@ -447,14 +455,22 @@ final class MonitorDesk {
             showInfo = false
         } else if pane == .rankCompare {
             board?.finishCompare(save: true)
-            popPane()
+            // Started on the phone, it was never stacked: Rank is under it either way.
+            if stack.last == .rankCompare { stack.removeLast() }
         } else {
             popPane()
         }
     }
 
     private func popPane() {
+        // A screen the phone has left already reads as the one under it, so Esc
+        // goes on from what's showing.
+        if stack.count > 2, stack.last == .rankCompare, board?.compare == nil { stack.removeLast() }
+        if stack.count > 2, stack.last == .organise, !library.organiseOpen { stack.removeLast() }
+        let leaving = stack.last
         if stack.count > 1 { stack.removeLast() }
+        // Off the session to its start screen: the phone goes back to its start too.
+        if leaving == .organise { library.leaveOrganise() }
         // Dropped out of a session on the phone, or back past the loupe.
         while stack.count > 1, library.triageIDs.isEmpty, [.loupe, .grid, .filters].contains(stack.last!) {
             stack.removeLast()
@@ -1095,6 +1111,7 @@ final class MonitorDesk {
 
     /// Into the session, with its start screen under it. Back there, Resume is lit.
     private func openOrganise() {
+        library.resumeOrganise()
         selection[.organiseHome] = nil
         stack = [.home, .organiseHome, .organise]
     }
@@ -1328,6 +1345,26 @@ final class MonitorDesk {
 
     /// The monitor has gone. Only the pause goes with it: everything else is
     /// waiting here for when it's back, and the session is the phone's to carry on.
+    /// Started or resumed on the phone: up here too, so the phone works as the
+    /// monitor's remote and both show the same thing.
+    func phoneOpened(_ section: MonitorSection) {
+        guard isConnected else { return }
+        switch section {
+        case .organise:
+            guard library.organisePhoto != nil, pane != .organise else { return }
+            overlay = nil
+            pinned = nil
+            resetZoom()
+            openOrganise()
+        case .rank:
+            guard pane != .rank, pane != .rankCompare else { return }
+            overlay = nil
+            go(to: .rank)
+        default:
+            break
+        }
+    }
+
     func monitorLeft() {
         isPaused = false
     }

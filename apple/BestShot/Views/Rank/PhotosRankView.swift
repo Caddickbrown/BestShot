@@ -6,9 +6,12 @@ import Photos
 /// Compare or by dragging, and optionally saved as an album in rank order.
 struct PhotosRankView: View {
     @Environment(\.modelContext) private var context
-    @State private var board: RankBoard?
-    @State private var media = PhotosRankMedia()
+    /// The board the monitor's Rank shows too.
+    @State private var holder = RankHolder.shared
+    @State private var loaded = false
     @State private var albumMessage: String?
+
+    private var board: RankBoard? { loaded ? holder.board : nil }
 
     static let albumTitle = "BestShot · Ranked"
 
@@ -28,6 +31,12 @@ struct PhotosRankView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await load() }
+        #if os(iOS)
+        // A Compare started here comes up on the monitor too, the same pair.
+        .onChange(of: holder.board?.compare?.id) { _, run in
+            if run != nil { MonitorDisplay.shared.desk?.phoneOpened(.rank) }
+        }
+        #endif
         .alert("Album", isPresented: Binding(get: { albumMessage != nil }, set: { if !$0 { albumMessage = nil } })) {
             Button("OK") { albumMessage = nil }
         } message: {
@@ -38,38 +47,25 @@ struct PhotosRankView: View {
 
     private func load() async {
         _ = await PhotoLibraryService.shared.requestAuthorization()
-        board = Self.makeBoard(context: context, media: media)
+        _ = holder.board(context: context)
+        loaded = true
     }
 
-    /// The board for the photos kept in Triage. The monitor's Rank uses this too.
+    /// The photos kept in Triage, newest first.
     @MainActor
-    static func makeBoard(context: ModelContext, media: PhotosRankMedia) -> RankBoard {
+    static func keptAssets(_ context: ModelContext) -> [PHAsset] {
         let kept = ReviewDecision.kept.rawValue
         let reviews = (try? context.fetch(FetchDescriptor<AssetReview>(predicate: #Predicate { $0.decisionRaw == kept }))) ?? []
-        let ids = reviews.map(\.assetLocalID)
-
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        let result = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: options)
+        let result = PHAsset.fetchAssets(withLocalIdentifiers: reviews.map(\.assetLocalID), options: options)
         var assets: [PHAsset] = []
         result.enumerateObjects { asset, _, _ in assets.append(asset) }
-        media.assets = Dictionary(uniqueKeysWithValues: assets.map { ($0.localIdentifier, $0) })
-
-        let order = savedOrder(context)
-        return RankBoard(
-            title: "Photos library",
-            media: media,
-            pools: [RankPool(id: "kept", title: "Kept", ids: assets.map(\.localIdentifier))],
-            ranking: order.ids
-        ) { ranking in
-            order.ids = ranking
-            order.updatedAt = .now
-            try? context.save()
-        }
+        return assets
     }
 
     @MainActor
-    private static func savedOrder(_ context: ModelContext) -> RankedOrder {
+    static func savedOrder(_ context: ModelContext) -> RankedOrder {
         let key = RankedOrder.photosLibraryKey
         if let existing = try? context.fetch(FetchDescriptor<RankedOrder>(predicate: #Predicate { $0.key == key })).first {
             return existing
@@ -81,7 +77,7 @@ struct PhotosRankView: View {
 
     private func saveAlbum() {
         guard let board else { return }
-        let assets = board.ranked.compactMap { media.assets[$0] }
+        let assets = board.ranked.compactMap { holder.media.assets[$0] }
         Task { albumMessage = await Self.saveAlbum(assets) }
     }
 

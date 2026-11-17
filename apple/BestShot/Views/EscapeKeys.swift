@@ -66,11 +66,12 @@ extension View {
         #endif
     }
 
-    /// The content of a sheet or full-screen cover.
+    /// The content of a sheet or full-screen cover. `isSheet` false for one the
+    /// monitor shows too, so the monitor keeps its keys and its picture.
     @ViewBuilder
-    func escapeScreen(_ close: @escaping () -> Void) -> some View {
+    func escapeScreen(isSheet: Bool = true, _ close: @escaping () -> Void) -> some View {
         #if os(iOS)
-        modifier(EscapeLayer(active: true, isSheet: true, close: close))
+        modifier(EscapeLayer(active: true, isSheet: isSheet, close: close))
             .background(EscapeCatcherHost().frame(width: 0, height: 0).allowsHitTesting(false))
         #else
         self

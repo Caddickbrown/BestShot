@@ -15,18 +15,20 @@ struct OrganiseHomeView: View {
     @State private var albums: [PHAssetCollection] = []
     @State private var folders: [String: String] = [:]
     @State private var counts: [String: Int]?
-    @State private var session: OrganiseSession?
+    /// Above this screen, so the monitor is on the same session.
+    @State private var holder = OrganiseHolder.shared
     @State private var isLoading = false
     @State private var emptyMessage: String?
     @State private var choosingFolder = false
 
     var body: some View {
         Group {
-            if let session {
-                OrganiseView(session: session) { self.session = nil }
+            if let session = holder.session, !holder.paused {
+                // Done keeps the place (and Undo) to resume; the end just ends.
+                OrganiseView(session: session) { holder.leave() }
             } else {
                 VStack(spacing: 0) {
-                    ScreenHeader(eyebrow: "Photos library", title: "Organise")
+                    ScreenHeader(eyebrow: "Photos library", title: "Organise", status: holder.session == nil ? nil : "Paused")
                     startScreen
                 }
             }
@@ -57,6 +59,18 @@ struct OrganiseHomeView: View {
 
     private var configForm: some View {
         Form {
+            if let paused = holder.session {
+                TableSection {
+                    Button {
+                        holder.resume()
+                        followOnMonitor()
+                    } label: {
+                        Label("Resume Organising", systemImage: "play.fill")
+                    }
+                } footer: {
+                    FormNote("\(min(paused.index + 1, paused.items.count)) of \(paused.items.count)\(paused.folderName.map { " in \($0)" } ?? ""). Starting again begins a new one.")
+                }
+            }
             SourceSection(source: $source, albums: albums, folders: folders, counts: counts, onStart: start)
             TableSection("Order") {
                 Picker("Order", selection: $order) {
@@ -126,7 +140,7 @@ struct OrganiseHomeView: View {
             let result = await OrganiseSession.fromFolder(folder, order: order, context: context)
             isLoading = false
             switch result {
-            case .success(let started): session = started
+            case .success(let started): begin(started)
             case .failure(let problem): emptyMessage = problem.message
             }
         }
@@ -155,9 +169,21 @@ struct OrganiseHomeView: View {
                 if assets.isEmpty {
                     emptyMessage = "No unorganised photos found for this source."
                 } else {
-                    session = OrganiseSession(assets: assets, albums: current.albums, folders: current.folders, context: context)
+                    begin(OrganiseSession(assets: assets, albums: current.albums, folders: current.folders, context: context))
                 }
             }
         }
+    }
+
+    private func begin(_ started: OrganiseSession) {
+        holder.start(started)
+        followOnMonitor()
+    }
+
+    /// With a monitor plugged in it shows the session too, and the phone is its remote.
+    private func followOnMonitor() {
+        #if os(iOS)
+        MonitorDisplay.shared.desk?.phoneOpened(.organise)
+        #endif
     }
 }

@@ -2,14 +2,17 @@ import SwiftUI
 import SwiftData
 import Photos
 
-/// The monitor's way to the real thing: the Triage session the phone is on, and
-/// the same services and saved records the phone's screens use. The monitor adds
+/// The monitor's way to the real thing: the Triage and Organise sessions and the
+/// Rank board the phone is on, and the same services and saved records the
+/// phone's screens use. The monitor adds
 /// no way of its own to delete: `commitDeletions` is the session's.
 @Observable
 @MainActor
 final class MonitorPhotosLibrary: MonitorLibrary {
     private let context: ModelContext
-    private let triage = TriageHolder.shared
+    private let triage: TriageHolder
+    private let organiseHolder: OrganiseHolder
+    private let rank: RankHolder
     private let photos = PhotoLibraryService.shared
     private let labels = LabelStore.shared
     private var access = PhotoLibraryService.shared.status
@@ -21,11 +24,14 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     /// Filled in as photos are looked up, which a redraw mustn't trigger.
     @ObservationIgnored private var assets: [String: PHAsset] = [:]
     @ObservationIgnored private var idCache: (session: ObjectIdentifier, ids: [String])?
-    private var organise: OrganiseSession?
-    private var rankMedia = PhotosRankMedia()
+    private var organise: OrganiseSession? { organiseHolder.session }
 
-    init(context: ModelContext) {
+    init(context: ModelContext, triage: TriageHolder = .shared, organise: OrganiseHolder = .shared,
+         rank: RankHolder = .shared) {
         self.context = context
+        self.triage = triage
+        self.organiseHolder = organise
+        self.rank = rank
     }
 
     // MARK: Photos access
@@ -129,11 +135,11 @@ final class MonitorPhotosLibrary: MonitorLibrary {
 
     func rankBoard() async -> RankBoard? {
         guard hasPhotoAccess else { return nil }
-        return PhotosRankView.makeBoard(context: context, media: rankMedia)
+        return rank.board(context: context)
     }
 
     func saveRankAlbum(_ ids: [String]) async -> String {
-        await PhotosRankView.saveAlbum(ids.compactMap { rankMedia.assets[$0] })
+        await PhotosRankView.saveAlbum(ids.compactMap { rank.media.assets[$0] })
     }
 
     // MARK: Organise
@@ -161,23 +167,33 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         guard !found.isEmpty else { return "No unorganised photos found for this source." }
         for asset in found { assets[asset.localIdentifier] = asset }
         let albums = photos.userAlbumsWithFolders()
-        organise = OrganiseSession(assets: found, albums: albums.albums, folders: albums.folders, context: context)
+        organiseHolder.start(OrganiseSession(assets: found, albums: albums.albums, folders: albums.folders, context: context))
         return nil
     }
 
     func startOrganise(folder: URL, order: SessionOrder) async -> String? {
         switch await OrganiseSession.fromFolder(folder, order: order, context: context) {
         case .success(let started):
-            for case .file(let url) in started.items { files[OrganiseItem.file(url).id] = url }
-            organise = started
+            organiseHolder.start(started)
             return nil
         case .failure(let problem):
             return problem.message
         }
     }
 
-    /// Photo files from Files, by their item id, for their pictures.
+    /// Photo files from Files, by their item id, for their pictures. The session
+    /// may have been started on the phone, so they're found in it as they're asked for.
     @ObservationIgnored private var files: [String: URL] = [:]
+
+    private func file(_ id: String) -> URL? {
+        if let known = files[id] { return known }
+        guard id.hasPrefix("file:"), let organise else { return nil }
+        for case .file(let url) in organise.items where OrganiseItem.file(url).id == id {
+            files[id] = url
+            return url
+        }
+        return nil
+    }
 
     func addToAlbum(_ id: String) async {
         guard let organise, let item = organise.currentItem,
@@ -200,10 +216,12 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     func nextOrganised() { organise?.next() }
     func skipOrganised() { organise?.skip() }
 
-    /// Anything filed is filed already, and each step saves as it goes.
-    func leaveOrganise() {
-        if organise?.isComplete == true { organise = nil }
-    }
+    var organiseOpen: Bool { organiseHolder.isOpen }
+    func resumeOrganise() { organiseHolder.resume() }
+
+    /// Anything filed is filed already, and each step saves as it goes. The place
+    /// and Undo wait to be resumed, here or on the phone.
+    func leaveOrganise() { organiseHolder.leave() }
 
     // MARK: Imported media
 
@@ -252,7 +270,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     // MARK: Pictures
 
     func picture(_ id: String, longEdge: CGFloat, fill: Bool) -> AnyView {
-        if let url = files[id] ?? (longEdge > 500 ? fullSize[id] : items[id]) {
+        if let url = file(id) ?? (longEdge > 500 ? fullSize[id] : items[id]) {
             return AnyView(AsyncFileImage(url: url, downsampleTo: longEdge, contentMode: fill ? .fill : .fit))
         }
         guard let asset = asset(id) else { return AnyView(Color.clear) }

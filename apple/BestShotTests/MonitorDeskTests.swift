@@ -48,7 +48,9 @@ final class FakeMonitorLibrary: MonitorLibrary {
     }
     func details(_ id: String) -> [String] { [] }
 
-    func rankBoard() async -> RankBoard? { nil }
+    /// The phone's board, when a test gives it one.
+    var board: RankBoard?
+    func rankBoard() async -> RankBoard? { board }
     func saveRankAlbum(_ ids: [String]) async -> String { "" }
 
     var organisePhoto: String?
@@ -60,6 +62,7 @@ final class FakeMonitorLibrary: MonitorLibrary {
         organiseSources.append(source)
         organisedFrom.append("photos")
         organisePhoto = "asset-1"
+        organisePaused = false
         return nil
     }
     var folderPhotos = ["a.jpg", "b.jpg"]
@@ -67,6 +70,7 @@ final class FakeMonitorLibrary: MonitorLibrary {
         organisedFrom.append(folder.lastPathComponent)
         guard let first = folderPhotos.first else { return "No photos left to organise in \(folder.lastPathComponent)." }
         organisePhoto = "file:" + folder.appendingPathComponent(first).path
+        organisePaused = false
         return nil
     }
     var filedInto: [String] = []
@@ -82,7 +86,11 @@ final class FakeMonitorLibrary: MonitorLibrary {
     }
     func nextOrganised() {}
     func skipOrganised() {}
-    func leaveOrganise() {}
+    /// Done on the phone, or Esc here, leaves the session waiting on a start screen.
+    var organisePaused = false
+    var organiseOpen: Bool { organisePhoto != nil && !organisePaused }
+    func leaveOrganise() { if organisePhoto != nil { organisePaused = true } }
+    func resumeOrganise() { organisePaused = false }
 
     var projects: [(id: UUID, name: String, count: Int)] = []
     func media(project: UUID?) -> [MonitorMediaItem] {

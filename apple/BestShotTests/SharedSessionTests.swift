@@ -213,6 +213,43 @@ final class MonitorFollowsThePhoneTests: XCTestCase {
         XCTAssertEqual(desk.pane, .organiseHome, "with its start screen under it")
     }
 
+    // Triage, as Organise: started or resumed on the phone, it's up on the monitor too (Dan, 17 Nov).
+
+    func testTriageStartedOnThePhoneComesUpHere() {
+        library.triageIDs = ["asset-1", "asset-2"]
+        desk.phoneOpened(.triage)
+        XCTAssertEqual(desk.pane, .loupe)
+        press(.right)
+        XCTAssertEqual(library.triageIndex, 1, "the monitor's keys move the phone's session")
+        press(.escape)
+        XCTAssertEqual(desk.pane, .triage, "with its start screen under it")
+    }
+
+    func testTriageLeftOnThePhoneTakesTheMonitorToItsStart() {
+        library.triageIDs = ["asset-1", "asset-2"]
+        desk.phoneOpened(.triage)
+        library.triagePaused = true   // Done on the phone, with photos marked
+        XCTAssertEqual(desk.pane, .triage)
+        press(.escape)
+        XCTAssertEqual(desk.pane, .home, "one Esc from what's showing")
+    }
+
+    func testTriageAlreadyUpHereStaysWhereItIs() {
+        library.triageIDs = ["asset-1", "asset-2"]
+        desk.phoneOpened(.triage)
+        press(.char("g"))
+        let here = desk.pane
+        desk.phoneOpened(.triage)
+        XCTAssertEqual(desk.pane, here, "the phone resuming doesn't pull the monitor off its grid")
+    }
+
+    func testNoMonitorTriageStaysOnThePhone() {
+        desk.isConnected = false
+        library.triageIDs = ["asset-1"]
+        desk.phoneOpened(.triage)
+        XCTAssertEqual(desk.pane, .home)
+    }
+
     func testNoMonitorNothingFollows() {
         desk.isConnected = false
         library.organisePhoto = "asset-1"

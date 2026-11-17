@@ -108,10 +108,15 @@ enum BestShotCommandMenu {
         case .startTriage(let source):
             app.send(.go(.triage))
             let order = defaults.string(forKey: BestShotCommandState.triageOrderKey).flatMap(SessionOrder.init(rawValue:)) ?? .newest
-            say { await library.startTriage(order: order, source: source) }
+            say {
+                let said = await library.startTriage(order: order, source: source)
+                desk.phoneOpened(.triage)   // up on the monitor too, as from the start screen's button
+                return said
+            }
         case .resumeTriage:
             app.send(.go(.triage))
             library.resumeTriage()
+            desk.phoneOpened(.triage)
 
         case .rankCompare(let scope): board?.startCompare(scope: scope)
         case .saveRankAlbum:

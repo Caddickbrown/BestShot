@@ -124,6 +124,7 @@ struct TriageHomeView: View {
             if let session {
                 Button {
                     paused = false
+                    followOnMonitor()
                 } label: {
                     Label("Resume Triage", systemImage: "play.fill").frame(maxWidth: .infinity)
                 }
@@ -245,9 +246,17 @@ struct TriageHomeView: View {
                     paused = false
                     session = TriageSession(assets: assets, context: context,
                                             tags: TriageTags.parse(tagText), marks: marks)
+                    followOnMonitor()
                 }
             }
         }
+    }
+
+    /// With a monitor plugged in it shows the session too, and the phone is its remote, as Organise does.
+    private func followOnMonitor() {
+        #if os(iOS)
+        MonitorDisplay.shared.desk?.phoneOpened(.triage)
+        #endif
     }
 
     /// Exclude only assets already kept or deleted (organised-only records should

@@ -31,9 +31,9 @@ final class FakeMonitorLibrary: MonitorLibrary {
     var left = 0
     func leaveTriage() {
         left += 1
-        if triageWaiting == 0 { triageIDs = [] }
+        if triageWaiting == 0 { triageIDs = [] } else { triagePaused = true }
     }
-    func resumeTriage() {}
+    func resumeTriage() { triagePaused = false }
     var commits = 0
     var confirmsDelete = true
     func commitDeletions() async -> Int {

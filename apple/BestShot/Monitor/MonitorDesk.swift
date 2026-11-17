@@ -260,7 +260,8 @@ final class MonitorDesk {
     /// its screens read as home until the stack catches up.
     var pane: MonitorPane {
         let top = stack.last ?? .home
-        if library.triageIDs.isEmpty, top == .loupe || top == .grid || top == .filters { return .triage }
+        // Ended or left on the phone: back to its start screen, as there.
+        if !library.triageShowing, top == .loupe || top == .grid || top == .filters { return .triage }
         if top == .rankCompare, board?.compare == nil { return .rank }
         // The board is the phone's too: a Compare started there is up here.
         if top == .rank, board?.compare != nil { return .rankCompare }
@@ -470,6 +471,7 @@ final class MonitorDesk {
         // goes on from what's showing.
         if stack.count > 2, stack.last == .rankCompare, board?.compare == nil { stack.removeLast() }
         if stack.count > 2, stack.last == .organise, !library.organiseOpen { stack.removeLast() }
+        while stack.count > 2, !library.triageShowing, [.loupe, .grid, .filters].contains(stack.last!) { stack.removeLast() }
         let leaving = stack.last
         if stack.count > 1 { stack.removeLast() }
         // Off the session to its start screen: the phone goes back to its start too.
@@ -794,6 +796,15 @@ final class MonitorDesk {
         held = nil
         undoStack = []
         restoreRedMarks()
+        resumeTriage()
+    }
+
+    /// A session the phone started or resumed: the monitor starts afresh on it,
+    /// as its own Start does, without starting another.
+    private func followTriage() {
+        filter = MonitorFilter()
+        held = nil
+        undoStack = []
         resumeTriage()
     }
 
@@ -1263,6 +1274,12 @@ final class MonitorDesk {
             pinned = nil
             resetZoom()
             openOrganise()
+        case .triage:
+            guard library.triageShowing, ![.loupe, .grid, .filters].contains(pane) else { return }
+            overlay = nil
+            pinned = nil
+            resetZoom()
+            followTriage()
         case .rank:
             guard pane != .rank, pane != .rankCompare else { return }
             overlay = nil

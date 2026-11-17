@@ -13,6 +13,7 @@ struct TriageView: View {
 
     @State private var showGallery = false
     @State private var showSummary = false
+    @State private var commands = AppCommands.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +30,16 @@ struct TriageView: View {
         }
         .onChange(of: session.isComplete) { _, complete in
             if complete { showSummary = true }
+        }
+        // The ⌘K menu's Grid and Finish, as the buttons up top.
+        .onChange(of: showGallery, initial: true) { _, shown in commands.triageGrid = shown }
+        .onDisappear { commands.triageGrid = false }
+        .onChange(of: commands.request?.id) { _, _ in
+            switch commands.request?.command {
+            case .grid?: Theme.Motion.run(Theme.Motion.settle) { showGallery.toggle() }
+            case .finishTriage?: showSummary = true
+            default: break
+            }
         }
         .escapeCloses {
             if showGallery {
@@ -104,6 +115,12 @@ struct TriageView: View {
             Button { showSummary = true } label: { Image(systemName: TriageControl.done.symbol) }
                 .accessibilityLabel(TriageControl.done.title)
                 .help(TriageControl.done.title)
+
+            #if os(iOS)
+            // The bar is hidden here, so its ⋯ menu is too: Commands sits with the other buttons.
+            Button { CommandRoute.presentMenu() } label: { Image(systemName: "command") }
+                .accessibilityLabel("Commands")
+            #endif
         }
         .padding(.horizontal)
         .padding(.vertical, 10)

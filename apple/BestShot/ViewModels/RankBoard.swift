@@ -64,6 +64,7 @@ final class RankBoard {
     func save(poolOrder: [String]) {
         let inPool = Set(pool).union(poolOrder)
         ranking = poolOrder + ranking.filter { !inPool.contains($0) }
+        cleared = nil
         persist(ranking)
     }
 
@@ -79,8 +80,20 @@ final class RankBoard {
         save(poolOrder: order)
     }
 
+    /// The ranking as it was before Clear, so Undo can put it back. Any other
+    /// change to the order forgets it.
+    private(set) var cleared: [String]?
+
     func clear() {
+        let before = ranked
         save(poolOrder: [])
+        if !before.isEmpty { cleared = before }
+    }
+
+    /// Undo for Clear.
+    func restoreCleared() {
+        guard let order = cleared else { return }
+        save(poolOrder: order)
     }
 
     func startCompare(scope: RankScope) {

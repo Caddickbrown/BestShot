@@ -92,7 +92,7 @@ enum MonitorAction: Equatable {
 struct MonitorSituation: Equatable {
     enum Surface: Equatable {
         case locked, paused, phoneSheet
-        case palette, help, entry, finish
+        case help, entry, finish
         case list, loupe, grid, rankCompare, mediaPhoto
     }
 
@@ -162,7 +162,6 @@ enum MonitorKeymap {
             return [MonitorBinding("esc ⌥⌘P", "Resume", .pause) { $0.matches(.escape) || isPause($0) }, textSize]
         case .phoneSheet:
             return [MonitorBinding("esc", "Close what's on the phone", .escape) { $0.matches(.escape) }]
-        case .palette: return palette + monitorKeys
         case .help:
             return [move("↑↓ jk", "Scroll"),
                     MonitorBinding("esc ?", "Close", .escape) { $0.matches(.escape) || isHelp($0) }] + monitorKeys
@@ -225,18 +224,6 @@ enum MonitorKeymap {
     }
 
     // MARK: Overlays
-
-    private static let palette: [MonitorBinding] = [
-        MonitorBinding("↑↓ ⇥", "Move") { k in
-            if k.matches(.down) || k.matches(.tab) { return .move(1) }
-            if k.matches(.up) || k.matches(.tab, .shift) { return .move(-1) }
-            return nil
-        },
-        MonitorBinding("↵", "Run", .submit) { $0.matches(.enter) },
-        MonitorBinding("⌫", "Delete a letter", .deleteLetter) { $0.matches(.backspace) },
-        MonitorBinding("Type", "To find") { $0.isText ? .type($0.text) : nil },
-        MonitorBinding("esc ⌘K", "Close", .escape) { $0.matches(.escape) || $0.matches(.char("k"), .command) },
-    ]
 
     private static func entry(_ s: MonitorSituation) -> [MonitorBinding] {
         var keys: [MonitorBinding] = []

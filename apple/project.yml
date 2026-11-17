@@ -31,6 +31,8 @@ targets:
       macOS: "14.0"
     sources:
       - path: BestShot
+      # App Kit's command menu: the rules and keys; the app supplies the commands.
+      - path: ../kit/swift/CommandPalette.swift
     dependencies:
       # Shared Rust core (../core), built by scripts/build-core.sh.
       - framework: Frameworks/BestShotCore.xcframework

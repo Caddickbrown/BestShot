@@ -10,7 +10,8 @@ struct OrganiseHomeView: View {
     @Query private var reviews: [AssetReview]
 
     @State private var authStatus = PhotoLibraryService.shared.status
-    @State private var order: SessionOrder = .newest
+    /// Kept, so the ⌘K menu's Order… and this picker are the same choice.
+    @AppStorage(BestShotCommandState.organiseOrderKey) private var order: SessionOrder = .newest
     @State private var source: TriageSourceOption = .allPhotos
     @State private var albums: [PHAssetCollection] = []
     @State private var folders: [String: String] = [:]

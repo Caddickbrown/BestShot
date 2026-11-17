@@ -31,6 +31,7 @@ struct BestShotApp: App {
         }
         #if os(iOS)
         MonitorDisplay.shared.start(container: container)
+        BestShotCommandMenu.install()
         #endif
     }
 

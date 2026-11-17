@@ -27,6 +27,8 @@ struct RootView: View {
     @State private var newName = ""
     @State private var deleting: Project?
     @State private var projectProblem: String?
+    /// The ⌘K menu's requests and what the screens tell it.
+    @State private var commands = AppCommands.shared
 
     enum SidebarSelection: Hashable {
         case triage
@@ -98,6 +100,14 @@ struct RootView: View {
                 // Both in plain sight. A secondary item folds into the bar's own
                 // overflow button, which put one More menu inside another.
                 ToolbarItemGroup(placement: .primaryAction) {
+                    #if os(iOS)
+                    // The way into the command menu without a keyboard.
+                    Button {
+                        CommandRoute.presentMenu()
+                    } label: {
+                        Label("Commands", systemImage: "command")
+                    }
+                    #endif
                     Button {
                         showingSettings = true
                     } label: {
@@ -113,6 +123,14 @@ struct RootView: View {
         } detail: {
             detailView
                 .environment(\.showRank, ShowRankAction { selection = .rank })
+                #if os(iOS)
+                .toolbar {
+                    // In the bar's ⋯ menu. A project has its own Options menu, with Commands in it.
+                    if commandsInBar {
+                        ToolbarItem(placement: .secondaryAction) { CommandsMenuItem() }
+                    }
+                }
+                #endif
         }
         .sheet(isPresented: $showingNewProject) {
             NewProjectSheet(name: $projectName, description: $projectDescription) { name, description in
@@ -142,14 +160,77 @@ struct RootView: View {
         .escapeCloses(when: deleting != nil) { deleting = nil }
         .escapeCloses(when: projectProblem != nil) { projectProblem = nil }
         // Choosing a place in the menu opens it, on a phone too.
-        .onChange(of: selection) { _, new in
+        .onChange(of: selection, initial: true) { _, new in
             if new != nil { compactColumn = .detail }
+            commands.place = Self.place(new)
         }
+        .onChange(of: commands.request?.id) { _, _ in
+            if let command = commands.request?.command { carryOut(command) }
+        }
+        .alert("BestShot", isPresented: Binding(
+            get: { commands.message != nil }, set: { if !$0 { commands.message = nil } }
+        )) {
+            Button("OK") { commands.message = nil }
+        } message: { Text(commands.message ?? "") }
+        .escapeCloses(when: commands.message != nil) { commands.message = nil }
         // Esc's last step is the main menu. A Triage session waits behind Resume.
         .escapeRoot(escapes) {
             selection = nil
             compactColumn = .sidebar
             columns = .all
+        }
+        .onAppear {
+            commands.leaveSheet = { [escapes] in if escapes.hasSheet { escapes.press() } }
+        }
+    }
+
+    /// Every screen but a project's, which has Commands in its Options menu.
+    private var commandsInBar: Bool {
+        switch selection {
+        case .project, nil: return false
+        default: return true
+        }
+    }
+
+    private static func place(_ selection: SidebarSelection?) -> AppCommands.Place {
+        switch selection {
+        case .triage: return .triage
+        case .organise: return .organise
+        case .rank: return .rank
+        case .folders: return .folders
+        case .allMedia: return .allMedia
+        case .joinVideos: return .joinVideos
+        case .antiCrop: return .antiCrop
+        case .project(let id): return .project(id)
+        case nil: return .home
+        }
+    }
+
+    /// A command from the ⌘K menu for the main menu: going somewhere, or a project.
+    private func carryOut(_ command: BestShotCommand) {
+        switch command {
+        case .go(let section):
+            switch section {
+            case .triage: selection = .triage
+            case .rank: selection = .rank
+            case .organise: selection = .organise
+            case .allMedia: selection = .allMedia
+            case .projects:
+                selection = nil
+                compactColumn = .sidebar
+            case .settings: showingSettings = true
+            }
+        case .project(let id): selection = .project(id)
+        case .joinVideos: selection = .joinVideos
+        case .antiCrop: selection = .antiCrop
+        case .newProject(let name): createProject(name: name, description: "")
+        case .renameProject(let id, let name):
+            if let project = projects.first(where: { $0.uuid == id }) { _ = ProjectLibrary.rename(project, to: name, context: context) }
+        case .deleteProject(let id):
+            // The same question as the menu's Delete: nothing goes without it.
+            deleting = projects.first { $0.uuid == id }
+        default:
+            break
         }
     }
 

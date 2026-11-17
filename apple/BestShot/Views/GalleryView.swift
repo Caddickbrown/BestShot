@@ -48,6 +48,9 @@ struct GalleryView: View {
     // Export / share
     @State private var shareURL: ShareableURL?
     @State private var showingClearConfirm = false
+    /// Delete the chosen, asked for from the ⌘K menu: it asks first.
+    @State private var confirmingBulkDelete = false
+    @State private var commands = AppCommands.shared
 
     private var displayedItems: [MediaItem] {
         project.sortedItems(by: sort, filter: filter).filter { MediaSearch.matches(searchText, item: $0) }
@@ -148,6 +151,8 @@ struct GalleryView: View {
             .sheet(item: $shareURL) { wrapper in
                 ShareSheet(url: wrapper.url)
             }
+            .modifier(GalleryCommands(state: commandState, selected: selectedIDs.count,
+                                      confirmingDelete: $confirmingBulkDelete, delete: bulkDelete, carryOut: carryOut))
             .modifier(GalleryEscapes(
                 selecting: selectionMode, onSelecting: exitSelection,
                 picker: $showingPhotoPicker, importer: $showingFileImporter,
@@ -289,6 +294,10 @@ struct GalleryView: View {
                 Button(role: .destructive, action: onDelete) {
                     Label("Delete Project…", systemImage: "trash")
                 }
+                #if os(iOS)
+                Divider()
+                CommandsMenuItem()
+                #endif
             } label: {
                 Label("Options", systemImage: "ellipsis.circle")
             }
@@ -303,6 +312,44 @@ struct GalleryView: View {
             Button { downloadAll() } label: { Label("Download All (ZIP)", systemImage: "archivebox") }
         } label: {
             Label("Export", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    // MARK: - The ⌘K menu
+
+    private var commandState: BestShotCommandState.OpenProject {
+        BestShotCommandState.OpenProject(
+            id: project.uuid, name: project.name, count: project.itemCount, unranked: project.unrankedCount,
+            sort: sort, filter: filter, grid: gridSize, selecting: selectionMode, selected: selectedIDs.count,
+            canJoin: joinableVideos.count >= 2)
+    }
+
+    /// A command for this project: what its button or menu item does, with the
+    /// same questions before anything goes.
+    private func carryOut(_ command: BestShotCommand) {
+        guard commands.place == .project(project.uuid) else { return }
+        switch command {
+        case .importPhotos: showingPhotoPicker = true
+        case .importFiles: showingFileImporter = true
+        case .compareProject(let scope): if project.itemCount > 1 { startComparison(scope: scope) }
+        case .projectSort(let new): sort = new
+        case .projectFilter(let new): filter = new
+        case .gridSize(let new): gridSize = new
+        case .selecting(let on): if on { selectionMode = true } else { exitSelection() }
+        case .selectAll:
+            selectionMode = true
+            selectedIDs = Set(displayedItems.map(\.uuid))
+        case .tagSelected(let tag):
+            bulkTagText = tag
+            applyBulkTag()
+        case .downloadSelected: if !selectedIDs.isEmpty { bulkDownload() }
+        case .joinSelected: if joinableVideos.count >= 2 { joinSelected() }
+        case .deleteSelected: if !selectedIDs.isEmpty { confirmingBulkDelete = true }
+        case .exportJSON: export(.json)
+        case .exportCSV: export(.csv)
+        case .downloadAll: downloadAll()
+        case .clearProjectRankings: showingClearConfirm = true
+        default: break
         }
     }
 
@@ -476,6 +523,33 @@ struct GalleryView: View {
         } catch {
             importMessage = "Export failed: \(error.localizedDescription)"
         }
+    }
+}
+
+/// The ⌘K menu's side of a project: what it's showing, the commands sent to
+/// it, and the question before the chosen are deleted.
+private struct GalleryCommands: ViewModifier {
+    let state: BestShotCommandState.OpenProject
+    let selected: Int
+    @Binding var confirmingDelete: Bool
+    let delete: () -> Void
+    let carryOut: (BestShotCommand) -> Void
+    @State private var commands = AppCommands.shared
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Delete \(selected) item\(selected == 1 ? "" : "s")?", isPresented: $confirmingDelete) {
+                Button("Delete", role: .destructive, action: delete)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("They're removed from this project and its folder.")
+            }
+            .escapeCloses(when: confirmingDelete) { confirmingDelete = false }
+            .onChange(of: state, initial: true) { _, state in commands.project = state }
+            .onDisappear { if commands.project?.id == state.id { commands.project = nil } }
+            .onChange(of: commands.request?.id) { _, _ in
+                if let command = commands.request?.command { carryOut(command) }
+            }
     }
 }
 

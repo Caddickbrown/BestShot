@@ -9,7 +9,8 @@ struct TriageHomeView: View {
     @Query private var reviews: [AssetReview]
 
     @State private var authStatus = PhotoLibraryService.shared.status
-    @State private var order: SessionOrder = .newest
+    /// Kept, so the ⌘K menu's Order… and this picker are the same choice.
+    @AppStorage(BestShotCommandState.triageOrderKey) private var order: SessionOrder = .newest
     /// Photos marked for deletion in a session that ended before its commit. A delete
     /// that went through leaves no asset, so anything still here was never deleted.
     @State private var waitingDeletes: [PHAsset] = []

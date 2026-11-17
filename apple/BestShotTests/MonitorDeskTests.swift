@@ -11,6 +11,8 @@ final class FakeMonitorLibrary: MonitorLibrary {
 
     var triageIDs: [String] = []
     var triageIndex = 0
+    var triagePaused = false
+    var triageShowing: Bool { !triageIDs.isEmpty && !triagePaused }
     var decisions: [String: ReviewDecision] = [:]
     var favourites = 0
     var triageWaiting: Int { decisions.values.filter { $0 == .deleted }.count }
@@ -89,6 +91,7 @@ final class FakeMonitorLibrary: MonitorLibrary {
     /// Done on the phone, or Esc here, leaves the session waiting on a start screen.
     var organisePaused = false
     var organiseOpen: Bool { organisePhoto != nil && !organisePaused }
+    var organiseOneAlbum = false
     func leaveOrganise() { if organisePhoto != nil { organisePaused = true } }
     func resumeOrganise() { organisePaused = false }
 
@@ -220,9 +223,7 @@ final class MonitorDeskTests: XCTestCase {
 
     func testMenuCanOnlyOpenTheFinishPanel() async {
         type("6")
-        press(.char("k"), .command)
-        type("finish")
-        press(.enter)
+        XCTAssertEqual(DeskMenu.choose("finish triage", on: desk), .finishTriage)
         await desk.work?.value
         XCTAssertEqual(library.commits, 0)
         guard case .finish(let finish) = desk.overlay else { return XCTFail("opens the panel") }
@@ -571,20 +572,24 @@ final class MonitorDeskTests: XCTestCase {
         XCTAssertEqual(library.names[.green], "Select")
     }
 
-    func testMenuFiltersAndEscClosesInOnePress() {
+    func testMenuKeysOpenTheKitMenu() {
+        var opened = 0
+        desk.onMenu = { opened += 1 }
         press(.char("k"), .command)
-        type("set")
-        guard case .palette(let palette) = desk.overlay else { return XCTFail("opens") }
-        XCTAssertEqual(palette.lit?.title, "Settings")
-        XCTAssertTrue(desk.stepBackFromEscape())
-        XCTAssertNil(desk.overlay)
+        type("/")
+        XCTAssertEqual(opened, 2, "⌘K and / both open it")
+    }
+
+    func testMenuFiltersAndEscClosesInOnePress() {
+        var menu = MonitorMenu(desk)
+        menu.type("set")
+        XCTAssertEqual(menu.lit?.title, "Go to Settings")
+        XCTAssertEqual(menu.press(.esc), .close)
         XCTAssertEqual(desk.pane, .loupe)
     }
 
     func testMenuRunsAndCarriesOnFromThere() {
-        press(.char("k"), .command)
-        type("settings")
-        press(.enter)
+        DeskMenu.choose("settings", on: desk)
         XCTAssertEqual(desk.pane, .settings)
     }
 
@@ -637,11 +642,10 @@ final class MonitorOrganiseFolderTests: XCTestCase {
     }
 
     func testTheMenuStartsFromASourceByName() async {
-        press(.char("k"), .command)
-        for c in "organise screen" { desk.handle(.typed(c)) }
-        guard case .palette(let menu) = desk.overlay else { return XCTFail("no menu") }
-        XCTAssertEqual(menu.lit?.action, .start(.screenshots))
-        press(.enter)
+        var menu = MonitorMenu(desk)
+        menu.type("organising screen")
+        XCTAssertEqual(menu.lit?.step, .run(.startOrganise(.screenshots)))
+        DeskMenu.choose("organising screen", on: desk)
         await desk.work?.value
         XCTAssertEqual(library.organiseSources, [.screenshots])
         XCTAssertEqual(desk.pane, .organise)
@@ -820,23 +824,24 @@ final class MonitorOrganiseAlbumTests: XCTestCase {
         return nil
     }
 
-    func testTheMenuMakesANewAlbum() {
-        press(.char("k"), .command)
-        type("new alb")
-        guard case .palette(let menu) = desk.overlay else { return XCTFail("no menu") }
-        XCTAssertEqual(menu.lit?.action, .newAlbum)
-        press(.enter)
-        XCTAssertEqual(entry?.kind, .album)
-        type("Paris")
-        press(.enter)
-        XCTAssertNil(desk.overlay)
+    func testTheMenuMakesANewAlbum() async {
+        var menu = MonitorMenu(desk)
+        menu.type("new alb")
+        XCTAssertEqual(menu.lit?.id, "organise.new")
+        XCTAssertEqual(menu.press(.enter), .stay, "it asks for the name, in the menu")
+        XCTAssertTrue(menu.isAsking)
+        menu.type("Paris")
+        guard case .run(let action) = menu.press(.enter) else { return XCTFail("makes it") }
+        XCTAssertEqual(action, .newAlbum("Paris"))
+        desk.run(action)
+        await desk.work?.value
+        XCTAssertEqual(library.madeAlbums, ["Paris"])
     }
 
     func testTheMenuHasNoNewAlbumOutsideOrganise() {
         press(.escape)
-        press(.char("k"), .command)
-        guard case .palette(let menu) = desk.overlay else { return XCTFail("no menu") }
-        XCTAssertFalse(menu.rows.contains { $0.action == .newAlbum })
+        let rows = MonitorMenu(desk).rows
+        XCTAssertFalse(rows.contains { $0.id == "organise.new" })
     }
 
     func testANewNameMakesExactlyWhatsTyped() async {
@@ -887,9 +892,7 @@ final class MonitorOrganiseAlbumTests: XCTestCase {
 
     func testUndoFromTheMenu() async {
         library.organiseCanUndo = true
-        press(.char("k"), .command)
-        type("undo")
-        press(.enter)
+        XCTAssertEqual(DeskMenu.choose("undo", on: desk), .undo)
         await desk.work?.value
         XCTAssertEqual(library.undos, 1)
     }

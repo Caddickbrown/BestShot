@@ -79,7 +79,6 @@ struct MonitorFinish: Equatable {
 }
 
 enum MonitorOverlay: Equatable {
-    case palette(MonitorPalette)
     case help
     case entry(MonitorEntry)
     case finish(MonitorFinish)
@@ -107,6 +106,8 @@ protocol MonitorLibrary: AnyObject {
     // Triage
     var triageIDs: [String] { get }
     var triageIndex: Int { get set }
+    /// The session is up on the phone, not paused on its start screen.
+    var triageShowing: Bool { get }
     /// How many are marked to delete.
     var triageWaiting: Int { get }
     func decision(_ id: String) -> ReviewDecision
@@ -150,6 +151,8 @@ protocol MonitorLibrary: AnyObject {
     func leaveOrganise()
     /// The session is up on the phone and here, not waiting on a start screen.
     var organiseOpen: Bool { get }
+    /// "One album, then next": a tap files the photo and moves on.
+    var organiseOneAlbum: Bool { get set }
     func resumeOrganise()
 
     // Imported media
@@ -192,6 +195,9 @@ final class MonitorDesk {
     var phoneSheetUp = false
     /// The phone needn't stay awake for a paused monitor.
     var onPause: () -> Void = {}
+    /// ⌘K or `/`: the kit's command menu, which the phone's glue opens and the
+    /// monitor draws (Commands/CommandMenu.swift).
+    var onMenu: () -> Void = {}
 
     // Where it's at
     private(set) var stack: [MonitorPane] = [.home]
@@ -291,8 +297,6 @@ final class MonitorDesk {
         s.canUndo = pane == .organise ? library.organiseCanUndo : !undoStack.isEmpty
         s.inTriage = !library.triageIDs.isEmpty
         switch overlay {
-        case .palette:
-            s.surface = .palette
         case .help:
             s.surface = .help
         case .entry(let entry):
@@ -350,7 +354,7 @@ final class MonitorDesk {
         guard let action = MonitorKeymap.action(for: press, in: situation) else {
             // A paused monitor shows nothing, and an open panel keeps its keys.
             switch situation.surface {
-            case .paused, .finish, .palette, .entry, .help: return true
+            case .paused, .finish, .entry, .help: return true
             default: return false
             }
         }
@@ -385,7 +389,6 @@ final class MonitorDesk {
         default: break
         }
         switch overlay {
-        case .palette: paletteAction(action)
         case .entry: entryAction(action)
         case .finish: finishAction(action)
         case .help: helpAction(action)
@@ -405,7 +408,7 @@ final class MonitorDesk {
         switch action {
         case .escape: stepBack()
         case .pause, .textSize: break
-        case .menu: openMenu()
+        case .menu: onMenu()
         case .help:
             helpRow = 0
             overlay = .help
@@ -1219,102 +1222,6 @@ final class MonitorDesk {
         }
     }
 
-    // MARK: - The menu
-
-    private func openMenu() {
-        var rows = MonitorSection.allCases.map {
-            MonitorMenuRow(id: "section-\($0.rawValue)", title: $0.title, detail: "⌘\($0.rawValue)", action: .section($0))
-        }
-        if !library.triageIDs.isEmpty {
-            rows.append(MonitorMenuRow(id: "grid", title: "Grid", detail: "g", action: .grid))
-            rows.append(MonitorMenuRow(id: "filters", title: "Filters", detail: "f", action: .filters))
-            if filter.isActive {
-                rows.append(MonitorMenuRow(id: "clear", title: "Clear filters", action: .clearFilters))
-            }
-            rows.append(MonitorMenuRow(id: "finish", title: "Finish Triage", detail: "Asks first", action: .finish))
-            rows += MonitorFilter.Status.allCases.map {
-                MonitorMenuRow(id: "status-\($0.rawValue)", title: "Show \($0.title.lowercased())", action: .status($0))
-            }
-            rows += marks.knownTags.map { MonitorMenuRow(id: "tag-\($0)", title: "Show tag \($0)", action: .tag($0)) }
-        }
-        // On a start screen, every source by name: type a few letters of the album, ↵ starts.
-        let starting = pane == .organiseHome || (pane == .triage && library.triageIDs.isEmpty)
-        if starting, library.hasPhotoAccess {
-            let verb = pane == .organiseHome ? "Organise" : "Triage"
-            rows += library.sources.map {
-                MonitorMenuRow(id: "start-\($0.option)", title: "\(verb) \($0.title)",
-                               detail: { if case .album = $0 { return "Album" } else { return nil } }($0.option),
-                               action: .start($0.option))
-            }
-        }
-        if pane == .organise, library.organisePhoto != nil {
-            rows.append(MonitorMenuRow(id: "new-album", title: "New album", detail: "n", action: .newAlbum))
-            if library.organiseCanUndo {
-                rows.append(MonitorMenuRow(id: "undo", title: "Undo", detail: "⌘Z", action: .undo))
-            }
-        }
-        rows.append(MonitorMenuRow(id: "keys", title: "All keys", detail: "?", action: .help))
-        rows.append(MonitorMenuRow(id: "pause", title: "Pause monitor", detail: "⌥⌘P", action: .pause))
-        rows += library.projects.map { MonitorMenuRow(id: "project-\($0.id)", title: $0.name, detail: "Project", action: .project($0.id)) }
-        overlay = .palette(MonitorPalette(rows))
-    }
-
-    private func paletteAction(_ action: MonitorAction) {
-        guard case .palette(var palette) = overlay else { return }
-        switch action {
-        case .move(let by): palette.move(by)
-        case .type(let text): palette.type(text)
-        case .deleteLetter: palette.backspace()
-        case .escape, .menu:
-            overlay = nil
-            return
-        case .submit:
-            guard let row = palette.lit else { return }
-            overlay = nil
-            run(row.action)
-            return
-        default: return
-        }
-        overlay = .palette(palette)
-    }
-
-    private func run(_ action: MonitorMenuAction) {
-        switch action {
-        case .section(let section): go(to: section)
-        case .project(let id):
-            stack = [.home, .projects]
-            mediaItems = library.media(project: id)
-            push(.media(project: id))
-        case .filters: stackForPhotos(); push(.filters)
-        case .clearFilters: filter = MonitorFilter(); held = nil
-        case .grid: stackForPhotos(); toggleGrid()
-        case .help:
-            helpRow = 0
-            overlay = .help
-        case .pause: togglePause()
-        case .status(let status):
-            filter.status = status
-            held = nil
-            stackForPhotos()
-        case .tag(let tag):
-            filter.tags = [tag]
-            held = nil
-            stackForPhotos()
-        case .finish: openFinish()
-        case .newAlbum: beginEntry(.album, title: "New album")
-        case .undo: pageAction(.undo)
-        case .start(let option):
-            if pane == .organiseHome {
-                organiseSource = option
-                organiseFromFolder = false
-                spawn { await self.startOrganise() }
-            } else if pane == .triage {
-                source = option
-                spawn { await self.startTriage() }
-            }
-        }
-    }
-
     /// From anywhere, to the photo walk.
     private func stackForPhotos() {
         if pane != .loupe, pane != .grid { resumeTriage() }
@@ -1379,4 +1286,217 @@ final class MonitorDesk {
 /// A photo's stars as text: `★★★☆☆`.
 func starText(_ rating: Int) -> String {
     String(repeating: "★", count: rating) + String(repeating: "☆", count: max(0, 5 - rating))
+}
+
+// MARK: - The ⌘K menu, on the monitor
+//
+// The kit's palette, with BestShot's list (Commands/BestShotCommands.swift).
+// `commandState` is what the monitor shows now, as plain values; `run` does a
+// chosen command here, on the monitor's screens. The phone's glue builds the
+// list from this exactly as the tests do.
+
+extension MonitorDesk {
+    /// What's on the monitor, for the menu.
+    func commandState(appearance: Appearance = .system) -> BestShotCommandState {
+        var s = BestShotCommandState()
+        s.display = .monitor
+        s.appearance = appearance
+        s.hasPhotoAccess = library.hasPhotoAccess
+        s.labelNames = Dictionary(uniqueKeysWithValues: LabelColour.allCases.map { ($0, library.labelName($0)) })
+        s.knownTags = marks.knownTags
+        s.monitorConnected = isConnected
+        s.monitorPaused = isPaused
+        s.textScale = textScale
+        s.projects = library.projects.map { .init(id: $0.id, name: $0.name, count: $0.count) }
+        s.sources = library.sources.map { .init(option: $0.option, title: $0.title) }
+
+        s.triageOpen = !library.triageIDs.isEmpty
+        s.triageWaiting = library.triageWaiting
+        s.order = order
+        s.filter = filter
+        s.zoomed = zoom > 1
+        s.comparing = pinned != nil
+        s.showingInfo = showInfo
+
+        s.organiseOpen = library.organiseOpen && library.organisePhoto != nil
+        s.organisePaused = library.organisePhoto != nil && !library.organiseOpen
+        s.organiseOrder = organiseOrder
+        s.albums = library.organiseAlbums.map { .init(id: $0.id, title: $0.title, added: $0.added) }
+        s.oneAlbum = library.organiseOneAlbum
+
+        if let board {
+            s.rankPool = board.pool.count
+            s.ranked = board.ranked.count
+            s.unranked = board.unranked.count
+            s.canPutRankingBack = board.cleared != nil
+        }
+
+        switch pane {
+        case .home: s.screen = .home
+        case .triage: s.screen = .triageStart
+        case .loupe: s.screen = .triage
+        case .grid: s.screen = .triageGrid
+        case .filters: s.screen = .filters
+        case .rank:
+            s.screen = .rank
+            if let row = litRow, row.photo != nil {
+                s.rankLit = [row.title, row.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            }
+        case .rankCompare: s.screen = .rankCompare
+        case .organiseHome: s.screen = .organiseStart
+        case .organise: s.screen = .organise
+        case .media: s.screen = .allMedia
+        case .mediaPhoto: s.screen = .mediaPhoto
+        case .projects: s.screen = .projects
+        case .settings: s.screen = .settings
+        }
+        s.canUndo = pane == .organise ? library.organiseCanUndo
+            : [.loupe, .grid].contains(pane) && !undoStack.isEmpty
+        if let id = current {
+            let mark = marks.mark(id)
+            s.photo = .init(id: id, stars: mark.rating, colour: colour(id), favourite: library.isFavourite(id), tags: mark.tags)
+        }
+        return s
+    }
+
+    /// The phone's Triage photo, marked from the menu there: the same marks and
+    /// the same rules as a key on the monitor (red waits to delete, green keeps).
+    func mark(_ id: String, with command: BestShotCommand) {
+        switch command {
+        case .stars(let n):
+            change(id) {
+                $0.rating = n
+                return nil
+            }
+        case .colour(let colour):
+            let shown = self.colour(id)
+            change(id) {
+                if shown == colour {
+                    $0.colour = nil
+                    return .undecided
+                }
+                $0.colour = colour
+                return colour.decision
+            }
+        case .noColour:
+            change(id) {
+                $0.colour = nil
+                return .undecided
+            }
+        case .toggleTag(let tag):
+            change(id) {
+                if $0.has(tag: tag) {
+                    $0.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+                } else {
+                    $0.tags.append(tag)
+                }
+                return nil
+            }
+        default:
+            break
+        }
+    }
+
+    /// A command chosen from the menu, done on the monitor.
+    func run(_ command: BestShotCommand) {
+        notice = nil
+        switch command {
+        case .go(let section): go(to: section)
+        case .project(let id):
+            stack = [.home, .projects]
+            mediaItems = library.media(project: id)
+            push(.media(project: id))
+        case .allKeys:
+            helpRow = 0
+            overlay = .help
+
+        case .stars(let n): rate(n)
+        case .colour(let colour): toggle(colour)
+        case .noColour: clearColour()
+        case .favourite: library.toggleFavourite()
+        case .toggleTag(let tag): toggleTag(tag)
+        case .undo: pageAction(.undo)
+        case .zoom: cycleZoom()
+        case .pinCompare: toggleCompare()
+        case .swapSides: swapCompare()
+        case .info: showInfo.toggle()
+        case .grid:
+            stackForPhotos()
+            toggleGrid()
+        case .nextUndecided(let by): nextUnreviewed(by)
+        case .finishTriage: openFinish()
+
+        case .filters:
+            stackForPhotos()
+            push(.filters)
+        case .filterStatus(let status):
+            filter.status = status
+            held = nil
+            stackForPhotos()
+        case .filterStars(let n):
+            filter.minimumStars = n
+            held = nil
+            stackForPhotos()
+        case .filterTag(let tag):
+            if filter.tags.remove(tag) == nil { filter.tags.insert(tag) }
+            held = nil
+            stackForPhotos()
+        case .filtersOff:
+            filter = MonitorFilter()
+            held = nil
+
+        case .triageOrder(let new): order = new
+        case .startTriage(let option):
+            source = option
+            stack = [.home, .triage]
+            spawn { await self.startTriage() }
+        case .resumeTriage: resumeTriage()
+
+        case .rankCompare(let scope):
+            spawn {
+                if self.board == nil { await self.loadBoard() }
+                if self.pane != .rank { self.stack = [.home, .rank] }
+                self.startCompare(scope)
+            }
+        case .saveRankAlbum: saveAlbum()
+        case .clearRanking:
+            board?.clear()
+            notice = "Ranking cleared. Undo it from ⌘K: Put the ranking back."
+        case .restoreRanking: board?.restoreCleared()
+        case .moveRanked(let by): moveRanked(by)
+        case .compareChoose(let choice): board?.compare?.choose(choice)
+        case .compareUndo: board?.compare?.undo()
+        case .compareSave: if pane == .rankCompare { stepBack() }
+
+        case .organiseOrder(let new): organiseOrder = new
+        case .startOrganise(let option):
+            organiseSource = option
+            organiseFromFolder = false
+            stack = [.home, .organiseHome]
+            spawn { await self.startOrganise() }
+        case .organiseFolder:
+            stack = [.home, .organiseHome]
+            askForFolder()
+        case .resumeOrganise: openOrganise()
+        case .addToAlbum(let id): spawn { [library] in await library.addToAlbum(id) }
+        case .newAlbum(let name): spawn { [library] in await library.newAlbum(name) }
+        case .nextPhoto: library.nextOrganised()
+        case .skipPhoto: library.skipOrganised()
+        case .oneAlbum(let on): library.organiseOneAlbum = on
+        case .doneOrganising: if pane == .organise { popPane() }
+
+        case .appearance(let look): UserDefaults.standard.set(look.rawValue, forKey: Appearance.key)
+        case .renameLabel(let colour, let name): notice = library.renameLabel(colour, to: name)
+        case .textSize(let by): adjustTextScale(by)
+        case .pause: togglePause()
+
+        // The phone's own: the monitor doesn't draw these, and never lists them.
+        case .joinVideos, .antiCrop, .keep, .markDelete, .skip,
+             .newProject, .renameProject, .deleteProject, .importPhotos, .importFiles, .compareProject,
+             .projectSort, .projectFilter, .gridSize, .selecting, .selectAll, .tagSelected,
+             .downloadSelected, .joinSelected, .deleteSelected, .exportJSON, .exportCSV, .downloadAll,
+             .clearProjectRankings:
+            break
+        }
+    }
 }

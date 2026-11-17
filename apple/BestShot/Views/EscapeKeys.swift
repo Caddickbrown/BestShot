@@ -296,7 +296,8 @@ final class EscapeCatcherController: UIViewController {
     /// Never from a field being typed in, nor from another catcher: a sheet's and
     /// the root's would trade it.
     private func takeKeysIfFree() {
-        guard let window = view.window else { return }
+        // The ⌘K menu has its own window and the keys while it's up.
+        guard !BestShotCommandMenu.isOpen, let window = view.window else { return }
         // First responder means nothing in a window that isn't key, and a monitor
         // coming and going can leave the phone's window that way.
         if monitorDesk != nil, !window.isKeyWindow { window.makeKey() }

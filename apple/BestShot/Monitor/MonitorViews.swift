@@ -24,6 +24,10 @@ struct MonitorMetrics {
 /// `MonitorDesk`, and this only shows what it says.
 struct MonitorRoot: View {
     let desk: MonitorDesk
+    #if os(iOS)
+    /// The ⌘K menu, drawn here while the monitor is showing things.
+    @ObservedObject private var commands = BestShotCommandMenu.host
+    #endif
     @Environment(\.displayScale) private var pixels
     @Environment(\.colorScheme) private var system
     @AppStorage(Appearance.key) private var appearance = Appearance.fallback
@@ -43,7 +47,12 @@ struct MonitorRoot: View {
                 } else {
                     MonitorScreen(desk: desk, palette: palette, metrics: metrics, size: geo.size)
                         .overlay { MonitorOverlayView(desk: desk, palette: palette, metrics: metrics) }
-                    MonitorHintBar(keys: desk.keys, palette: palette, metrics: metrics)
+                        .overlay { commandPanel(metrics) }
+                    if let hints = commandHints {
+                        CommandHintBar(hints: hints, palette: palette, metrics: metrics)
+                    } else {
+                        MonitorHintBar(keys: desk.keys, palette: palette, metrics: metrics)
+                    }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -56,6 +65,57 @@ struct MonitorRoot: View {
 
     private func backdrop(_ palette: Theme.Palette) -> Color {
         desk.isLocked || desk.isPaused ? .black : palette.background
+    }
+
+    /// Exactly the keys the menu takes while it's up.
+    private var commandHints: [CommandHint]? {
+        #if os(iOS)
+        if commands.onMonitor, let menu = commands.menu { return menu.hints }
+        #endif
+        return nil
+    }
+
+    @ViewBuilder
+    private func commandPanel(_ metrics: MonitorMetrics) -> some View {
+        #if os(iOS)
+        if commands.onMonitor, let menu = commands.menu {
+            ZStack(alignment: .top) {
+                Color.black.opacity(0.55)
+                CommandPanel(menu: menu, palette: Theme.viewfinder, text: metrics.text, caption: metrics.caption,
+                             rowHeight: metrics.text * 2.4)
+                    .frame(maxWidth: metrics.text * 44)
+                    .padding(.top, metrics.padding * 2)
+                    .padding(.horizontal, metrics.padding)
+            }
+            .environment(\.colorScheme, .dark)
+        }
+        #endif
+    }
+}
+
+/// The menu's keys, in the hint bar's place, while it's open on the monitor.
+private struct CommandHintBar: View {
+    let hints: [CommandHint]
+    let palette: Theme.Palette
+    let metrics: MonitorMetrics
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HairlineRule(palette: palette)
+            FlowLayout(spacing: metrics.caption * 1.2) {
+                ForEach(hints) { hint in
+                    HStack(spacing: metrics.caption * 0.4) {
+                        Text(hint.key).foregroundStyle(palette.ink)
+                        Text(hint.label).foregroundStyle(palette.muted)
+                    }
+                    .font(.mono(metrics.caption))
+                    .fixedSize()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.padding)
+            .padding(.vertical, metrics.caption * 0.6)
+        }
     }
 }
 
@@ -456,7 +516,6 @@ private struct MonitorOverlayView: View {
 
     var body: some View {
         switch desk.overlay {
-        case .palette(let menu): panel(palette(for: menu))
         case .entry(let entry): panel(entryView(entry))
         case .finish(let finish): panel(finishView(finish))
         case .help: panel(helpView)
@@ -492,22 +551,6 @@ private struct MonitorOverlayView: View {
         .padding(.vertical, metrics.caption * 0.5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(isLit ? sheet.accent : .clear)
-    }
-
-    private func palette(for menu: MonitorPalette) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(menu.query.isEmpty ? "Type where to go, or what to do" : menu.query)
-                .font(.mono(metrics.title))
-                .foregroundStyle(menu.query.isEmpty ? sheet.dim : sheet.ink)
-                .padding(metrics.text)
-            HairlineRule(palette: sheet)
-            if menu.rows.isEmpty {
-                Text("Nothing matches").font(.mono(metrics.text)).foregroundStyle(sheet.muted).padding(metrics.text)
-            }
-            ForEach(menu.rows) { row in
-                line(row.title, detail: row.detail, isLit: row.id == menu.selected)
-            }
-        }
     }
 
     @ViewBuilder

@@ -56,6 +56,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     }
 
     var triageWaiting: Int { triage.session?.deleteCount ?? 0 }
+    var triageShowing: Bool { triage.session != nil && !triage.paused }
 
     var triageIndex: Int {
         get { triage.session?.index ?? 0 }
@@ -217,6 +218,13 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     func skipOrganised() { organise?.skip() }
 
     var organiseOpen: Bool { organiseHolder.isOpen }
+
+    var organiseOneAlbum: Bool {
+        get { organise?.singleAlbum ?? UserDefaults.standard.bool(forKey: "organise.singleAlbum") }
+        set {
+            if let organise { organise.singleAlbum = newValue } else { UserDefaults.standard.set(newValue, forKey: "organise.singleAlbum") }
+        }
+    }
     func resumeOrganise() { organiseHolder.resume() }
 
     /// Anything filed is filed already, and each step saves as it goes. The place

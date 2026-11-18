@@ -119,7 +119,7 @@ final class OrganiseSession {
         guard folder.startAccessingSecurityScopedResource() else {
             return .failure(FolderProblem(message: "BestShot couldn't open that folder."))
         }
-        let done = OrganisedFiles.done
+        let done = OrganisedFiles.done()
         let files = await Task.detached { FolderPhotos.list(in: folder, order: order, excluding: done) }.value
         guard !files.isEmpty else {
             folder.stopAccessingSecurityScopedResource()
@@ -403,20 +403,45 @@ final class OrganiseSession {
     }
 }
 
-/// Files from Files already added to the library, by path, with their photo's id there. Kept
-/// on this device, so a file filed in a session that then ended with Skip or a quit isn't
-/// imported again the next time it comes up (it was held in memory only).
+/// What a file is, beyond its path: its size and when it was last written, to the second. A camera
+/// card reuses DCIM/100APPLE/IMG_0001 for a new photo; by path alone that was taken as the photo
+/// organised or imported before (review L54). Nil when the file can't be read.
+enum FileFingerprint {
+    static func of(_ url: URL) -> String? {
+        var url = url
+        url.removeAllCachedResourceValues()   // a URL caches what it read: the file may have changed since
+        guard let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+              let size = v.fileSize else { return nil }
+        let when = v.contentModificationDate.map { Int($0.timeIntervalSince1970) } ?? 0
+        return "\(size)-\(when)"
+    }
+
+    /// True unless both are known and differ: an entry from before fingerprints, or a file that
+    /// can't be read now, still counts as the same.
+    static func same(_ recorded: String?, _ url: URL) -> Bool {
+        guard let recorded, !recorded.isEmpty, let now = of(url) else { return true }
+        return recorded == now
+    }
+}
+
+/// Files from Files already added to the library, by path, with their photo's id there and what the
+/// file was. Kept on this device, so a file filed in a session that then ended with Skip or a quit
+/// isn't imported again the next time it comes up (it was held in memory only).
 enum ImportedFiles {
     private static let key = "organise.filesImported"
     private static let keep = 20_000
+    /// Between the photo's id and the file's fingerprint in a stored value.
+    private static let mark = "\u{1F}"
 
     static func assetID(for url: URL, in defaults: UserDefaults = .standard) -> String? {
-        (defaults.dictionary(forKey: key) as? [String: String])?[OrganisedFiles.key(for: url)]
+        guard let value = (defaults.dictionary(forKey: key) as? [String: String])?[OrganisedFiles.key(for: url)] else { return nil }
+        let parts = value.components(separatedBy: mark)
+        return FileFingerprint.same(parts.count > 1 ? parts[1] : nil, url) ? parts[0] : nil
     }
 
     static func remember(_ url: URL, as assetID: String, in defaults: UserDefaults = .standard) {
         var all = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
-        all[OrganisedFiles.key(for: url)] = assetID
+        all[OrganisedFiles.key(for: url)] = assetID + (FileFingerprint.of(url).map { mark + $0 } ?? "")
         if all.count > keep { all = Dictionary(uniqueKeysWithValues: all.sorted { $0.key < $1.key }.suffix(keep).map { ($0.key, $0.value) }) }
         defaults.set(all, forKey: key)
     }
@@ -429,37 +454,53 @@ enum ImportedFiles {
 }
 
 /// Files from Files that Next has been pressed on, so they don't come up
-/// again. Kept on this device, by path.
+/// again. Kept on this device, by path, with what the file was (`FileFingerprint`).
 enum OrganisedFiles {
     private static let key = "organise.filesDone"
+    private static let printsKey = "organise.filesDoneFingerprints"
     private static let keep = 20_000
 
     static func key(for url: URL) -> String { url.standardizedFileURL.path }
 
-    static var done: Set<String> {
-        Set((UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]).keys)
+    /// Path to fingerprint ("" for one marked before fingerprints).
+    static func done(in defaults: UserDefaults = .standard) -> [String: String] {
+        let paths = (defaults.dictionary(forKey: key) as? [String: Double] ?? [:]).keys
+        let prints = defaults.dictionary(forKey: printsKey) as? [String: String] ?? [:]
+        return Dictionary(uniqueKeysWithValues: paths.map { ($0, prints[$0] ?? "") })
     }
 
-    static func unmark(_ url: URL) {
-        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+    static func unmark(_ url: URL, in defaults: UserDefaults = .standard) {
+        var all = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
+        var prints = defaults.dictionary(forKey: printsKey) as? [String: String] ?? [:]
         all[key(for: url)] = nil
-        UserDefaults.standard.set(all, forKey: key)
+        prints[key(for: url)] = nil
+        defaults.set(all, forKey: key)
+        defaults.set(prints, forKey: printsKey)
     }
 
-    static func mark(_ url: URL) {
-        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+    static func mark(_ url: URL, in defaults: UserDefaults = .standard) {
+        var all = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
+        var prints = defaults.dictionary(forKey: printsKey) as? [String: String] ?? [:]
         all[key(for: url)] = Date().timeIntervalSince1970
+        prints[key(for: url)] = FileFingerprint.of(url)
         if all.count > keep {
-            for (k, _) in all.sorted(by: { $0.value < $1.value }).prefix(all.count - keep) { all[k] = nil }
+            for (k, _) in all.sorted(by: { $0.value < $1.value }).prefix(all.count - keep) { all[k] = nil; prints[k] = nil }
         }
-        UserDefaults.standard.set(all, forKey: key)
+        defaults.set(all, forKey: key)
+        defaults.set(prints, forKey: printsKey)
     }
 }
 
 /// The photo files in a folder from Files and the folders inside it (a camera
 /// import keeps them in DCIM/100APPLE and so on), oldest or newest first.
 enum FolderPhotos {
-    static func list(in folder: URL, order: SessionOrder, excluding done: Set<String> = []) -> [URL] {
+    static func list(in folder: URL, order: SessionOrder, excluding done: Set<String>) -> [URL] {
+        list(in: folder, order: order, excluding: Dictionary(uniqueKeysWithValues: done.map { ($0, "") }))
+    }
+
+    /// `done`: path to fingerprint, as `OrganisedFiles.done`. A path that's done but now holds
+    /// another file (a new card's IMG_0001) comes up.
+    static func list(in folder: URL, order: SessionOrder, excluding done: [String: String] = [:]) -> [URL] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentTypeKey, .creationDateKey, .contentModificationDateKey]
         guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys,
                                                           options: [.skipsHiddenFiles, .skipsPackageDescendants])
@@ -469,7 +510,7 @@ enum FolderPhotos {
             guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
                   let type = values.contentType ?? UTType(filenameExtension: url.pathExtension),
                   type.conforms(to: .image),
-                  !done.contains(OrganisedFiles.key(for: url))
+                  !(done[OrganisedFiles.key(for: url)].map { FileFingerprint.same($0, url) } ?? false)
             else { continue }
             found.append((url, values.creationDate ?? values.contentModificationDate ?? .distantPast))
         }

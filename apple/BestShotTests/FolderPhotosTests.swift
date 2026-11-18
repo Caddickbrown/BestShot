@@ -46,6 +46,20 @@ final class FolderPhotosTests: XCTestCase {
             .map(\.lastPathComponent)
         XCTAssertEqual(names, ["todo.jpg"])
     }
+
+    /// Review L54: a new card reuses DCIM/100APPLE/IMG_0001. A file organised before is known by
+    /// what it is (size and date), not by its path alone, so the new photo there comes up.
+    func testANewPhotoAtAnOrganisedPathComesUp() throws {
+        let suite = "organised-files-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let url = try file("DCIM/100APPLE/IMG_0001.JPG", daysAgo: 30)
+        OrganisedFiles.mark(url, in: defaults)
+        XCTAssertEqual(FolderPhotos.list(in: folder, order: .oldest, excluding: OrganisedFiles.done(in: defaults)), [])
+        try Data(repeating: 0xAB, count: 4_096).write(to: url)   // the next card's IMG_0001
+        XCTAssertEqual(FolderPhotos.list(in: folder, order: .oldest, excluding: OrganisedFiles.done(in: defaults))
+                        .map(\.lastPathComponent), ["IMG_0001.JPG"])
+    }
 }
 
 /// 17 Nov review: a file filed in a session that ended with Skip or a quit is remembered, so the
@@ -61,6 +75,33 @@ final class ImportedFilesTests: XCTestCase {
         XCTAssertEqual(ImportedFiles.assetID(for: URL(fileURLWithPath: "/tmp/DCIM/./100APPLE/IMG_0001.JPG"), in: defaults), "ABC/L0/001")
         ImportedFiles.forget(url, in: defaults)
         XCTAssertNil(ImportedFiles.assetID(for: url, in: defaults))
+    }
+}
+
+/// Review L54: the photo imported from a reused card path is a new photo, not the old one.
+final class ImportedFilesFingerprintTests: XCTestCase {
+    func testAnotherFileAtTheSamePathIsNotTheImportedOne() throws {
+        let suite = "imported-fp-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("IMG_0001.JPG")
+        try Data([0xFF, 0xD8, 0xFF]).write(to: url)
+        ImportedFiles.remember(url, as: "ABC/L0/001", in: defaults)
+        XCTAssertEqual(ImportedFiles.assetID(for: url, in: defaults), "ABC/L0/001")
+        try Data(repeating: 0xAB, count: 4_096).write(to: url)
+        XCTAssertNil(ImportedFiles.assetID(for: url, in: defaults), "the new card's photo would never be added")
+    }
+
+    func testAnEntryFromBeforeFingerprintsStillCounts() {
+        let suite = "imported-old-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let url = URL(fileURLWithPath: "/tmp/DCIM/100APPLE/IMG_0009.JPG")
+        defaults.set([OrganisedFiles.key(for: url): "OLD/L0/001"], forKey: "organise.filesImported")
+        XCTAssertEqual(ImportedFiles.assetID(for: url, in: defaults), "OLD/L0/001")
     }
 }
 

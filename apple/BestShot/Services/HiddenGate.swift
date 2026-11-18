@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import SwiftUI
 #if os(iOS)
 import UIKit
 #else
@@ -9,6 +10,7 @@ import AppKit
 /// Photos' Hidden album opens only after Face ID (or Touch ID, or the passcode),
 /// as it does in Photos, and locks again whenever BestShot goes to the background.
 @MainActor
+@Observable
 final class HiddenGate {
     static let shared = HiddenGate()
     private(set) var isUnlocked = false
@@ -39,5 +41,35 @@ final class HiddenGate {
     /// For starting a session: anything but Hidden goes straight through.
     func allows(_ source: TriageSourceOption) async -> Bool {
         source.isHidden ? await unlock() : true
+    }
+}
+
+extension View {
+    /// Covers a session holding Hidden photos while Hidden is locked. The lock was only checked
+    /// when a session started, so one resumed after BestShot had been in the background showed
+    /// the Hidden photos again with no Face ID.
+    func hiddenLock(_ holdsHidden: Bool) -> some View {
+        modifier(HiddenLockCover(holdsHidden: holdsHidden))
+    }
+}
+
+private struct HiddenLockCover: ViewModifier {
+    let holdsHidden: Bool
+    @State private var gate = HiddenGate.shared
+
+    func body(content: Content) -> some View {
+        if holdsHidden && !gate.isUnlocked {
+            VStack(spacing: 16) {
+                Image(systemName: "lock.fill").font(.largeTitle).foregroundStyle(Theme.table.muted)
+                Text("Hidden is locked").font(.sectionTitle)
+                Button("Unlock") { Task { _ = await gate.unlock() } }
+                    .buttonStyle(.pill)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .tableSurface()
+            .task { _ = await gate.unlock() }
+        } else {
+            content
+        }
     }
 }

@@ -39,9 +39,13 @@ struct TriageHomeView: View {
             if let session, !paused {
                 TriageView(session: session) {
                     self.session = nil
+                    // The photos it just deleted were still listed as waiting: the marks don't
+                    // change on a delete, so the onChange below never ran again.
+                    findWaitingDeletes()
                 } onLeave: {
                     holder.leave()
                 }
+                .hiddenLock(session.holdsHidden)
             } else {
                 // Its own heading, as Rank has: no title in the bar over it.
                 VStack(spacing: 0) {

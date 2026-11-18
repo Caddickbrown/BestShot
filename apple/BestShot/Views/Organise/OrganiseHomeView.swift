@@ -27,6 +27,7 @@ struct OrganiseHomeView: View {
             if let session = holder.session, !holder.paused {
                 // Done keeps the place (and Undo) to resume; the end just ends.
                 OrganiseView(session: session) { holder.leave() }
+                    .hiddenLock(session.holdsHidden)
             } else {
                 VStack(spacing: 0) {
                     ScreenHeader(eyebrow: "Photos library", title: "Organise", status: holder.session == nil ? nil : "Paused")

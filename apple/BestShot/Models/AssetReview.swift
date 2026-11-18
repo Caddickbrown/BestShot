@@ -26,4 +26,11 @@ final class AssetReview {
         get { ReviewDecision(rawValue: decisionRaw) ?? .undecided }
         set { decisionRaw = newValue.rawValue }
     }
+
+    /// Takes the triage decision back. True when nothing else is kept here, so the row can go;
+    /// false when it still says the photo was organised, and it stays, undecided.
+    func undecide() -> Bool {
+        decision = .undecided
+        return !organised
+    }
 }

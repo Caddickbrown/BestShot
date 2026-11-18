@@ -12,6 +12,8 @@ struct TriageSummaryView: View {
     let onKeepGoing: () -> Void
 
     @State private var isDeleting = false
+    /// The system delete prompt was declined (or the delete failed).
+    @State private var declined = false
 
     var body: some View {
         NavigationStack {
@@ -44,6 +46,12 @@ struct TriageSummaryView: View {
                     }
                     .buttonStyle(.pill)
                     .disabled(isDeleting)
+
+                    if declined {
+                        Text("Nothing was deleted. The photos are still marked.")
+                            .font(.note)
+                            .foregroundStyle(Theme.table.muted)
+                    }
                 } else {
                     Text("Nothing marked for deletion.")
                         .font(.note)
@@ -101,9 +109,12 @@ struct TriageSummaryView: View {
 
     private func commit() {
         isDeleting = true
+        declined = false
         Task {
-            _ = await session.commitDeletions()
+            let deleted = await session.commitDeletions()
             isDeleting = false
+            // Declined or failed: the session goes on, marks and all, as on the monitor.
+            guard deleted > 0 else { declined = true; return }
             onCommit()
             dismiss()
         }

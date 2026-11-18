@@ -47,3 +47,34 @@ final class FolderPhotosTests: XCTestCase {
         XCTAssertEqual(names, ["todo.jpg"])
     }
 }
+
+/// 17 Nov review: a file filed in a session that ended with Skip or a quit is remembered, so the
+/// next session doesn't put it in Photos a second time; Undo of that import forgets it.
+final class ImportedFilesTests: XCTestCase {
+    func testAFiledFileIsRememberedThenForgotten() {
+        let suite = "imported-files-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let url = URL(fileURLWithPath: "/tmp/DCIM/100APPLE/IMG_0001.JPG")
+        XCTAssertNil(ImportedFiles.assetID(for: url, in: defaults))
+        ImportedFiles.remember(url, as: "ABC/L0/001", in: defaults)
+        XCTAssertEqual(ImportedFiles.assetID(for: URL(fileURLWithPath: "/tmp/DCIM/./100APPLE/IMG_0001.JPG"), in: defaults), "ABC/L0/001")
+        ImportedFiles.forget(url, in: defaults)
+        XCTAssertNil(ImportedFiles.assetID(for: url, in: defaults))
+    }
+}
+
+/// 17 Nov review: Undo in Triage took the whole review row away, `organised` and all, so an
+/// organised photo came up in Organise again.
+final class AssetReviewUndecideTests: XCTestCase {
+    func testAnOrganisedRowStaysUndecided() {
+        let row = AssetReview(assetLocalID: "a", decision: .kept, organised: true)
+        XCTAssertFalse(row.undecide())
+        XCTAssertEqual(row.decision, .undecided)
+        XCTAssertTrue(row.organised)
+    }
+
+    func testARowWithOnlyADecisionGoes() {
+        XCTAssertTrue(AssetReview(assetLocalID: "b", decision: .deleted).undecide())
+    }
+}

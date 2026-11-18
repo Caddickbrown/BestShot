@@ -15,6 +15,8 @@ import Observation
 final class TriageSession {
 
     let assets: [PHAsset]
+    /// From Hidden: covered while Hidden is locked (`hiddenLock`).
+    let holdsHidden: Bool
     /// Current focus index. When == assets.count the session is complete.
     var index: Int = 0
 
@@ -36,6 +38,7 @@ final class TriageSession {
 
     init(assets: [PHAsset], context: ModelContext, tags: [String] = [], marks: PhotoMarkStore? = nil) {
         self.assets = assets
+        self.holdsHidden = assets.contains(where: \.isHidden)
         self.context = context
         self.tags = tags
         self.marks = tags.isEmpty ? nil : marks
@@ -161,20 +164,13 @@ final class TriageSession {
 
     /// Commit the session: batch-delete everything marked for deletion. Returns
     /// the number actually deleted (0 if the user cancelled the system prompt).
+    /// Cancelled or failed, the marks stay, in memory and saved: the session goes on,
+    /// and the photos can be deleted from the summary again or from "waiting to be
+    /// deleted" later. (They were reverted to undecided, and the session ended anyway.)
     func commitDeletions() async -> Int {
         let toDelete = pendingDeletions
         guard !toDelete.isEmpty else { return 0 }
-        let confirmed = await library.deleteAssets(toDelete)
-        if confirmed {
-            return toDelete.count
-        } else {
-            // User cancelled: revert those to undecided so they can be re-triaged.
-            for asset in toDelete {
-                decisions[asset.localIdentifier] = .undecided
-                removePersisted(id: asset.localIdentifier)
-            }
-            return 0
-        }
+        return await library.deleteAssets(toDelete) ? toDelete.count : 0
     }
 
     // MARK: - Persistence
@@ -189,9 +185,11 @@ final class TriageSession {
         try? context.save()
     }
 
+    /// Takes the decision back. A row that also says the photo was organised stays, undecided:
+    /// deleting it made an organised photo come up in Organise again after an Undo here.
     private func removePersisted(id: String) {
         if let existing = fetchReview(id: id) {
-            context.delete(existing)
+            if existing.undecide() { context.delete(existing) }
             try? context.save()
         }
     }

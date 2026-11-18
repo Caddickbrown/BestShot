@@ -33,6 +33,8 @@ enum OrganiseItem: Equatable {
 final class OrganiseSession {
 
     let items: [OrganiseItem]
+    /// From Hidden: covered while Hidden is locked (`hiddenLock`).
+    let holdsHidden: Bool
     var index: Int = 0 {
         didSet {
             loadMembership()
@@ -80,6 +82,7 @@ final class OrganiseSession {
 
     init(assets: [PHAsset], albums: [PHAssetCollection], folders: [String: String] = [:], context: ModelContext) {
         self.items = assets.map(OrganiseItem.asset)
+        self.holdsHidden = assets.contains(where: \.isHidden)
         self.albums = AlbumRecency.ordered(albums)
         AlbumRecency.forgetMissing(Set(albums.map(\.localIdentifier)))
         self.folders = folders
@@ -93,6 +96,7 @@ final class OrganiseSession {
     /// access already started; the session stops it when it ends.
     init(files: [URL], folder: URL, albums: [PHAssetCollection], folders: [String: String] = [:], context: ModelContext) {
         self.items = files.map(OrganiseItem.file)
+        self.holdsHidden = false
         self.albums = AlbumRecency.ordered(albums)
         AlbumRecency.forgetMissing(Set(albums.map(\.localIdentifier)))
         self.folders = folders
@@ -135,9 +139,21 @@ final class OrganiseSession {
         for i in [index, index + 1] where items.indices.contains(i) {
             let item = items[i]
             guard added[item.id] == nil else { continue }
-            guard case .asset(let asset) = item else {
-                added[item.id] = []
-                continue
+            let asset: PHAsset
+            switch item {
+            case .asset(let a):
+                asset = a
+            case .file(let url):
+                // Filed in an earlier session that ended with Skip or a quit: its photo is
+                // already in the library, so it isn't added a second time.
+                guard let id = ImportedFiles.assetID(for: url),
+                      let found = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
+                else {
+                    added[item.id] = []
+                    continue
+                }
+                imported[item.id] = found
+                asset = found
             }
             let found = PHAssetCollection.fetchAssetCollectionsContaining(asset, with: .album, options: nil)
             var ids = Set<String>()
@@ -189,6 +205,7 @@ final class OrganiseSession {
                 return nil
             }
             imported[item.id] = asset
+            ImportedFiles.remember(url, as: asset.localIdentifier)
             return asset
         }
     }
@@ -326,6 +343,7 @@ final class OrganiseSession {
                 }
                 if wasImport, !failed, await library.deleteAssets([asset]) {
                     imported[itemID] = nil
+                    if case .file(let url)? = items.first(where: { $0.id == itemID }) { ImportedFiles.forget(url) }
                     added[itemID] = []
                 }
             case .removed(let itemID, let albumID):
@@ -382,6 +400,31 @@ final class OrganiseSession {
             context.insert(AssetReview(assetLocalID: id, decision: .undecided, organised: true))
         }
         try? context.save()
+    }
+}
+
+/// Files from Files already added to the library, by path, with their photo's id there. Kept
+/// on this device, so a file filed in a session that then ended with Skip or a quit isn't
+/// imported again the next time it comes up (it was held in memory only).
+enum ImportedFiles {
+    private static let key = "organise.filesImported"
+    private static let keep = 20_000
+
+    static func assetID(for url: URL, in defaults: UserDefaults = .standard) -> String? {
+        (defaults.dictionary(forKey: key) as? [String: String])?[OrganisedFiles.key(for: url)]
+    }
+
+    static func remember(_ url: URL, as assetID: String, in defaults: UserDefaults = .standard) {
+        var all = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
+        all[OrganisedFiles.key(for: url)] = assetID
+        if all.count > keep { all = Dictionary(uniqueKeysWithValues: all.sorted { $0.key < $1.key }.suffix(keep).map { ($0.key, $0.value) }) }
+        defaults.set(all, forKey: key)
+    }
+
+    static func forget(_ url: URL, in defaults: UserDefaults = .standard) {
+        var all = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
+        all[OrganisedFiles.key(for: url)] = nil
+        defaults.set(all, forKey: key)
     }
 }
 

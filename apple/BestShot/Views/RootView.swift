@@ -238,6 +238,12 @@ struct RootView: View {
         case .deleteProject(let id):
             // The same question as the menu's Delete: nothing goes without it.
             deleting = projects.first { $0.uuid == id }
+        case .projectRemoved(let id):
+            // Deleted from the monitor, which asked first: let go of it here.
+            if selection == .project(id) {
+                selection = nil
+                compactColumn = .sidebar
+            }
         default:
             break
         }

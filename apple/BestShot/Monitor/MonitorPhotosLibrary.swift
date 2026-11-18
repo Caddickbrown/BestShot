@@ -106,7 +106,7 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         }
     }
 
-    func startTriage(order: SessionOrder, source: TriageSourceOption) async -> String? {
+    func startTriage(order: SessionOrder, source: TriageSourceOption, tags: [String]) async -> String? {
         guard triage.session == nil else { return nil }
         guard await HiddenGate.shared.allows(source) else { return "Hidden stays locked without Face ID." }
         let found = TriageHomeView.fetchSession(order: order, source: source, context: context)
@@ -115,8 +115,35 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         }
         assets = Dictionary(found.map { ($0.localIdentifier, $0) }, uniquingKeysWith: { first, _ in first })
         triage.paused = false
-        triage.session = TriageSession(assets: found, context: context)
+        triage.session = TriageSession(assets: found, context: context, tags: tags, marks: tags.isEmpty ? nil : .shared)
         return nil
+    }
+
+    // Photos marked to delete by a run that ended early: the phone's start screen's
+    // "Delete Them" and "Keep Them", lifted out of the view.
+
+    private var waitingReviews: [AssetReview] {
+        ((try? context.fetch(FetchDescriptor<AssetReview>())) ?? []).filter { $0.decision == .deleted }
+    }
+
+    var waitingDeletes: Int {
+        guard triage.session == nil else { return 0 }
+        let ids = waitingReviews.map(\.assetLocalID)
+        guard !ids.isEmpty else { return 0 }
+        return PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).count
+    }
+
+    func deleteWaiting() async -> Int {
+        let ids = waitingReviews.map(\.assetLocalID)
+        let found = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+        let assets = found.objects(at: IndexSet(0..<found.count))
+        guard !assets.isEmpty else { return 0 }
+        return await photos.deleteAssets(assets) ? assets.count : 0
+    }
+
+    func keepWaiting() {
+        for review in waitingReviews { context.delete(review) }
+        try? context.save()
     }
 
     func leaveTriage() { triage.leave() }
@@ -249,12 +276,91 @@ final class MonitorPhotosLibrary: MonitorLibrary {
         }
         return shown.map {
             MonitorMediaItem(id: $0.uuid.uuidString, title: $0.filename,
-                             detail: ([$0.project?.name, $0.tags.isEmpty ? nil : $0.tags.joined(separator: ", ")]).compactMap { $0 }.joined(separator: " · "),
-                             tags: $0.tags)
+                             detail: ([$0.project?.name, $0.rank.map { "#\($0 + 1)" }, $0.tags.isEmpty ? nil : $0.tags.joined(separator: ", ")])
+                                .compactMap { $0 }.joined(separator: " · "),
+                             tags: $0.tags, note: $0.comment, isVideo: $0.mediaType == .video, rank: $0.rank,
+                             size: $0.fileSize, imported: $0.importedAt, project: $0.project?.name)
         }
     }
 
     @ObservationIgnored private var fullSize: [String: URL] = [:]
+
+    private func project(_ id: UUID) -> Project? {
+        (try? context.fetch(FetchDescriptor<Project>(predicate: #Predicate { $0.uuid == id })))?.first
+    }
+
+    private func item(_ id: String) -> MediaItem? {
+        guard let uuid = UUID(uuidString: id) else { return nil }
+        return (try? context.fetch(FetchDescriptor<MediaItem>(predicate: #Predicate { $0.uuid == uuid })))?.first
+    }
+
+    func newProject(_ name: String) -> UUID? {
+        guard let clean = ProjectLibrary.cleanName(name) else { return nil }
+        let all = (try? context.fetch(FetchDescriptor<Project>())) ?? []
+        let project = Project(name: clean, sortIndex: (all.map(\.sortIndex).max() ?? 0) + 1)
+        context.insert(project)
+        try? context.save()
+        return project.uuid
+    }
+
+    func renameProject(_ id: UUID, to name: String) -> Bool {
+        guard let project = project(id) else { return false }
+        return ProjectLibrary.rename(project, to: name, context: context)
+    }
+
+    func projectRemoval(_ id: UUID) -> String {
+        project(id).map(ProjectLibrary.removalMessage) ?? ""
+    }
+
+    func removeProject(_ id: UUID) async -> String? {
+        // The phone lets go of the project first, if it's showing it.
+        AppCommands.shared.send(.projectRemoved(id))
+        try? await Task.sleep(for: .milliseconds(300))
+        guard let project = project(id) else { return nil }
+        do {
+            try ProjectLibrary.remove(project, context: context)
+            return nil
+        } catch {
+            return "Its photos couldn't be moved to Files, so it's been kept. \(error.localizedDescription)"
+        }
+    }
+
+    func setMediaTags(_ id: String, _ tags: [String]) {
+        guard let item = item(id) else { return }
+        var seen = Set<String>()
+        item.tags = tags.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        try? context.save()
+    }
+
+    func setMediaNote(_ id: String, _ note: String) {
+        guard let item = item(id) else { return }
+        item.comment = note
+        try? context.save()
+    }
+
+    func projectBoard(_ id: UUID) -> RankBoard? {
+        guard let project = project(id) else { return nil }
+        let items = project.items
+        let ids = items.sorted(by: SortOption.rank.comparator).map(\.uuid.uuidString)
+        let ranking = items.filter { $0.rank != nil }.sorted(by: SortOption.rank.comparator).map(\.uuid.uuidString)
+        let context = context
+        return RankBoard(title: project.name, media: ProjectRankMedia(library: self),
+                         pools: [RankPool(id: "project", title: project.name, ids: ids)], ranking: ranking,
+                         persist: { [weak self] order in
+                             guard let self, let project = self.project(id) else { return }
+                             let byID = Dictionary(project.items.map { ($0.uuid.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
+                             let placed = Set(order)
+                             for item in project.items where !placed.contains(item.uuid.uuidString) { item.rank = nil }
+                             RankingService.applyOrder(order.compactMap { byID[$0] }, context: context)
+                         })
+    }
+
+    func clearProjectRankings(_ id: UUID) {
+        guard let project = project(id) else { return }
+        RankingService.clearRankings(project: project, context: context)
+    }
+
+    func caption(_ id: String) -> String { item(id)?.filename ?? "" }
 
     // MARK: Settings
 
@@ -325,4 +431,14 @@ private struct MonitorAssetImage: View {
             if !Task.isCancelled { image = full ?? image }
         }
     }
+}
+
+/// A project's photos, drawn for the monitor's Compare.
+@MainActor
+private final class ProjectRankMedia: RankMedia {
+    weak var library: MonitorPhotosLibrary?
+    init(library: MonitorPhotosLibrary) { self.library = library }
+    func thumbnail(_ id: String) -> AnyView { library?.picture(id, longEdge: 400, fill: true) ?? AnyView(Color.clear) }
+    func fullImage(_ id: String) -> AnyView { library?.picture(id, longEdge: 2600, fill: false) ?? AnyView(Color.clear) }
+    func caption(_ id: String) -> String { library?.caption(id) ?? "" }
 }

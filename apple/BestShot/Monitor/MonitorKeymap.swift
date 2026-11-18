@@ -78,6 +78,9 @@ enum MonitorAction: Equatable {
     case choose(RankChoice), compareUndo, startCompare
     case nextPhoto, skipPhoto, newAlbum
     case type(String), deleteLetter, complete, submit
+    /// Opens the ⌘K menu at this command's step: `r` is "Rename…" there.
+    case command(String)
+    case slideshow
 
     /// Held down, these keep going. A mark never does: one press, one mark.
     var repeats: Bool {
@@ -124,6 +127,13 @@ struct MonitorSituation: Equatable {
     /// Deleting: the phone is asking, and no key does anything until it's answered.
     var finishBusy = false
     var hasMediaNeighbours = false
+    /// A project's or All Media's list; a photo or video is lit, or open.
+    var mediaList = false
+    var mediaItem = false
+    var inProject = false
+    /// The Projects list, with a project lit.
+    var projectsList = false
+    var projectLit = false
 }
 
 struct MonitorBinding: Identifiable {
@@ -286,8 +296,30 @@ enum MonitorKeymap {
                 return nil
             })
         }
-        if s.canCompare {
+        if s.canCompare, !s.mediaList {
             keys.append(MonitorBinding("c", "Compare", .startCompare) { $0.matches(.char("c")) })
+        }
+        if s.projectsList {
+            keys.append(MonitorBinding("n", "New project", .command("project.new")) { $0.matches(.char("n")) })
+            if s.projectLit {
+                keys.append(MonitorBinding("r", "Rename", .command("project.rename")) { $0.matches(.char("r")) })
+                keys.append(MonitorBinding("⌘⌫", "Delete project", .command("project.delete")) { $0.matches(.backspace, .command) })
+            }
+        }
+        if s.mediaList {
+            keys.append(MonitorBinding("s", "Sort", .command("project.sort")) { $0.matches(.char("s")) })
+            keys.append(MonitorBinding("f", "Show", .command("project.filter")) { $0.matches(.char("f")) })
+            if s.mediaItem {
+                keys.append(MonitorBinding("t", "Tags", .command("media.tags")) { $0.matches(.char("t")) })
+                keys.append(MonitorBinding("e", "Note", .command("media.note")) { $0.matches(.char("e")) })
+            }
+            if s.inProject {
+                if s.canCompare {
+                    keys.append(MonitorBinding("c", "Compare", .startCompare) { $0.matches(.char("c")) })
+                }
+                keys.append(MonitorBinding("r", "Rename", .command("project.rename")) { $0.matches(.char("r")) })
+                keys.append(MonitorBinding("⌘⌫", "Delete project", .command("project.delete")) { $0.matches(.backspace, .command) })
+            }
         }
         if s.organising {
             keys.append(MonitorBinding("→", "Next photo", .nextPhoto) { $0.matches(.right) })
@@ -312,6 +344,7 @@ enum MonitorKeymap {
         MonitorBinding("7", "Yellow maybe", .label(.yellow)) { $0.matches(.char("7")) },
         MonitorBinding("6", "Red delete", .label(.red)) { $0.matches(.char("6")) },
         MonitorBinding("9", "Blue", .label(.blue)) { $0.matches(.char("9")) },
+        MonitorBinding("p", "Purple", .label(.purple)) { $0.matches(.char("p")) },
         MonitorBinding("u", "Clear colour", .clearMark) { $0.matches(.char("u")) },
         MonitorBinding("t", "Tag", .tag) { $0.matches(.char("t")) },
         MonitorBinding("h", "Favourite", .favourite) { $0.matches(.char("h")) },
@@ -402,6 +435,13 @@ enum MonitorKeymap {
                 if k.matches(.left) || k.matches(.up) || k.matches(.char("k")) { return .move(-1) }
                 return nil
             })
+        }
+        if s.mediaItem {
+            keys.append(MonitorBinding("t", "Tags", .command("media.tags")) { $0.matches(.char("t")) })
+            keys.append(MonitorBinding("e", "Note", .command("media.note")) { $0.matches(.char("e")) })
+        }
+        if s.hasMediaNeighbours {
+            keys.append(MonitorBinding("p", "Slideshow", .slideshow) { $0.matches(.char("p")) })
         }
         return keys
     }

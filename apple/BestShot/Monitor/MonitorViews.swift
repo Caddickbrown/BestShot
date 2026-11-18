@@ -47,6 +47,7 @@ struct MonitorRoot: View {
                 } else {
                     MonitorScreen(desk: desk, palette: palette, metrics: metrics, size: geo.size)
                         .overlay { MonitorOverlayView(desk: desk, palette: palette, metrics: metrics) }
+                        .overlay(alignment: .bottom) { notices(metrics) }
                         .overlay { commandPanel(metrics) }
                     if let hints = commandHints {
                         CommandHintBar(hints: hints, palette: palette, metrics: metrics)
@@ -73,6 +74,16 @@ struct MonitorRoot: View {
         if commands.onMonitor, let menu = commands.menu { return menu.hints }
         #endif
         return nil
+    }
+
+    /// Results, Undo (⌘Z) and "Finish on the phone", over the bottom of the screen.
+    @ViewBuilder
+    private func notices(_ metrics: MonitorMetrics) -> some View {
+        #if os(iOS)
+        CommandNoticeStack(z: metrics.text / 17)
+            .frame(maxWidth: metrics.text * 36)
+            .padding(metrics.padding)
+        #endif
     }
 
     @ViewBuilder
@@ -216,7 +227,7 @@ private struct MonitorScreen: View {
         if let notice = desk.notice { return notice }
         if let warning = desk.marks.warning { return warning }
         switch desk.pane {
-        case .media: return desk.mediaItems.isEmpty ? "Nothing here yet" : "\(desk.mediaItems.count) items, to look at. Importing and tags are on the phone."
+        case .media: return desk.mediaAll.isEmpty ? "Nothing here yet" : [desk.mediaQuery.isEmpty ? nil : "Finding “\(desk.mediaQuery)”", "\(desk.mediaItems.count) of \(desk.mediaAll.count) · \(desk.mediaSort.title)", "⌘K for tags, notes, sort and more"].compactMap { $0 }.joined(separator: " · ")
         default: return ""
         }
     }
@@ -418,7 +429,9 @@ private struct MonitorMediaPhoto: View {
                 HStack {
                     Text(item.title).foregroundStyle(Theme.viewfinder.ink)
                     Text(item.tags.joined(separator: "  ")).foregroundStyle(Theme.viewfinder.muted)
+                    if !item.note.isEmpty { Text("“\(item.note)”").foregroundStyle(Theme.viewfinder.muted) }
                     Spacer()
+                    if desk.slideshow { Text("Slideshow · p stops").foregroundStyle(Theme.viewfinder.muted) }
                     Text("\(desk.mediaIndex + 1) / \(desk.mediaItems.count)").foregroundStyle(Theme.viewfinder.muted)
                 }
                 .font(.mono(metrics.text))
@@ -487,7 +500,7 @@ private struct MonitorRankCompare: View {
     let metrics: MonitorMetrics
 
     var body: some View {
-        if let board = desk.board, let run = board.compare {
+        if let board = desk.compareBoard, let run = board.compare {
             VStack(spacing: 0) {
                 if let pair = run.pair {
                     HStack(spacing: metrics.caption) {
@@ -557,9 +570,12 @@ private struct MonitorOverlayView: View {
     private func entryView(_ entry: MonitorEntry) -> some View {
         VStack(alignment: .leading, spacing: metrics.caption) {
             Text(entry.title).font(.mono(metrics.caption)).foregroundStyle(sheet.muted)
-            Text(entry.text.isEmpty ? " " : entry.text + "▏")
-                .font(.mono(metrics.title))
-                .foregroundStyle(sheet.ink)
+            HStack(spacing: 1) {
+                Text(entry.text.isEmpty ? " " : entry.text)
+                    .font(.mono(metrics.title))
+                    .foregroundStyle(sheet.ink)
+                if !entry.text.isEmpty { Caret(font: .mono(metrics.title), color: sheet.accent) }
+            }
             if entry.kind == .album {
                 if !entry.suggestions.isEmpty {
                     Text(entry.chosen == nil ? "Already there? ↓ to choose one, or ↵ uses \u{201C}\(entry.text.trimmingCharacters(in: .whitespaces))\u{201D} as typed"

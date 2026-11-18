@@ -84,6 +84,20 @@ enum BestShotCommand: Equatable {
     case downloadSelected, joinSelected, deleteSelected
     case exportJSON, exportCSV, downloadAll
     case clearProjectRankings
+    /// The monitor removed a project: the phone stops showing it, if it is.
+    case projectRemoved(UUID)
+
+    // Imported media, on the monitor
+    case findMedia(String)
+    case setMediaTags(String, [String])
+    case noteMedia(String, String)
+    case slideshow
+
+    // Triage start, on the monitor
+    case runTags([String])
+    case deleteWaiting, keepWaiting
+    /// Compare on the monitor, ended without keeping the answers.
+    case compareDiscard
 
     // Settings
     case appearance(Appearance)
@@ -128,6 +142,16 @@ struct BestShotCommandState: Equatable {
         var id: UUID
         var name: String
         var count = 0
+        /// What Delete says first.
+        var removal = ""
+    }
+
+    /// An imported photo or video, lit on the monitor's list or open there.
+    struct MediaItem: Equatable {
+        var id: String
+        var title: String
+        var tags: [String] = []
+        var note = ""
     }
 
     /// The project on the phone's screen.
@@ -142,6 +166,7 @@ struct BestShotCommandState: Equatable {
         var selecting = false
         var selected = 0
         var canJoin = false
+        var removal = ""
     }
 
     var display = Display.phone
@@ -181,6 +206,21 @@ struct BestShotCommandState: Equatable {
     // Projects
     var projects: [Project] = []
     var project: OpenProject?
+    /// The monitor's Projects list: the project lit there.
+    var litProject: Project?
+
+    // Imported media, on the monitor
+    var mediaItem: MediaItem?
+    var mediaSort = SortOption.dateNewest
+    var mediaFilter = MediaFilter.all
+    var mediaQuery = ""
+    var mediaShown = 0
+    var slideshow = false
+
+    // Starting Triage, on the monitor
+    var runTags: [String] = []
+    /// Marked to delete by a run that ended early.
+    var waitingDeletes = 0
 
     // Settings
     var appearance = Appearance.system
@@ -213,6 +253,7 @@ struct BestShotCommandList: CommandList {
     private func photoRows(_ photo: BestShotCommandState.Photo) -> [Row] {
         let here = "This photo"
         var rows: [Row] = []
+        // monitor-alt: the colours below are the monitor's Keep (8 green) and Mark to delete (6 red); ] is next
         if !onMonitor && state.screen == .triage {
             rows += [
                 Row("photo.keep", "Keep", detail: "Swipe right", symbol: "checkmark", step: .run(.keep),
@@ -237,7 +278,7 @@ struct BestShotCommandList: CommandList {
             let name = state.name(colour)
             rows.append(Row.toggle("photo.colour.\(colour.slug)", isOn: photo.colour == colour,
                                    turnOn: "Mark \(word)", turnOff: "Take \(word) off",
-                                   detail: [name == colour.title ? nil : name, onMonitor ? colour.key : nil]
+                                   detail: [name == colour.title ? nil : name, onMonitor ? colour.monitorKey : nil]
                                        .compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
                                    symbol: "circle.fill", action: .colour(colour),
                                    synonyms: [name, "colour", "color", "label", colour == .green ? "keep" : "",
@@ -313,7 +354,20 @@ struct BestShotCommandList: CommandList {
         case .organise, .organiseStart:
             rows += organiseRows
         case .project:
-            if let project = state.project { rows += projectRows(project) }
+            if let project = state.project { rows += onMonitor ? monitorProjectRows(project) : projectRows(project) }
+        case .allMedia where onMonitor:
+            rows += mediaListRows
+            if let item = state.mediaItem { rows += mediaItemRows(item) }
+        case .mediaPhoto where onMonitor:
+            if let item = state.mediaItem { rows += mediaItemRows(item) }
+            rows.append(Row.toggle("media.slideshow", isOn: state.slideshow, turnOn: "Start slideshow", turnOff: "Stop slideshow",
+                                   detail: "p", symbol: "play.rectangle", action: .slideshow,
+                                   synonyms: ["play", "auto", "advance"]))
+        case .projects where onMonitor:
+            if let p = state.litProject {
+                rows += [renameRow(id: p.id, name: p.name, context: "“\(p.name)”"),
+                         deleteRow(id: p.id, name: p.name, removal: p.removal, context: "“\(p.name)”")]
+            }
         default:
             break
         }
@@ -390,7 +444,40 @@ struct BestShotCommandList: CommandList {
             rows.append(sourcePick(id: "triage.start", title: "Start Triage…", verb: "Triage", command: BestShotCommand.startTriage))
         }
         rows.append(orderPick(id: "triage.order", order: state.order, command: BestShotCommand.triageOrder))
+        if onMonitor {
+            rows.append(runTagsRow)
+            if state.waitingDeletes > 0 && !state.triageOpen {
+                let n = state.waitingDeletes
+                let photos = "\(n) photo\(n == 1 ? "" : "s")"
+                rows.append(Row("triage.waiting.delete", "Delete the \(photos) waiting…",
+                                detail: "From a run that ended early · iOS asks on the phone", symbol: "trash",
+                                step: .confirm(CommandConfirm(prompt: "Delete the \(photos) waiting?", title: "Delete them",
+                                                              detail: "They go to Recently Deleted once you confirm on the phone.",
+                                                              action: .deleteWaiting)),
+                                synonyms: ["waiting", "ended early", "bin"], destructive: true,
+                                onPhone: "Confirm the delete on the phone."))
+                rows.append(Row("triage.waiting.keep", "Keep the \(photos) waiting", detail: "They come up in the next run",
+                                symbol: "arrow.uturn.backward", step: .run(.keepWaiting), synonyms: ["waiting", "release", "undecide"]))
+            }
+        }
         return rows
+    }
+
+    /// "Tag what you keep": tags every photo kept in the next run gets.
+    private var runTagsRow: Row {
+        let tags = state.runTags
+        let typed = tags.joined(separator: ", ")
+        let known = state.knownTags.filter { tag in !tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }.map { tag in
+            Row("runtag.\(tag)", "Add “\(tag)”", symbol: "tag", step: .run(.runTags(tags + [tag])))
+        }
+        return Row("triage.runtags", "Tag what you keep…", detail: tags.isEmpty ? "None" : typed, symbol: "tag",
+                   step: .ask(CommandAsk(prompt: "Tags, with commas between", initial: typed, suggestions: known, symbol: "tag",
+                                         title: { $0.isEmpty ? "No tags for this run" : "Tag what I keep “\($0)”" },
+                                         make: { text in
+                                             let new = TriageTags.parse(text)
+                                             return new == tags ? nil : .runTags(new)
+                                         })),
+                   synonyms: ["run tags", "keep tags", "keyword"])
     }
 
     private func sourcePick(id: String, title: String, verb: String,
@@ -433,6 +520,11 @@ struct BestShotCommandList: CommandList {
                     step: .run(.compareUndo), synonyms: ["undo"]),
                 Row("compare.save", "Save and stop comparing", detail: "esc", symbol: "checkmark",
                     step: .run(.compareSave), synonyms: ["done", "finish", "exit"]),
+                Row("compare.discard", "Stop without saving…", symbol: "xmark",
+                    step: .confirm(CommandConfirm(prompt: "Stop and forget these answers?", title: "Stop without saving",
+                                                  detail: "The ranking stays as it was before this run.", symbol: "xmark",
+                                                  action: .compareDiscard)),
+                    synonyms: ["cancel", "discard", "abandon", "quit"], destructive: true),
             ]
         }
         if state.rankPool > 1 {
@@ -446,7 +538,7 @@ struct BestShotCommandList: CommandList {
         if state.ranked > 0 {
             rows.append(Row("rank.album", "Save ranking as an album", detail: "BestShot · Ranked, in Photos",
                             symbol: "rectangle.stack.badge.plus", step: .run(.saveRankAlbum), synonyms: ["export", "photos album"]))
-            rows.append(Row("rank.clear", "Clear ranking", detail: "Undo puts it back", symbol: "xmark.circle",
+            rows.append(Row("rank.clear", "Clear ranking", detail: onMonitor ? "⌘Z puts it back" : "Undo puts it back", symbol: "xmark.circle",
                             step: .run(.clearRanking), synonyms: ["reset", "start over", "unrank"],
                             destructive: true, undoable: true))
         }
@@ -608,6 +700,130 @@ struct BestShotCommandList: CommandList {
         return rows
     }
 
+    // MARK: - Projects and imported media, on the monitor
+    //
+    // The phone's project screen has pickers, a share sheet and alerts; the monitor
+    // gets the same actions as steps in the palette: typed names, picks, ticks and
+    // a confirm in place of the alert. Only the imports need the phone.
+
+    private func renameRow(id: UUID, name: String, context: String) -> Row {
+        Row("project.rename", "Rename…", detail: onMonitor ? "r" : nil, symbol: "pencil",
+            step: .ask(CommandAsk(prompt: "A new name", initial: name, title: { "Rename to “\($0)”" },
+                                  make: { text in
+                                      let t = text.trimmingCharacters(in: .whitespaces)
+                                      return t.isEmpty || t == name ? nil : .renameProject(id, t)
+                                  })),
+            synonyms: ["name", "title", "rename project"], context: context)
+    }
+
+    /// The phone's alert, as a question in the palette: Return deletes, Esc backs out.
+    private func deleteRow(id: UUID, name: String, removal: String, context: String) -> Row {
+        Row("project.delete", "Delete project…", detail: onMonitor ? "⌘⌫ · asks first" : "Asks first · its photos move to Files",
+            symbol: "trash",
+            step: .confirm(CommandConfirm(prompt: "Delete “\(name)”?", title: "Delete the project",
+                                          detail: removal.isEmpty ? "Its photos move to Files." : removal, action: .deleteProject(id))),
+            synonyms: ["remove", "bin", "delete project"], destructive: true, context: context)
+    }
+
+    private func monitorProjectRows(_ p: BestShotCommandState.OpenProject) -> [Row] {
+        let here = "“\(p.name)”"
+        var rows: [Row] = []
+        if p.count > 1 {
+            rows.append(Row("project.compareall", "Compare all", detail: "c", symbol: "arrow.left.arrow.right",
+                            step: .run(.compareProject(.all)), synonyms: ["rank", "pairs"], context: here))
+            if p.unranked > 0 {
+                rows.append(Row("project.comparenew", "Compare the new ones", detail: "\(p.unranked) new",
+                                symbol: "arrow.left.arrow.right", step: .run(.compareProject(.unranked)),
+                                synonyms: ["unranked", "rank"], context: here))
+            }
+        }
+        rows += [
+            Row("project.importphotos", "Import from Photos…", detail: "Chosen on the phone", symbol: "photo.on.rectangle",
+                step: .run(.importPhotos), synonyms: ["add", "library"], context: here,
+                onPhone: "Choose the photos on the phone."),
+            Row("project.importfiles", "Import from Files…", detail: "Chosen on the phone", symbol: "folder",
+                step: .run(.importFiles), synonyms: ["add", "icloud"], context: here,
+                onPhone: "Choose the files on the phone."),
+        ]
+        rows += mediaListRows
+        if let item = state.mediaItem { rows += mediaItemRows(item) }
+        if p.count > 0 {
+            rows.append(Row("project.clearranks", "Clear rankings…", symbol: "arrow.uturn.backward",
+                            step: .confirm(CommandConfirm(prompt: "Clear the rankings in “\(p.name)”?", title: "Clear rankings",
+                                                          detail: "Every photo here goes back to unranked.", symbol: "arrow.uturn.backward",
+                                                          action: .clearProjectRankings)),
+                            synonyms: ["reset", "unrank"], destructive: true, context: here))
+        }
+        rows.append(renameRow(id: p.id, name: p.name, context: here))
+        rows.append(deleteRow(id: p.id, name: p.name, removal: p.removal, context: here))
+        return rows
+    }
+
+    /// Sort, show and find, for a project or All Media.
+    private var mediaListRows: [Row] {
+        let sort = state.project?.sort ?? state.mediaSort
+        let filter = state.project?.filter ?? state.mediaFilter
+        let sorts = SortOption.allCases.map {
+            Row("sort.\($0.rawValue)", $0.title, symbol: "arrow.up.arrow.down", step: .run(.projectSort($0)), isCurrent: sort == $0)
+        }
+        let filters = MediaFilter.allCases.map {
+            Row("filter.\($0.rawValue)", $0.title, symbol: "line.3.horizontal.decrease", step: .run(.projectFilter($0)),
+                isCurrent: filter == $0)
+        }
+        let query = state.mediaQuery
+        var rows: [Row] = [
+            Row("project.sort", "Sort by…", detail: [sort.title, "s"].joined(separator: " · "), symbol: "arrow.up.arrow.down",
+                step: .pick(CommandPick(prompt: "Sort by what?", choices: sorts)), synonyms: ["order"]),
+            Row("project.filter", "Show…", detail: [filter.title, "f"].joined(separator: " · "), symbol: "line.3.horizontal.decrease",
+                step: .pick(CommandPick(prompt: "Show what?", choices: filters)), synonyms: ["filter", "photos", "videos"]),
+            Row("media.find", "Find a photo…", detail: query.isEmpty ? "Names, tags, notes" : "“\(query)” · \(state.mediaShown) found",
+                symbol: "magnifyingglass",
+                step: .ask(CommandAsk(prompt: "Names, tags or notes", initial: query, symbol: "magnifyingglass",
+                                      title: { "Find “\($0)”" },
+                                      make: { text in
+                                          let t = text.trimmingCharacters(in: .whitespaces)
+                                          return t.isEmpty || t == query ? nil : .findMedia(t)
+                                      })),
+                synonyms: ["search", "look for"]),
+        ]
+        if !query.isEmpty {
+            rows.append(Row("media.findoff", "Stop finding “\(query)”", detail: "Show them all again", symbol: "xmark.circle",
+                            step: .run(.findMedia("")), synonyms: ["clear search", "show all"]))
+        }
+        return rows
+    }
+
+    /// The lit or open item: tags, ticked, with new ones typed in; and notes.
+    private func mediaItemRows(_ item: BestShotCommandState.MediaItem) -> [Row] {
+        let here = item.title
+        let known = state.knownTags + item.tags.filter { tag in !state.knownTags.contains(tag) }
+        let options = known.map { CommandOption($0, $0) }
+        var rows: [Row] = [
+            Row("media.tags", "Tags…", detail: [item.tags.isEmpty ? "None" : item.tags.joined(separator: ", "), "t"]
+                    .joined(separator: " · "),
+                symbol: "tag",
+                step: .multi(CommandMulti(prompt: "Which tags?", options: options, ticked: item.tags,
+                                          adds: { "New tag “\($0)”" },
+                                          make: { ticks in
+                                              let tags = ticks.ids + ticks.added
+                                              return tags == item.tags ? nil : .setMediaTags(item.id, tags)
+                                          })),
+                synonyms: ["tag", "keyword", "label", "untag"], context: here),
+            Row("media.note", item.note.isEmpty ? "Add a note…" : "Edit the note…", detail: item.note.isEmpty ? "e" : "“\(item.note)” · e",
+                symbol: "note.text",
+                step: .ask(CommandAsk(prompt: "A note for this photo", initial: item.note, symbol: "note.text",
+                                      title: { "Note: “\($0)”" },
+                                      make: { text in text == item.note ? nil : .noteMedia(item.id, text) })),
+                synonyms: ["notes", "comment", "caption"], context: here),
+        ]
+        if !item.note.isEmpty {
+            rows.append(Row("media.noteoff", "Clear the note", detail: "⌘Z puts it back", symbol: "note",
+                            step: .run(.noteMedia(item.id, "")), synonyms: ["remove note", "delete comment"],
+                            destructive: true, undoable: true, context: here))
+        }
+        return rows
+    }
+
     // MARK: - Places
 
     private var places: [Row] {
@@ -627,21 +843,22 @@ struct BestShotCommandList: CommandList {
                             step: .pick(CommandPick(prompt: "Which project?", choices: choices, nothing: "No project by that name.")),
                             synonyms: ["find", "go to", "projects"]))
         }
-        if !onMonitor {
-            rows.append(Row("project.new", "New project…", symbol: "plus",
-                            step: .ask(CommandAsk(prompt: "The new project's name", symbol: "plus", title: { "Make the project “\($0)”" },
-                                                  make: { text in
-                                                      let t = text.trimmingCharacters(in: .whitespaces)
-                                                      return t.isEmpty ? nil : .newProject(t)
-                                                  })),
-                            synonyms: ["create", "add project"]))
-            #if os(iOS)
-            rows.append(Row("go.joinvideos", "Join Videos", symbol: "film.stack", step: .run(.joinVideos),
-                            synonyms: ["tools", "merge", "combine", "video"]))
-            rows.append(Row("go.anticrop", "Anti-Crop", symbol: "rectangle.split.2x1", step: .run(.antiCrop),
-                            synonyms: ["tools", "band", "cut", "remove middle"]))
-            #endif
-        } else {
+        rows.append(Row("project.new", "New project…", detail: onMonitor && state.screen == .projects ? "n" : nil, symbol: "plus",
+                        step: .ask(CommandAsk(prompt: "The new project's name", symbol: "plus", title: { "Make the project “\($0)”" },
+                                              make: { text in
+                                                  let t = text.trimmingCharacters(in: .whitespaces)
+                                                  return t.isEmpty ? nil : .newProject(t)
+                                              })),
+                        synonyms: ["create", "add project"]))
+        #if os(iOS)
+        // The tools are screens of their own, with pickers: chosen on the monitor, they open on the phone.
+        let tools = onMonitor ? "The tool opens on the phone." : nil
+        rows.append(Row("go.joinvideos", "Join Videos", detail: onMonitor ? "On the phone" : nil, symbol: "film.stack",
+                        step: .run(.joinVideos), synonyms: ["tools", "merge", "combine", "video"], onPhone: tools))
+        rows.append(Row("go.anticrop", "Anti-Crop", detail: onMonitor ? "On the phone" : nil, symbol: "rectangle.split.2x1",
+                        step: .run(.antiCrop), synonyms: ["tools", "band", "cut", "remove middle"], onPhone: tools))
+        #endif
+        if onMonitor {
             rows.append(Row("keys", "All keys", detail: "?", symbol: "keyboard", step: .run(.allKeys),
                             synonyms: ["help", "shortcuts"]))
         }
@@ -715,4 +932,9 @@ struct BestShotCommandList: CommandList {
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+extension LabelColour {
+    /// The monitor's key: the phone's, and `p` for purple, which has no digit.
+    var monitorKey: String? { key ?? (self == .purple ? "p" : nil) }
 }

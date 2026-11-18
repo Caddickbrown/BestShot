@@ -24,7 +24,9 @@ final class FakeMonitorLibrary: MonitorLibrary {
     var sources: [(option: TriageSourceOption, title: String)] = [(.allPhotos, "All Photos"), (.screenshots, "Screenshots")]
     func reloadSources() {}
     var nextSession: [String] = []
-    func startTriage(order: SessionOrder, source: TriageSourceOption) async -> String? {
+    var startedWithTags: [String]?
+    func startTriage(order: SessionOrder, source: TriageSourceOption, tags: [String]) async -> String? {
+        startedWithTags = tags
         triageIDs = nextSession
         return nextSession.isEmpty ? "Nothing found" : nil
     }
@@ -95,10 +97,51 @@ final class FakeMonitorLibrary: MonitorLibrary {
     func leaveOrganise() { if organisePhoto != nil { organisePaused = true } }
     func resumeOrganise() { organisePaused = false }
 
-    var projects: [(id: UUID, name: String, count: Int)] = []
-    func media(project: UUID?) -> [MonitorMediaItem] {
-        (0..<30).map { MonitorMediaItem(id: "m\($0)", title: "m\($0).jpg", detail: "", tags: []) }
+    var waitingDeletes = 0
+    var deletedWaiting = 0
+    func deleteWaiting() async -> Int {
+        deletedWaiting = waitingDeletes
+        waitingDeletes = 0
+        return deletedWaiting
     }
+    func keepWaiting() { waitingDeletes = 0 }
+
+    var projects: [(id: UUID, name: String, count: Int)] = []
+    /// A test's own items; otherwise thirty plain ones.
+    var items: [MonitorMediaItem]?
+    var mediaTags: [String: [String]] = [:]
+    var mediaNotes: [String: String] = [:]
+    func media(project: UUID?) -> [MonitorMediaItem] {
+        (items ?? (0..<30).map { MonitorMediaItem(id: "m\($0)", title: "m\($0).jpg", detail: "", tags: []) }).map {
+            var item = $0
+            if let tags = mediaTags[item.id] { item.tags = tags }
+            if let note = mediaNotes[item.id] { item.note = note }
+            return item
+        }
+    }
+    func newProject(_ name: String) -> UUID? {
+        let id = UUID()
+        projects.append((id, name, 0))
+        return id
+    }
+    func renameProject(_ id: UUID, to name: String) -> Bool {
+        guard let i = projects.firstIndex(where: { $0.id == id }) else { return false }
+        projects[i].name = name
+        return true
+    }
+    func projectRemoval(_ id: UUID) -> String { "Its photos move to Files." }
+    var removed: [UUID] = []
+    func removeProject(_ id: UUID) async -> String? {
+        removed.append(id)
+        projects.removeAll { $0.id == id }
+        return nil
+    }
+    func setMediaTags(_ id: String, _ tags: [String]) { mediaTags[id] = tags }
+    func setMediaNote(_ id: String, _ note: String) { mediaNotes[id] = note }
+    var projectBoards: [UUID: RankBoard] = [:]
+    func projectBoard(_ id: UUID) -> RankBoard? { projectBoards[id] }
+    var clearedRankings: [UUID] = []
+    func clearProjectRankings(_ id: UUID) { clearedRankings.append(id) }
 
     var names: [LabelColour: String] = [:]
     func labelName(_ colour: LabelColour) -> String { names[colour] ?? colour.title }
@@ -398,7 +441,7 @@ final class MonitorDeskTests: XCTestCase {
         // Everything the bar shows on the photo, by the press that fires it.
         let samples: [String: MonitorPress] = [
             "←→ jk": MonitorPress(.right), "Home End": MonitorPress(.home), "1–5 0": .typed("3"), "8": .typed("8"), "7": .typed("7"),
-            "6": .typed("6"), "9": .typed("9"), "u": .typed("u"), "t": .typed("t"), "h": .typed("h"), "z": .typed("z"),
+            "6": .typed("6"), "9": .typed("9"), "p": .typed("p"), "u": .typed("u"), "t": .typed("t"), "h": .typed("h"), "z": .typed("z"),
             "c": .typed("c"), "i": .typed("i"), "g": .typed("g"), "[ ]": .typed("]"), "f": .typed("f"),
             "x ⌘⌫": .typed("x"), "⌘K /": MonitorPress(.char("k"), .command), "⌘1–6 ⌘,": MonitorPress(.char("2"), .command),
             "?": MonitorPress(.char("/"), .shift, text: "?"), "esc": MonitorPress(.escape), "⌥⌘P": MonitorPress(.char("p"), [.command, .option]),
@@ -450,10 +493,14 @@ final class MonitorDeskTests: XCTestCase {
         XCTAssertNil(desk.overlay)
     }
 
-    func testEscAddsATagBeingTypedAsTheViewerDoes() {
+    func testEscDropsATagHalfTyped() {
         type("tsea")
         XCTAssertTrue(desk.stepBackFromEscape())
-        XCTAssertEqual(currentMark.tags, ["sea"])
+        XCTAssertEqual(currentMark.tags, [], "esc closes with nothing done, as the hint says")
+        XCTAssertNil(desk.overlay)
+        type("t")
+        guard case .entry(let entry) = desk.overlay else { return XCTFail("the entry opens again") }
+        XCTAssertEqual(entry.text, "", "and starts empty")
         XCTAssertEqual(desk.pane, .loupe)
     }
 

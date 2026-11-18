@@ -218,9 +218,10 @@ final class CommandMenuTests: XCTestCase {
 
     func testTheMonitorHasNoPhoneScreens() {
         let ids = Set(everything(desk.commandState()).map(\.id))
-        for id in ["go.joinvideos", "go.anticrop", "project.new", "photo.keep"] {
+        for id in ["photo.keep"] {
             XCTAssertFalse(ids.contains(id), id)
         }
+        XCTAssertTrue(ids.contains("project.new"), "made from the monitor too, 18 Nov")
     }
 
     func testThePhoneHasNoMonitorScreens() {

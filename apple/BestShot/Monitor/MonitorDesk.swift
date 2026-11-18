@@ -90,7 +90,42 @@ struct MonitorMediaItem: Identifiable, Equatable {
     let title: String
     let detail: String
     /// In the order the list shows them.
-    let tags: [String]
+    var tags: [String]
+    /// What sorting, Show… and Find look at, as the phone's grid does.
+    var note = ""
+    var isVideo = false
+    var rank: Int?
+    var size = 0
+    var imported = Date.distantPast
+    var project: String?
+
+    /// The phone's Show…, on these values.
+    func shows(_ filter: MediaFilter) -> Bool {
+        switch filter {
+        case .all: return true
+        case .photos: return !isVideo
+        case .videos: return isVideo
+        }
+    }
+
+    /// The phone's sort orders (`SortOption.comparator`), on these values.
+    static func before(_ a: MonitorMediaItem, _ b: MonitorMediaItem, by sort: SortOption) -> Bool {
+        switch sort {
+        case .rank:
+            switch (a.rank, b.rank) {
+            case let (ra?, rb?): return ra < rb
+            case (nil, _?): return false
+            case (_?, nil): return true
+            case (nil, nil): return a.title.localizedStandardCompare(b.title) == .orderedAscending
+            }
+        case .nameAsc: return a.title.localizedStandardCompare(b.title) == .orderedAscending
+        case .nameDesc: return a.title.localizedStandardCompare(b.title) == .orderedDescending
+        case .dateNewest: return a.imported > b.imported
+        case .dateOldest: return a.imported < b.imported
+        case .sizeLargest: return a.size > b.size
+        case .sizeSmallest: return a.size < b.size
+        }
+    }
 }
 
 /// Where the desk gets what it shows and where its changes go: Photos and the
@@ -117,8 +152,14 @@ protocol MonitorLibrary: AnyObject {
     func toggleFavourite()
     var sources: [(option: TriageSourceOption, title: String)] { get }
     func reloadSources()
-    /// Nil when it started, or what to tell the user.
-    func startTriage(order: SessionOrder, source: TriageSourceOption) async -> String?
+    /// Nil when it started, or what to tell the user. `tags` go on every photo kept.
+    func startTriage(order: SessionOrder, source: TriageSourceOption, tags: [String]) async -> String?
+    /// Marked to delete by a run that ended early, with no session open.
+    var waitingDeletes: Int { get }
+    /// Through Photos' own question, on the phone. The number deleted.
+    func deleteWaiting() async -> Int
+    /// Takes the marks back, so they come up next time.
+    func keepWaiting()
     /// Back to the start: a session with deletes marked waits to be resumed.
     func leaveTriage()
     func resumeTriage()
@@ -158,6 +199,18 @@ protocol MonitorLibrary: AnyObject {
     // Imported media
     var projects: [(id: UUID, name: String, count: Int)] { get }
     func media(project: UUID?) -> [MonitorMediaItem]
+    /// The new project's id, or nil for a blank name.
+    func newProject(_ name: String) -> UUID?
+    func renameProject(_ id: UUID, to name: String) -> Bool
+    /// What the question says before removing.
+    func projectRemoval(_ id: UUID) -> String
+    /// Nil when it went, or what went wrong.
+    func removeProject(_ id: UUID) async -> String?
+    func setMediaTags(_ id: String, _ tags: [String])
+    func setMediaNote(_ id: String, _ note: String)
+    /// The project's photos as a board, for the monitor's Compare. Ranks are saved on the items.
+    func projectBoard(_ id: UUID) -> RankBoard?
+    func clearProjectRankings(_ id: UUID)
 
     // Settings
     func labelName(_ colour: LabelColour) -> String
@@ -168,6 +221,12 @@ protocol MonitorLibrary: AnyObject {
     // Pictures
     func picture(_ id: String, longEdge: CGFloat, fill: Bool) -> AnyView
     func warm(_ ids: [String], longEdge: CGFloat)
+}
+
+extension MonitorLibrary {
+    func startTriage(order: SessionOrder, source: TriageSourceOption) async -> String? {
+        await startTriage(order: order, source: source, tags: [])
+    }
 }
 
 /// Everything the monitor is doing: what's up, what's lit, and what a key does.
@@ -198,6 +257,13 @@ final class MonitorDesk {
     /// ⌘K or `/`: the kit's command menu, which the phone's glue opens and the
     /// monitor draws (Commands/CommandMenu.swift).
     var onMenu: () -> Void = {}
+    /// A key that opens the menu at one of its commands: `r` is "Rename…".
+    var onCommand: (String) -> Void = { _ in }
+    /// Notices for the monitor's stack (`CommandNotices` on the phone).
+    var onSay: (String) -> Void = { _ in }
+    var onUndoable: (String, @escaping () -> Void) -> Void = { _, _ in }
+    /// ⌘Z with nothing of the desk's own to take back: the latest notice's Undo.
+    var undoLatest: () -> Bool = { false }
 
     // Where it's at
     private(set) var stack: [MonitorPane] = [.home]
@@ -237,8 +303,42 @@ final class MonitorDesk {
 
     // Other sections
     private(set) var board: RankBoard?
-    private(set) var mediaItems: [MonitorMediaItem] = []
+    /// A project's photos being compared on the monitor, in place of Rank's board.
+    private(set) var projectBoard: RankBoard?
+    /// Every item in the media list, before Show… and Find.
+    private(set) var mediaAll: [MonitorMediaItem] = []
     private(set) var mediaIndex = 0
+    private(set) var mediaSort = SortOption.dateNewest
+    private(set) var mediaFilter = MediaFilter.all
+    private(set) var mediaQuery = ""
+    private(set) var slideshow = false
+    private var slides: Task<Void, Never>?
+    /// "Tag what you keep" for the next Triage started here.
+    private(set) var runTags: [String] = []
+
+    /// The media list as shown: Show… and Find, in the chosen order.
+    var mediaItems: [MonitorMediaItem] {
+        let shown = mediaAll.enumerated().filter { _, item in
+            item.shows(mediaFilter)
+                && MediaSearch.matches(mediaQuery, filename: item.title, tags: item.tags, comment: item.note, project: item.project)
+        }
+        return shown.sorted { a, b in
+            if MonitorMediaItem.before(a.element, b.element, by: mediaSort) { return true }
+            if MonitorMediaItem.before(b.element, a.element, by: mediaSort) { return false }
+            return a.offset < b.offset
+        }.map(\.element)
+    }
+
+    /// The board Compare is drawn from: a project's, or Rank's.
+    var compareBoard: RankBoard? { projectBoard ?? board }
+
+    /// The project whose photos are listed, if it's one project.
+    var openProject: UUID? {
+        switch pane {
+        case .media(let id), .mediaPhoto(let id): return id
+        default: return nil
+        }
+    }
 
     /// What's running on behalf of a key, for the tests to wait on.
     private(set) var work: Task<Void, Never>?
@@ -262,7 +362,10 @@ final class MonitorDesk {
         let top = stack.last ?? .home
         // Ended or left on the phone: back to its start screen, as there.
         if !library.triageShowing, top == .loupe || top == .grid || top == .filters { return .triage }
-        if top == .rankCompare, board?.compare == nil { return .rank }
+        if top == .rankCompare, compareBoard?.compare == nil {
+            // A project's Compare goes back to its photos.
+            return projectBoard != nil ? (stack.dropLast().last ?? .home) : .rank
+        }
         // The board is the phone's too: a Compare started there is up here.
         if top == .rank, board?.compare != nil { return .rankCompare }
         // Left or finished on the phone: back to its start screen, as there.
@@ -295,7 +398,8 @@ final class MonitorDesk {
         }
         s.canStepBack = pane != .home
         s.hasPhoto = current != nil
-        s.canUndo = pane == .organise ? library.organiseCanUndo : !undoStack.isEmpty
+        s.canUndo = pane == .organise ? library.organiseCanUndo
+            : pane == .rank ? board?.cleared != nil : !undoStack.isEmpty
         s.inTriage = !library.triageIDs.isEmpty
         switch overlay {
         case .help:
@@ -325,6 +429,7 @@ final class MonitorDesk {
             case .mediaPhoto:
                 s.surface = .mediaPhoto
                 s.hasMediaNeighbours = mediaItems.count > 1
+                s.mediaItem = mediaItems.indices.contains(mediaIndex)
             default:
                 s.surface = .list
                 let rows = rows
@@ -333,6 +438,16 @@ final class MonitorDesk {
                 s.ranking = pane == .rank && litRow?.photo != nil
                 s.canCompare = pane == .rank && (board?.pool.count ?? 0) > 1
                 s.organising = pane == .organise && library.organisePhoto != nil
+                if case .media(let project) = pane {
+                    s.mediaList = true
+                    s.mediaItem = litRow?.action == .mediaItem
+                    s.inProject = project != nil
+                    s.canCompare = project != nil && mediaAll.count > 1
+                }
+                if pane == .projects {
+                    s.projectsList = true
+                    if case .project = litRow?.action { s.projectLit = true }
+                }
             }
         }
         return s
@@ -410,12 +525,22 @@ final class MonitorDesk {
         case .escape: stepBack()
         case .pause, .textSize: break
         case .menu: onMenu()
+        case .command(let id): onCommand(id)
+        case .slideshow: toggleSlideshow()
         case .help:
             helpRow = 0
             overlay = .help
         case .section(let section): go(to: section)
         case .undo:
-            if pane == .organise { spawn { [library] in self.notice = await library.undoOrganise() } } else { undo() }
+            if pane == .organise {
+                spawn { [library] in self.notice = await library.undoOrganise() }
+            } else if pane == .rank, board?.cleared != nil {
+                restoreRanking()
+            } else if undoStack.isEmpty || ![.loupe, .grid].contains(pane) {
+                _ = undoLatest()
+            } else {
+                undo()
+            }
         case .move(let by): move(by)
         case .moveRow(let by): moveRanked(by)
         case .page(let by): page(by)
@@ -436,9 +561,10 @@ final class MonitorDesk {
         case .info: showInfo.toggle()
         case .finish: openFinish()
         case .nextUnreviewed(let by): nextUnreviewed(by)
-        case .choose(let choice): board?.compare?.choose(choice)
-        case .compareUndo: board?.compare?.undo()
-        case .startCompare: startCompare(.all)
+        case .choose(let choice): compareBoard?.compare?.choose(choice)
+        case .compareUndo: compareBoard?.compare?.undo()
+        case .startCompare:
+            if openProject != nil { compareProject(.all) } else { startCompare(.all) }
         case .nextPhoto: library.nextOrganised()
         case .skipPhoto: library.skipOrganised()
         case .newAlbum: beginEntry(.album, title: "New album")
@@ -458,9 +584,7 @@ final class MonitorDesk {
         } else if showInfo, pane == .loupe {
             showInfo = false
         } else if pane == .rankCompare {
-            board?.finishCompare(save: true)
-            // Started on the phone, it was never stacked: Rank is under it either way.
-            if stack.last == .rankCompare { stack.removeLast() }
+            endCompare(save: true)
         } else {
             popPane()
         }
@@ -469,7 +593,10 @@ final class MonitorDesk {
     private func popPane() {
         // A screen the phone has left already reads as the one under it, so Esc
         // goes on from what's showing.
-        if stack.count > 2, stack.last == .rankCompare, board?.compare == nil { stack.removeLast() }
+        if stack.count > 2, stack.last == .rankCompare, compareBoard?.compare == nil {
+            stack.removeLast()
+            leaveProjectCompare()
+        }
         if stack.count > 2, stack.last == .organise, !library.organiseOpen { stack.removeLast() }
         while stack.count > 2, !library.triageShowing, [.loupe, .grid, .filters].contains(stack.last!) { stack.removeLast() }
         let leaving = stack.last
@@ -516,7 +643,7 @@ final class MonitorDesk {
             if library.organisePhoto == nil { stack = [.home, .organiseHome] } else { openOrganise() }
         case .allMedia:
             stack = [.home, .media(project: nil)]
-            mediaItems = library.media(project: nil)
+            loadMedia(nil, fresh: true)
         case .projects:
             stack = [.home, .projects]
         case .settings:
@@ -627,13 +754,14 @@ final class MonitorDesk {
         case .album(let id): spawn { [library] in await library.addToAlbum(id) }
         case .newAlbum: beginEntry(.album, title: "New album")
         case .project(let id):
-            mediaItems = library.media(project: id)
+            loadMedia(id, fresh: true)
             push(.media(project: id))
         case .allMedia: go(to: .allMedia)
         case .mediaItem:
             guard case .media(let project) = pane else { return }
             mediaIndex = mediaItems.firstIndex { $0.id == row.id } ?? 0
             push(.mediaPhoto(project: project))
+            stopSlideshow()
         case .rename(let colour): beginEntry(.rename(colour), title: "Name for \(colour.title)", text: library.labelName(colour))
         case .textSize: adjustTextScale(textScale >= (Self.textScales.last ?? 1) ? -Self.textScales.count : 1)
         case .pause: togglePause()
@@ -790,7 +918,7 @@ final class MonitorDesk {
     // MARK: - Triage
 
     private func startTriage() async {
-        notice = await library.startTriage(order: order, source: source)
+        notice = await library.startTriage(order: order, source: source, tags: runTags)
         guard !library.triageIDs.isEmpty else { return }
         filter = MonitorFilter()
         held = nil
@@ -1084,6 +1212,82 @@ final class MonitorDesk {
         spawn { self.notice = await self.library.saveRankAlbum(ids) }
     }
 
+    private func restoreRanking() {
+        board?.restoreCleared()
+    }
+
+    /// Ends Compare on the monitor, keeping the answers or not. A project's goes
+    /// back to its photos, with their new ranks.
+    private func endCompare(save: Bool) {
+        compareBoard?.finishCompare(save: save)
+        // Started on the phone, it was never stacked: Rank is under it either way.
+        if stack.last == .rankCompare { stack.removeLast() }
+        leaveProjectCompare()
+    }
+
+    private func leaveProjectCompare() {
+        guard projectBoard != nil else { return }
+        projectBoard = nil
+        reloadMedia()
+    }
+
+    /// Compare a project's photos, in the monitor's Compare.
+    private func compareProject(_ scope: ComparisonScope) {
+        guard let id = openProject, let board = library.projectBoard(id), board.pool.count > 1 else { return }
+        if case .mediaPhoto = pane { stack.removeLast() }
+        stopSlideshow()
+        board.startCompare(scope: scope == .all ? .all : .unranked)
+        guard board.compare != nil else { return }
+        projectBoard = board
+        stack.append(.rankCompare)
+    }
+
+    // MARK: - Imported media
+
+    /// A project's photos, or everything. Fresh: the phone's starting sort, nothing hidden or found.
+    private func loadMedia(_ project: UUID?, fresh: Bool) {
+        if fresh {
+            mediaSort = project == nil ? .dateNewest : .rank
+            mediaFilter = .all
+            mediaQuery = ""
+        }
+        mediaAll = library.media(project: project)
+    }
+
+    /// After a change: the same list, the same photo up.
+    private func reloadMedia() {
+        let showing = mediaItems.indices.contains(mediaIndex) ? mediaItems[mediaIndex].id : nil
+        mediaAll = library.media(project: openProject)
+        if let showing, let at = mediaItems.firstIndex(where: { $0.id == showing }) { mediaIndex = at }
+        mediaIndex = min(mediaIndex, max(0, mediaItems.count - 1))
+    }
+
+    /// Sorted or narrowed: the photo shown stays the one shown, if it's still there.
+    private func keepShown(_ change: () -> Void) {
+        let showing = mediaItems.indices.contains(mediaIndex) ? mediaItems[mediaIndex].id : nil
+        change()
+        mediaIndex = showing.flatMap { id in mediaItems.firstIndex { $0.id == id } } ?? 0
+    }
+
+    private func toggleSlideshow() {
+        if slideshow { stopSlideshow(); return }
+        guard case .mediaPhoto = pane, mediaItems.count > 1 else { return }
+        slideshow = true
+        slides = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, !Task.isCancelled, self.slideshow, case .mediaPhoto = self.pane else { break }
+                self.mediaIndex = (self.mediaIndex + 1) % max(1, self.mediaItems.count)
+            }
+        }
+    }
+
+    private func stopSlideshow() {
+        slideshow = false
+        slides?.cancel()
+        slides = nil
+    }
+
     // MARK: - Organise
 
     /// ↵ on "A folder in Files…": the phone shows its picker, and the monitor
@@ -1191,14 +1395,10 @@ final class MonitorDesk {
         overlay = .entry(entry)
     }
 
-    /// As in the viewer, a tag being typed is added rather than lost. Other words
-    /// wait for next time.
+    /// Esc closes with nothing done, as the hint says: a tag half typed is
+    /// dropped, not added. Other words wait for next time.
     private func closeEntry(_ entry: MonitorEntry) {
-        if entry.kind == .tag, !entry.text.trimmingCharacters(in: .whitespaces).isEmpty {
-            commitEntry(entry)
-            return
-        }
-        drafts[entry.kind] = entry.text.isEmpty ? nil : entry.text
+        drafts[entry.kind] = entry.kind == .tag || entry.text.isEmpty ? nil : entry.text
         overlay = nil
     }
 
@@ -1326,6 +1526,8 @@ extension MonitorDesk {
         s.textScale = textScale
         s.projects = library.projects.map { .init(id: $0.id, name: $0.name, count: $0.count) }
         s.sources = library.sources.map { .init(option: $0.option, title: $0.title) }
+        s.runTags = runTags
+        s.waitingDeletes = library.triageIDs.isEmpty ? library.waitingDeletes : 0
 
         s.triageOpen = !library.triageIDs.isEmpty
         s.triageWaiting = library.triageWaiting
@@ -1362,11 +1564,35 @@ extension MonitorDesk {
         case .rankCompare: s.screen = .rankCompare
         case .organiseHome: s.screen = .organiseStart
         case .organise: s.screen = .organise
-        case .media: s.screen = .allMedia
-        case .mediaPhoto: s.screen = .mediaPhoto
-        case .projects: s.screen = .projects
+        case .media(let id):
+            s.screen = .allMedia
+            if let id, let p = library.projects.first(where: { $0.id == id }) {
+                s.screen = .project
+                s.project = .init(id: id, name: p.name, count: mediaAll.count,
+                                  unranked: mediaAll.filter { $0.rank == nil }.count, sort: mediaSort, filter: mediaFilter,
+                                  removal: library.projectRemoval(id))
+            }
+            if let row = litRow, row.action == .mediaItem, let item = mediaAll.first(where: { $0.id == row.id }) {
+                s.mediaItem = .init(id: item.id, title: item.title, tags: item.tags, note: item.note)
+            }
+        case .mediaPhoto:
+            s.screen = .mediaPhoto
+            if mediaItems.indices.contains(mediaIndex) {
+                let item = mediaItems[mediaIndex]
+                s.mediaItem = .init(id: item.id, title: item.title, tags: item.tags, note: item.note)
+            }
+        case .projects:
+            s.screen = .projects
+            if let row = litRow, case .project(let id) = row.action {
+                s.litProject = .init(id: id, name: row.title, removal: library.projectRemoval(id))
+            }
         case .settings: s.screen = .settings
         }
+        s.mediaSort = mediaSort
+        s.mediaFilter = mediaFilter
+        s.mediaQuery = mediaQuery
+        s.mediaShown = mediaItems.count
+        s.slideshow = slideshow
         s.canUndo = pane == .organise ? library.organiseCanUndo
             : [.loupe, .grid].contains(pane) && !undoStack.isEmpty
         if let id = current {
@@ -1421,7 +1647,7 @@ extension MonitorDesk {
         case .go(let section): go(to: section)
         case .project(let id):
             stack = [.home, .projects]
-            mediaItems = library.media(project: id)
+            loadMedia(id, fresh: true)
             push(.media(project: id))
         case .allKeys:
             helpRow = 0
@@ -1463,6 +1689,16 @@ extension MonitorDesk {
             held = nil
 
         case .triageOrder(let new): order = new
+        case .runTags(let tags): runTags = tags
+        case .deleteWaiting:
+            spawn { [library] in
+                let n = await library.deleteWaiting()
+                self.notice = n > 0 ? "\(n) photo\(n == 1 ? "" : "s") moved to Recently Deleted." : "Nothing was deleted. They're still waiting."
+                self.onSay(self.notice ?? "")
+            }
+        case .keepWaiting:
+            library.keepWaiting()
+            onSay("Kept. They come up in the next run.")
         case .startTriage(let option):
             source = option
             stack = [.home, .triage]
@@ -1478,12 +1714,13 @@ extension MonitorDesk {
         case .saveRankAlbum: saveAlbum()
         case .clearRanking:
             board?.clear()
-            notice = "Ranking cleared. Undo it from ⌘K: Put the ranking back."
-        case .restoreRanking: board?.restoreCleared()
+            onUndoable("Ranking cleared.") { [weak self] in self?.restoreRanking() }
+        case .restoreRanking: restoreRanking()
         case .moveRanked(let by): moveRanked(by)
-        case .compareChoose(let choice): board?.compare?.choose(choice)
-        case .compareUndo: board?.compare?.undo()
-        case .compareSave: if pane == .rankCompare { stepBack() }
+        case .compareChoose(let choice): compareBoard?.compare?.choose(choice)
+        case .compareUndo: compareBoard?.compare?.undo()
+        case .compareSave: if pane == .rankCompare { endCompare(save: true) }
+        case .compareDiscard: if pane == .rankCompare { endCompare(save: false) }
 
         case .organiseOrder(let new): organiseOrder = new
         case .startOrganise(let option):
@@ -1507,12 +1744,51 @@ extension MonitorDesk {
         case .textSize(let by): adjustTextScale(by)
         case .pause: togglePause()
 
-        // The phone's own: the monitor doesn't draw these, and never lists them.
-        case .joinVideos, .antiCrop, .keep, .markDelete, .skip,
-             .newProject, .renameProject, .deleteProject, .importPhotos, .importFiles, .compareProject,
-             .projectSort, .projectFilter, .gridSize, .selecting, .selectAll, .tagSelected,
-             .downloadSelected, .joinSelected, .deleteSelected, .exportJSON, .exportCSV, .downloadAll,
-             .clearProjectRankings:
+        case .newProject(let name):
+            guard let id = library.newProject(name) else { return }
+            stack = [.home, .projects]
+            selection[.projects] = id.uuidString
+            onSay("Made the project “\(name)”.")
+        case .renameProject(let id, let name):
+            if library.renameProject(id, to: name) { onSay("Renamed to “\(name)”.") }
+        case .deleteProject(let id):
+            let name = library.projects.first { $0.id == id }?.name ?? "the project"
+            spawn { [library] in
+                if let problem = await library.removeProject(id) {
+                    self.notice = problem
+                    return
+                }
+                if self.openProject == id { self.stack = [.home, .projects] }
+                self.onSay("Deleted “\(name)”. Its photos are in Files, BestShot › Removed Projects.")
+            }
+        case .compareProject(let scope): compareProject(scope)
+        case .projectSort(let sort): keepShown { mediaSort = sort }
+        case .projectFilter(let filter): keepShown { mediaFilter = filter }
+        case .findMedia(let query): keepShown { mediaQuery = query }
+        case .setMediaTags(let id, let tags):
+            library.setMediaTags(id, tags)
+            reloadMedia()
+        case .noteMedia(let id, let note):
+            let before = mediaAll.first { $0.id == id }?.note ?? ""
+            library.setMediaNote(id, note)
+            reloadMedia()
+            if note.isEmpty, !before.isEmpty {
+                onUndoable("Note cleared.") { [weak self] in
+                    self?.library.setMediaNote(id, before)
+                    self?.reloadMedia()
+                }
+            }
+        case .slideshow: toggleSlideshow()
+        case .clearProjectRankings:
+            guard let id = openProject else { return }
+            library.clearProjectRankings(id)
+            reloadMedia()
+            onSay("Rankings cleared.")
+
+        // The phone's own: they open on the phone (Commands/CommandMenu.swift), or aren't listed here.
+        case .joinVideos, .antiCrop, .keep, .markDelete, .skip, .importPhotos, .importFiles,
+             .gridSize, .selecting, .selectAll, .tagSelected,
+             .downloadSelected, .joinSelected, .deleteSelected, .exportJSON, .exportCSV, .downloadAll, .projectRemoved:
             break
         }
     }

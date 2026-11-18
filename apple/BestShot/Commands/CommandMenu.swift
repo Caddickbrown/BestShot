@@ -47,6 +47,14 @@ enum BestShotCommandMenu {
         CommandResponders.install()
         _ = host
         desk?.onMenu = { host.toggle() }
+        // A key on the monitor that opens the menu at a command's step.
+        desk?.onCommand = { id in
+            if host.menu == nil { host.toggle() }
+            host.choose(id)
+        }
+        desk?.onSay = { CommandNotices.shared.say($0) }
+        desk?.onUndoable = { text, undo in CommandNotices.shared.undoable(text, undo: undo) }
+        desk?.undoLatest = { CommandNotices.shared.undoLatest() }
     }
 
     private static var appearance: Appearance {
@@ -72,7 +80,18 @@ enum BestShotCommandMenu {
     static func run(_ command: BestShotCommand) {
         guard let desk else { return }
         if display == .monitor {
-            desk.run(command)
+            switch command {
+            // Pickers and tool screens only the phone can show: the row's onPhone says so on the monitor.
+            case .importPhotos, .importFiles:
+                guard let id = desk.openProject else { return }
+                let app = AppCommands.shared
+                if app.place != .project(id) { app.send(.project(id)) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { app.send(command) }
+            case .joinVideos, .antiCrop:
+                AppCommands.shared.send(command)
+            default:
+                desk.run(command)
+            }
         } else {
             phone(command, desk: desk)
         }
@@ -163,7 +182,9 @@ enum BestShotCommandMenu {
         case .pause: desk.togglePause()
 
         // The monitor's own screens: never listed on the phone.
-        case .allKeys, .zoom, .pinCompare, .swapSides, .info, .nextUndecided, .filters, .filterStatus, .filterStars,
+        case .projectRemoved, .findMedia, .setMediaTags, .noteMedia, .slideshow, .runTags, .deleteWaiting, .keepWaiting,
+             .compareDiscard,
+             .allKeys, .zoom, .pinCompare, .swapSides, .info, .nextUndecided, .filters, .filterStatus, .filterStars,
              .filterTag, .filtersOff, .moveRanked:
             break
         }

@@ -62,7 +62,7 @@ struct CommandPanel: View {
                     Text(menu.query).font(.mono(text * 1.15)).foregroundStyle(palette.ink)
                         .lineLimit(1).truncationMode(.head)
                 }
-                Text("▏").font(.mono(text * 1.15)).foregroundStyle(palette.accent)
+                Caret(font: .mono(text * 1.15), color: palette.accent)
                 if menu.query.isEmpty {
                     Text(menu.prompt).font(.mono(text * 1.15)).foregroundStyle(palette.dim).lineLimit(1)
                 }
@@ -166,5 +166,20 @@ struct CommandPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, text)
         .padding(.vertical, caption * 0.6)
+    }
+}
+
+/// The text cursor, drawn: a bar a line high in the field's font. A typed "▏"
+/// or "|" takes a letter's width and leaves a gap beside the text (kit 0.9.1).
+struct Caret: View {
+    let font: Font
+    let color: Color
+    var width: CGFloat = 2
+
+    var body: some View {
+        Text("Ag").font(font).hidden()
+            .frame(width: width)
+            .overlay(Rectangle().fill(color))
+            .accessibilityHidden(true)
     }
 }

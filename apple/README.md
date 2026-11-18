@@ -8,6 +8,10 @@ A native photo culling and ranking app, fully on-device. It shares its look
   to delete (batched into one system confirmation, then Recently Deleted).
   Tags typed on the start screen go on every photo kept in that run (the same
   tags the monitor shows); Undo takes them off.
+  Stars and colour labels sit under the photo: tap a star, or a colour (again
+  to take it off); on a keyboard, `1`-`5`, `0`, `6`-`9` as in Folders. Green
+  keeps, yellow skips, red marks it for deleting, blue and purple are labels
+  only. They're the marks the monitor shows, and Undo takes them back in turn.
 - **Rank**: put your Triage keepers in order, best first. Use **Compare**
   (two photos side by side; pick the better one) or drag photos into place.
   **Save as album** writes the order to a "BestShot · Ranked" album in Photos.
@@ -46,6 +50,10 @@ open BestShot.xcodeproj
 Pick the **BestShot_macOS** scheme (My Mac) or **BestShot_iOS** (an iPhone /
 iPad or the Simulator) and press ⌘R. Re-run `build-core.sh` whenever `core/`
 changes.
+
+Debug Mac builds open Folders on a folder at launch with
+`BESTSHOT_FOLDER=<path>` (the sandbox still applies, so use a folder under
+Pictures), for test runs against fixture folders.
 
 ## Tests
 

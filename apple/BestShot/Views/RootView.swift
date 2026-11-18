@@ -88,6 +88,11 @@ struct RootView: View {
             .tableSurfaceList()
             // The mark and the name head the menu, as a screen's header heads it.
             .safeAreaInset(edge: .top, spacing: 0) { BrandHeader() }
+            #if os(macOS)
+            // Wide enough for the name on one line: narrower, the Mac stacked
+            // "BestShot" a letter per line and cut the rows short (18 Nov run).
+            .navigationSplitViewColumnWidth(min: 230, ideal: 250, max: 320)
+            #endif
             .navigationTitle("BestShot")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -181,6 +186,10 @@ struct RootView: View {
         }
         .onAppear {
             commands.leaveSheet = { [escapes] in if escapes.hasSheet { escapes.press() } }
+            #if os(macOS) && DEBUG
+            // `BESTSHOT_FOLDER=<path>` opens Folders on that folder, for test runs.
+            if FolderHomeView.launchFolder != nil { selection = .folders }
+            #endif
         }
     }
 

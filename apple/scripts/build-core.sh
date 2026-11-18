@@ -9,12 +9,17 @@ APPLE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CORE_DIR="$APPLE_DIR/../core"
 OUT_FW="$APPLE_DIR/Frameworks/BestShotCore.xcframework"
 OUT_SWIFT="$APPLE_DIR/BestShot/Generated"
-WORK="$CORE_DIR/target/apple"
+# Honour CARGO_TARGET_DIR, so the build can live on another disk.
+TARGET_DIR="${CARGO_TARGET_DIR:-$CORE_DIR/target}"
+WORK="$TARGET_DIR/apple"
 LIB=libbestshot_ffi.a
 
 MAC_TARGETS=(aarch64-apple-darwin x86_64-apple-darwin)
 IOS_TARGET=aarch64-apple-ios
 SIM_TARGETS=(aarch64-apple-ios-sim x86_64-apple-ios)
+
+# rustup's toolchain has the cross targets; a Homebrew Rust earlier on PATH doesn't.
+if [ -x "$HOME/.cargo/bin/cargo" ]; then export PATH="$HOME/.cargo/bin:$PATH"; fi
 
 cd "$CORE_DIR"
 rustup target add "${MAC_TARGETS[@]}" "$IOS_TARGET" "${SIM_TARGETS[@]}" >/dev/null
@@ -30,7 +35,7 @@ rm -rf "$WORK" && mkdir -p "$WORK/macos" "$WORK/sim" "$WORK/headers" "$WORK/bind
 
 echo "==> Generating Swift bindings"
 cargo run -q -p bestshot-ffi --bin uniffi-bindgen -- generate \
-  --library "target/aarch64-apple-darwin/release/libbestshot_ffi.dylib" \
+  --library "$TARGET_DIR/aarch64-apple-darwin/release/libbestshot_ffi.dylib" \
   --language swift --out-dir "$WORK/bindings"
 
 cp "$WORK/bindings/BestShotCoreFFI.h" "$WORK/headers/"
@@ -39,15 +44,18 @@ mkdir -p "$OUT_SWIFT"
 cp "$WORK/bindings/BestShotCore.swift" "$OUT_SWIFT/BestShotCore.swift"
 
 echo "==> Universal libraries"
-lipo -create $(for t in "${MAC_TARGETS[@]}"; do echo "target/$t/release/$LIB"; done) -output "$WORK/macos/$LIB"
-lipo -create $(for t in "${SIM_TARGETS[@]}"; do echo "target/$t/release/$LIB"; done) -output "$WORK/sim/$LIB"
+# Arrays, not $(...): the target folder may have spaces in it ("/Volumes/Crucial X9").
+mac_libs=(); for t in "${MAC_TARGETS[@]}"; do mac_libs+=("$TARGET_DIR/$t/release/$LIB"); done
+sim_libs=(); for t in "${SIM_TARGETS[@]}"; do sim_libs+=("$TARGET_DIR/$t/release/$LIB"); done
+lipo -create "${mac_libs[@]}" -output "$WORK/macos/$LIB"
+lipo -create "${sim_libs[@]}" -output "$WORK/sim/$LIB"
 
 echo "==> XCFramework"
 rm -rf "$OUT_FW"
 mkdir -p "$(dirname "$OUT_FW")"
 xcodebuild -create-xcframework \
   -library "$WORK/macos/$LIB" -headers "$WORK/headers" \
-  -library "target/$IOS_TARGET/release/$LIB" -headers "$WORK/headers" \
+  -library "$TARGET_DIR/$IOS_TARGET/release/$LIB" -headers "$WORK/headers" \
   -library "$WORK/sim/$LIB" -headers "$WORK/headers" \
   -output "$OUT_FW"
 

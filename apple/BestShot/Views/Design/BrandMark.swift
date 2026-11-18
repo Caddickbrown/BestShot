@@ -57,8 +57,11 @@ struct BrandHeader: View {
                 Text("BestShot")
                     .font(.screenTitle)
                     .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                Spacer()
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, Theme.Space.screen)
             .padding(.top, Theme.Space.headerTop)

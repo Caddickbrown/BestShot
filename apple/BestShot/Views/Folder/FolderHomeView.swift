@@ -45,6 +45,13 @@ enum RecentFolders {
 
 /// Mac-only: cull a folder of files, exactly like BestShot for Linux.
 struct FolderHomeView: View {
+    #if DEBUG
+    /// `BESTSHOT_FOLDER=<path>` (Debug builds only) opens that folder at launch,
+    /// for test runs against fixture folders. The sandbox still applies.
+    @MainActor static var launchFolder: URL? = ProcessInfo.processInfo.environment["BESTSHOT_FOLDER"]
+        .map { URL(fileURLWithPath: $0, isDirectory: true) }
+    #endif
+
     @State private var session: FolderCullSession?
     @State private var recents = RecentFolders.load()
     @State private var importing = false
@@ -67,6 +74,14 @@ struct FolderHomeView: View {
             if case .success(let url) = result { open(url) }
         }
         .onDisappear { session?.flush() }
+        #if DEBUG
+        .onAppear {
+            if session == nil, let url = Self.launchFolder {
+                Self.launchFolder = nil
+                open(url)
+            }
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             session?.flush()
         }

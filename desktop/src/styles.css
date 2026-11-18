@@ -1173,3 +1173,13 @@ table.keys td:first-child {
   background: #c8261d;
   color: #fbfaf6;
 }
+
+/* Reduce Motion: keep every change, drop the movement (spinners, pops, slides). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

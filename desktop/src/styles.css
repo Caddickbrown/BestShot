@@ -649,6 +649,45 @@ button:focus-visible {
   content: "✕ ";
 }
 
+/* Stars and colour labels, the XMP's, under the decision badge. */
+.marks {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--ink, #e8e6e1);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.marks[hidden] {
+  display: none;
+}
+
+.marks .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.marks .label-text {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+
+.label-red { background: #e0352b; }
+.label-yellow { background: #edbb12; }
+.label-green { background: #2fa354; }
+.label-blue { background: #2f73e0; }
+.label-purple { background: #8e52d6; }
+
 .flash {
   position: absolute;
   top: 50%;

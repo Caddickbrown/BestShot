@@ -61,6 +61,26 @@ folder, so you can close the app and pick up where you left off.
   video inside the app needs the GStreamer codecs
   (`sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-bad`).
 
+### Stars, colour labels and Bridge
+
+The folder is read through the same catalog as the Mac app, so stars, colour
+labels and keywords are standard XMP (sidecars, or embedded in JPEG, TIFF,
+DNG and PNG), readable by Bridge, Lightroom, darktable and exiftool:
+
+| Key | Action |
+|-----|--------|
+| `1`-`5` · `0` | Stars · clear the stars |
+| `6` `7` `8` `9` | Red, yellow, green, blue; press again to clear |
+
+Green is Keep and red is Reject, in the XMP and in `.bestshot-cull.json`, so a
+folder labelled in Bridge or on the Mac opens with the same keeps and rejects
+here, and Finish clears out every red. Undo puts a photo's XMP back as it was.
+Label text not mapped to a colour (Bridge's own "Select", say) is shown as
+text and never counts as a reject. The label names come from
+`~/.config/io.github.caddickbrown.bestshot/labels.json`, the same file shape
+as the Mac's Settings; without one, the defaults apply. Linux writes sidecars
+only, never into the originals.
+
 Thumbnails and HEIC conversions are cached in `~/.cache/io.github.caddickbrown.bestshot`
 (trimmed automatically above 2 GB).
 

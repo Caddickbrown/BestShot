@@ -17,9 +17,10 @@ const S = {
   name: "",
   items: [],
   decisions: new Map(), // rel -> "keep" | "reject"
+  marks: new Map(), // rel -> { rating, colour, label }: stars and colour labels from the XMP
   ranking: [], // rels, best first (see rank.js)
   index: 0,
-  undo: [], // { index, prev }
+  undo: [], // { index, rel, before }: the photo's XMP and decision before each change
   view: "loupe", // "loupe" | "grid"
   filter: "all",
   info: false,
@@ -149,6 +150,7 @@ async function openFolder(path, { message = "Scanning folder…" } = {}) {
       name: info.name || info.root,
       items: info.items,
       decisions: new Map(Object.entries(info.decisions)),
+      marks: new Map(Object.entries(info.marks)),
       ranking: info.ranking,
       undo: [],
       filter: "all",
@@ -192,16 +194,53 @@ function setTitle(title) {
 
 let saveChain = Promise.resolve();
 
+/// The photo as the catalog says it is after a change.
+function apply(changed) {
+  if (changed.decision) S.decisions.set(changed.rel, changed.decision);
+  else S.decisions.delete(changed.rel);
+  const m = changed.mark;
+  if (m.rating || m.colour || m.label) S.marks.set(changed.rel, m);
+  else S.marks.delete(changed.rel);
+  if (changed.warning) toast(changed.warning, true);
+}
+
+/// One change to photo `i`, written to its XMP (and `.bestshot-cull.json`) by
+/// the shared catalog, as on the Mac. Changes run one at a time, in order, so a
+/// quick change-then-undo can't land out of order; each keeps what it replaced.
+function mutate(i, command, args) {
+  const rel = S.items[i].rel;
+  const gen = S.gen;
+  saveChain = saveChain
+    .then(() => invoke(command, { gen, rel, ...args }))
+    .then((changed) => {
+      if (gen !== S.gen) return;
+      apply(changed);
+      S.undo.push({ index: i, rel, before: changed.before });
+      if (S.undo.length > 1000) S.undo.shift();
+      renderState();
+    })
+    .catch((err) => toast(`Couldn't save: ${err}`, true));
+  rememberRecent();
+}
+
 function setDecision(i, decision) {
+  // Shown at once; the catalog's answer follows.
   const rel = S.items[i].rel;
   if (decision) S.decisions.set(rel, decision);
   else S.decisions.delete(rel);
-  // Serialise writes so a quick decide-then-undo can't land out of order.
-  const gen = S.gen;
-  saveChain = saveChain
-    .then(() => invoke("set_decision", { gen, rel, decision }))
-    .catch((err) => toast(`Couldn't save decision: ${err}`, true));
-  rememberRecent();
+  mutate(i, "set_decision", { decision });
+}
+
+const COLOUR_KEYS = { 6: "red", 7: "yellow", 8: "green", 9: "blue" };
+
+/// 1-5 stars, 0 clears them; 6-9 a colour, again to clear. Stays on the photo,
+/// as in the Mac's Folders. Green and red are keep and reject.
+function rate(stars) {
+  mutate(S.index, "set_rating", { stars });
+}
+
+function toggleColour(colour) {
+  mutate(S.index, "toggle_colour", { colour });
 }
 
 function counts() {
@@ -228,11 +267,7 @@ function nextUnreviewed(from) {
 function decide(decision) {
   const i = S.index;
   const prev = decisionOf(i);
-  if (prev !== decision) {
-    setDecision(i, decision);
-    S.undo.push({ index: i, prev });
-    if (S.undo.length > 1000) S.undo.shift();
-  }
+  if (prev !== decision) setDecision(i, decision);
   flash(decision);
 
   if (counts().left === 0) {
@@ -247,21 +282,25 @@ function decide(decision) {
 }
 
 function undo() {
-  const last = S.undo.pop();
-  if (!last) {
-    toast("Nothing to undo");
-    return;
-  }
-  setDecision(last.index, last.prev);
-  if (S.view === "grid") renderGrid();
-  else show(last.index);
+  const gen = S.gen;
+  saveChain = saveChain
+    .then(async () => {
+      if (gen !== S.gen) return;
+      const last = S.undo.pop();
+      if (!last) {
+        toast("Nothing to undo");
+        return;
+      }
+      apply(await invoke("restore", { gen, rel: last.rel, snapshot: last.before }));
+      if (S.view === "grid") renderGrid();
+      else show(last.index);
+    })
+    .catch((err) => toast(`Couldn't undo: ${err}`, true));
 }
 
 function clearDecision() {
-  const prev = decisionOf(S.index);
-  if (!prev) return;
+  if (!decisionOf(S.index)) return;
   setDecision(S.index, null);
-  S.undo.push({ index: S.index, prev });
   show(S.index);
 }
 
@@ -319,6 +358,17 @@ function show(i) {
     preloadAround(S.index);
   }
 
+  $("position").textContent = `${fmt(S.index + 1)} / ${fmt(S.items.length)} · ${item.rel}`;
+  renderState();
+  if (S.info) renderInfo();
+}
+
+/// The current photo's decision, stars and colour, the counts and the strip:
+/// everything a mark changes, without reloading the photo or losing the zoom.
+function renderState() {
+  if (S.view === "grid") return renderGrid();
+  if (!S.items.length) return;
+  const stage = $("stage");
   const decision = decisionOf(S.index);
   stage.classList.toggle("decided-keep", decision === "keep");
   stage.classList.toggle("decided-reject", decision === "reject");
@@ -326,10 +376,17 @@ function show(i) {
   badge.className = `badge ${decision ?? ""}`;
   badge.textContent = decision ? decision.toUpperCase() : "";
 
-  $("position").textContent = `${fmt(S.index + 1)} / ${fmt(S.items.length)} · ${item.rel}`;
+  const mark = S.marks.get(S.items[S.index].rel);
+  const marks = $("marks");
+  const stars = mark?.rating > 0 ? "★".repeat(mark.rating) + "☆".repeat(5 - mark.rating) : mark?.rating < 0 ? "Rejected in Bridge" : "";
+  marks.replaceChildren(
+    ...(mark?.colour ? [el("span", { className: `dot label-${mark.colour}`, title: mark.colour })] : []),
+    ...(mark?.label && !mark.colour ? [el("span", { className: "label-text", textContent: mark.label })] : []),
+    el("span", { className: "stars", textContent: stars }),
+  );
+  marks.hidden = !mark;
   updateProgress();
   renderFilmstrip();
-  if (S.info) renderInfo();
 }
 
 async function showMediaError(url) {
@@ -718,6 +775,15 @@ function onKey(e) {
   // Holding a decision key shouldn't machine-gun through the folder.
   if (e.repeat && DECISION_KEYS.has(k)) {
     e.preventDefault();
+    return;
+  }
+
+  if (/^[0-9]$/.test(k)) {
+    e.preventDefault();
+    if (e.repeat) return;
+    const n = Number(k);
+    if (n <= 5) rate(n);
+    else toggleColour(COLOUR_KEYS[n]);
     return;
   }
 

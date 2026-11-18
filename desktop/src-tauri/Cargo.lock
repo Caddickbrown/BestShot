@@ -253,6 +253,7 @@ dependencies = [
 name = "bestshot-core"
 version = "0.2.0"
 dependencies = [
+ "quick-xml",
  "serde",
  "serde_json",
  "walkdir",

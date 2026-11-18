@@ -19,7 +19,10 @@ struct TriageView: View {
         VStack(spacing: 0) {
             header
             content
-            if !showGallery { controls }
+            if !showGallery {
+                if let asset = session.current { labels(asset) }
+                controls
+            }
         }
         .viewfinder()
         #if os(iOS)
@@ -161,6 +164,68 @@ struct TriageView: View {
         .overlay(alignment: .top) { HairlineRule(palette: Theme.viewfinder) }
     }
 
+    // MARK: - Stars and colour labels
+
+    /// Stars and colours, as in Folders and on the monitor, in the marks they
+    /// share. A colour stays on the photo, so pressing it again clears it; green
+    /// keeps, yellow skips, red marks it for deleting. Keys 1-5, 0 and 6-9 too.
+    private func labels(_ asset: PHAsset) -> some View {
+        let rating = session.mark(for: asset).rating
+        let shown = session.shownColour(for: asset)
+        let names = LabelStore.shared
+        return HStack(spacing: 0) {
+            ForEach(1...5, id: \.self) { n in
+                Button { session.rate(rating == n ? 0 : n) } label: {
+                    Image(systemName: n <= rating ? "star.fill" : "star")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(n <= rating ? Theme.viewfinder.ink : Theme.viewfinder.muted)
+                        .frame(width: 30, height: 40)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .modifier(LabelKey(key: String(n), on: keysHere))
+                .accessibilityLabel(n == 1 ? "1 star" : "\(n) stars")
+                .accessibilityAddTraits(n == rating ? .isSelected : [])
+            }
+            // 0 clears the stars, as in Folders.
+            Button { session.rate(0) } label: { EmptyView() }
+                .modifier(LabelKey(key: "0", on: keysHere))
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+            Spacer(minLength: 8)
+            ForEach(LabelColour.allCases) { colour in
+                let on = shown == colour
+                Button { Theme.Motion.run(Theme.Motion.snap) { session.toggleColour(colour) } } label: {
+                    Circle()
+                        .fill(Theme.label(colour))
+                        .frame(width: on ? 22 : 16, height: on ? 22 : 16)
+                        .overlay(Circle().strokeBorder(Theme.viewfinder.ink, lineWidth: on ? 2 : 0))
+                        .frame(width: 34, height: 40)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .modifier(LabelKey(key: colour.key, on: keysHere))
+                .accessibilityLabel(names.name(colour))
+                .accessibilityHint(on ? "Takes the colour off" : colour.triageHint)
+                .accessibilityAddTraits(on ? .isSelected : [])
+                .help(names.name(colour) + (colour.key.map { " (\($0))" } ?? ""))
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        .background(Color.black)
+    }
+
+    /// With a monitor up, the keyboard is the monitor's: its own keys set these there.
+    private var keysHere: Bool {
+        #if os(iOS)
+        MonitorDisplay.shared.desk?.isConnected != true
+        #else
+        true
+        #endif
+    }
+
     /// Keep is the one filled: it's what you'll press most.
     private func icon(_ control: TriageControl, isOn: Bool) -> some View {
         let inked = control == .keep
@@ -183,6 +248,31 @@ struct TriageView: View {
         case .skip: session.skip()
         case .favourite: session.toggleFavourite()
         case .done: showSummary = true
+        }
+    }
+}
+
+/// A label's digit, where it has one (purple has none).
+private struct LabelKey: ViewModifier {
+    let key: String?
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on, let key, let character = key.first {
+            content.keyboardShortcut(KeyEquivalent(character), modifiers: [])
+        } else {
+            content
+        }
+    }
+}
+
+private extension LabelColour {
+    var triageHint: String {
+        switch decision {
+        case .kept: return "Keeps the photo"
+        case .skipped: return "Maybe: it comes round again"
+        case .deleted: return "Marks the photo to delete"
+        case .undecided: return "A label only"
         }
     }
 }

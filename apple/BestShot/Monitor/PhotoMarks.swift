@@ -32,6 +32,47 @@ struct PhotoMark: Codable, Equatable {
     }
 }
 
+extension PhotoMark {
+    /// Stars, 0 to 5. They never change the decision.
+    mutating func rate(_ stars: Int) { rating = min(5, max(0, stars)) }
+
+    /// A colour, or off again if it's the one showing (`shown`, which counts a
+    /// keep's implied green). Returns the decision it now means.
+    @discardableResult
+    mutating func toggle(_ new: LabelColour, shown: LabelColour?) -> ReviewDecision {
+        if shown == new {
+            colour = nil
+            return .undecided
+        }
+        colour = new
+        return new.decision
+    }
+
+    @discardableResult
+    mutating func clearColour() -> ReviewDecision {
+        colour = nil
+        return .undecided
+    }
+
+    mutating func toggle(tag: String) {
+        if has(tag: tag) {
+            tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+        } else {
+            tags.append(tag)
+        }
+    }
+}
+
+/// Triage's label keys on a keyboard (iPad or Mac), as in Folders: 1-5 stars,
+/// 0 clears them, 6-9 red, yellow, green, blue.
+enum TriageLabelKey {
+    static func command(for key: String) -> BestShotCommand? {
+        if let n = Int(key), (0...5).contains(n) { return .stars(n) }
+        if let colour = LabelColour.allCases.first(where: { $0.key == key }) { return .colour(colour) }
+        return nil
+    }
+}
+
 extension LabelColour {
     /// Dan's flow: green good keep, yellow maybe, red delete. Yellow is a skip, so
     /// it comes round again. Blue and purple say nothing about keeping.

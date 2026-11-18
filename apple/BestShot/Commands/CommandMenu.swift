@@ -93,8 +93,11 @@ enum BestShotCommandMenu {
         case .go, .project, .joinVideos, .antiCrop, .newProject, .renameProject, .deleteProject:
             app.send(command)
 
-        case .stars, .colour, .noColour, .toggleTag:
-            if let id = triage?.current?.localIdentifier { desk.mark(id, with: command) }
+        // The session's own, so the phone's Undo takes them back in order with the swipes.
+        case .stars(let n): triage?.rate(n)
+        case .colour(let colour): triage?.toggleColour(colour)
+        case .noColour: triage?.clearColour()
+        case .toggleTag(let tag): triage?.toggleTag(tag)
         case .favourite: triage?.toggleFavourite()
         case .keep: Theme.Motion.run(Theme.Motion.snap) { triage?.keep() }
         case .markDelete: Theme.Motion.run(Theme.Motion.snap) { triage?.delete() }

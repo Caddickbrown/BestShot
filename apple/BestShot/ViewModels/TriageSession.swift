@@ -25,8 +25,16 @@ final class TriageSession {
     /// Local IDs favourited during this session (for the running tally + badges).
     private(set) var favourited: Set<String> = []
 
-    /// Undo stack of (index, previousDecision, wasFavourited, tags this step added).
-    private var history: [(index: Int, previous: ReviewDecision, wasFav: Bool, tagged: [String])] = []
+    /// One step back: where it was, the decision and favourite before, the tags
+    /// it added, and the stars, colour and tags before when the step changed them.
+    private struct Step {
+        var index: Int
+        var previous: ReviewDecision
+        var wasFav: Bool
+        var tagged: [String] = []
+        var mark: PhotoMark? = nil
+    }
+    private var history: [Step] = []
 
     /// Tags given to every photo kept in this run, chosen at the start. They go
     /// in the same marks the monitor shows and filters by.
@@ -41,7 +49,7 @@ final class TriageSession {
         self.holdsHidden = assets.contains(where: \.isHidden)
         self.context = context
         self.tags = tags
-        self.marks = tags.isEmpty ? nil : marks
+        self.marks = marks
     }
 
     // MARK: - Derived
@@ -76,7 +84,8 @@ final class TriageSession {
     /// Skip advances without persisting, so the photo resurfaces next time.
     func skip() {
         guard let asset = current else { return }
-        history.append((index, decisions[asset.localIdentifier] ?? .undecided, favourited.contains(asset.localIdentifier), []))
+        history.append(Step(index: index, previous: decisions[asset.localIdentifier] ?? .undecided,
+                            wasFav: favourited.contains(asset.localIdentifier)))
         decisions[asset.localIdentifier] = .skipped
         index += 1
     }
@@ -93,7 +102,7 @@ final class TriageSession {
         guard let asset = current else { return }
         let id = asset.localIdentifier
         let tagged = decision == .kept ? addTags(to: id) : []
-        history.append((index, decisions[id] ?? .undecided, favourited.contains(id), tagged))
+        history.append(Step(index: index, previous: decisions[id] ?? .undecided, wasFav: favourited.contains(id), tagged: tagged))
         decisions[id] = decision
         persist(id: id, decision: decision)
         index += 1
@@ -101,7 +110,7 @@ final class TriageSession {
 
     /// Gives the photo the run's tags it doesn't have yet, and says which.
     private func addTags(to id: String) -> [String] {
-        guard let marks else { return [] }
+        guard let marks, !tags.isEmpty else { return [] }
         var mark = marks.mark(id)
         let new = tags.filter { !mark.has(tag: $0) }
         guard !new.isEmpty else { return [] }
@@ -115,6 +124,48 @@ final class TriageSession {
         var mark = marks.mark(id)
         mark.tags.removeAll { tag in tagged.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
         marks.set(mark, for: id)
+    }
+
+    // MARK: - Stars and colour labels
+
+    /// The current photo's stars, colour and tags: the monitor's, so either can set them.
+    func mark(for asset: PHAsset) -> PhotoMark { (marks ?? .shared).mark(asset.localIdentifier) }
+
+    /// The colour showing: a keep is green and a delete red, whatever's saved.
+    func shownColour(for asset: PHAsset) -> LabelColour? {
+        mark(for: asset).shownColour(decision(for: asset))
+    }
+
+    func rate(_ stars: Int) { changeMark { $0.rate(stars); return nil } }
+
+    /// Stays on the photo, so a second press clears it, as in Folders and on the monitor.
+    func toggleColour(_ colour: LabelColour) {
+        guard let asset = current else { return }
+        let shown = shownColour(for: asset)
+        changeMark { $0.toggle(colour, shown: shown) }
+    }
+
+    func clearColour() { changeMark { $0.clearColour() } }
+
+    func toggleTag(_ tag: String) { changeMark { $0.toggle(tag: tag); return nil } }
+
+    /// One step for Undo, whatever it changed. A colour's decision is saved as a
+    /// swipe's would be, without moving on.
+    private func changeMark(_ body: (inout PhotoMark) -> ReviewDecision?) {
+        guard let asset = current else { return }
+        let store = marks ?? .shared
+        let id = asset.localIdentifier
+        var mark = store.mark(id)
+        let before = mark
+        let decision = decisions[id] ?? .undecided
+        let new = body(&mark)
+        guard mark != before || (new != nil && new != decision) else { return }
+        history.append(Step(index: index, previous: decision, wasFav: favourited.contains(id), mark: before))
+        store.set(mark, for: id)
+        if let new, new != decision {
+            if new == .undecided { decisions.removeValue(forKey: id) } else { decisions[id] = new }
+            if new == .skipped || new == .undecided { removePersisted(id: id) } else { persist(id: id, decision: new) }
+        }
     }
 
     /// Jump the focus to a specific index (used when tapping a gallery tile).
@@ -144,6 +195,7 @@ final class TriageSession {
         if let asset = assets[safe: last.index] {
             let id = asset.localIdentifier
             removeTags(last.tagged, from: id)
+            if let mark = last.mark { (marks ?? .shared).set(mark, for: id) }
             if last.previous == .undecided {
                 decisions.removeValue(forKey: id)
                 removePersisted(id: id)

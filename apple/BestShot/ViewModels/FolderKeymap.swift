@@ -13,6 +13,8 @@ enum FolderCommand: Equatable {
     case label(LabelColour)
     case toggleZoom, toggleInfo, toggleKeywords, toggleGrid, toggleRank
     case open, trashRed, escape
+    /// The photo tools: Multi Crop on the current photo, Glue on the selection.
+    case multiCrop, glue, selectAll
 }
 
 /// Where the key was pressed. A new mode is a new case here and in `command`.
@@ -25,8 +27,15 @@ enum FolderSurface: Equatable {
 enum FolderKeymap {
     static func command(key: KeyEquivalent, characters: String, modifiers: EventModifiers, on surface: FolderSurface) -> FolderCommand? {
         let text = characters.lowercased()
+        if modifiers.contains(.command) && modifiers.contains(.option) {
+            // ⌥ changes the character on a Mac keyboard: ⌥C is ç, ⌥G is ©.
+            if text == "c" || text == "ç" || key == KeyEquivalent("c") { return .multiCrop }
+            if text == "g" || text == "©" || key == KeyEquivalent("g") { return .glue }
+            return nil
+        }
         if modifiers.contains(.command) {
             if text == "z" { return .undo }
+            if text == "a" && surface == .grid { return .selectAll }
             if key == .delete { return .trashRed }
             return nil
         }

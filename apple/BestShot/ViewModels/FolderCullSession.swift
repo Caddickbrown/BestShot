@@ -14,7 +14,7 @@ final class FolderCullSession {
 
     let root: URL
     let name: String
-    private let catalog: FolderCatalog
+    private var catalog: FolderCatalog
     private(set) var items: [FolderItem] = []
     private(set) var rows: [String: MetaRow] = [:]
     private(set) var counts = FolderCounts(keep: 0, reject: 0, other: 0, left: 0)
@@ -189,8 +189,105 @@ final class FolderCullSession {
         case .open: mode = .loupe
         case .trashRed: confirmTrashRed()
         case .escape:
-            if zoomed { zoomed = false } else if mode != .loupe { mode = .loupe } else { showDone = false }
+            if !selection.isEmpty { clearSelection() }
+            else if zoomed { zoomed = false } else if mode != .loupe { mode = .loupe } else { showDone = false }
+        case .multiCrop: openMultiCrop()
+        case .glue: openGlue()
+        case .selectAll:
+            selection = Set(visible.filter { items[$0].kind == .image })
+            selectionAnchor = index
         }
+    }
+
+    // MARK: - Selection and the photo tools (Glue, Multi Crop)
+
+    /// Photos chosen for Glue, by item position. Grid order is Glue's order.
+    var selection: Set<Int> = []
+    private var selectionAnchor: Int?
+
+    struct ToolRequest: Identifiable {
+        enum Kind { case glue, multiCrop }
+        let id = UUID()
+        let kind: Kind
+        let urls: [URL]
+        let keywords: [[String]]
+        var folder: URL { urls[0].deletingLastPathComponent() }
+    }
+    var toolRequest: ToolRequest?
+    /// The last files a tool made here, for the notice and its Undo.
+    private(set) var made: (urls: [URL], text: String)?
+
+    func toggleSelect(_ i: Int) {
+        guard items.indices.contains(i), items[i].kind == .image else { return }
+        if selection.contains(i) { selection.remove(i) } else { selection.insert(i) }
+        selectionAnchor = i
+    }
+    func selectRange(to i: Int) {
+        let anchor = selectionAnchor ?? index
+        guard let a = visible.firstIndex(of: anchor), let b = visible.firstIndex(of: i) else { return toggleSelect(i) }
+        for j in visible[min(a, b)...max(a, b)] where items[j].kind == .image { selection.insert(j) }
+    }
+    func clearSelection() {
+        selection = []
+        selectionAnchor = nil
+    }
+    /// The selection in grid order, photos only.
+    var selectedInOrder: [Int] { visible.filter { selection.contains($0) && items[$0].kind == .image } }
+
+    func openMultiCrop() {
+        guard let item = current, item.kind == .image else {
+            warning = "Multi Crop is for photos."
+            return
+        }
+        toolRequest = ToolRequest(kind: .multiCrop, urls: [url(for: item)], keywords: [rows[item.rel]?.keywords ?? []])
+    }
+    func openGlue() {
+        var picks = selectedInOrder
+        if picks.isEmpty, let i = items.indices.contains(index) ? index : nil, items[i].kind == .image { picks = [i] }
+        guard !picks.isEmpty else {
+            warning = "Glue is for photos. Select two or more with ⌘-click in the grid."
+            return
+        }
+        let chosen = Array(picks.prefix(10))
+        toolRequest = ToolRequest(kind: .glue, urls: chosen.map { url(for: items[$0]) },
+                                  keywords: chosen.map { rows[items[$0].rel]?.keywords ?? [] })
+    }
+
+    /// A tool wrote files beside the photos: pick them up, and keep the notice for Undo.
+    func madeFiles(_ urls: [URL], _ text: String, showFirst: Bool = false) {
+        made = (urls, text)
+        clearSelection()
+        let rel = showFirst ? urls.first.map { relative($0) } : nil
+        Task { await rescan(showing: rel) }
+    }
+    private func relative(_ url: URL) -> String {
+        let base = root.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        return path.hasPrefix(base + "/") ? String(path.dropFirst(base.count + 1)) : url.lastPathComponent
+    }
+    func takeBackMade() {
+        guard let made else { return }
+        ToolImaging.takeBack(made.urls)
+        self.made = nil
+        Task { await rescan() }
+    }
+    func dismissMade() { made = nil }
+
+    /// Scans the folder again, keeping the current photo.
+    func rescan(showing: String? = nil) async {
+        flush()
+        let keep = showing ?? current?.rel
+        let path = root.path
+        let (recursive, includeVideos) = (self.recursive, self.includeVideos)
+        let settings = LabelStore.shared.settings
+        let writeJPEG = LabelStore.shared.writeJPEG
+        guard let fresh = try? await Task.detached(priority: .userInitiated, operation: {
+            try FolderCatalog.open(root: path, recursive: recursive, includeVideos: includeVideos, settings: settings, writeJpeg: writeJPEG)
+        }).value else { return }
+        catalog = fresh
+        reload()
+        if let keep, let i = items.firstIndex(where: { $0.rel == keep }) { index = i }
+        rebuildRankBoard()
     }
 
     func toggleKeywords() {

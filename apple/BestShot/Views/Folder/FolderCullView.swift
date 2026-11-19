@@ -38,11 +38,28 @@ struct FolderCullView: View {
         .sheet(isPresented: $session.showProblems) {
             FolderProblemsView(session: session)
         }
+        .sheet(item: $session.toolRequest, onDismiss: { focused = true }) { request in
+            FolderToolSheet(session: session, request: request)
+        }
     }
 
     /// Anything that went wrong, where it can't be missed.
     @ViewBuilder
     private var notices: some View {
+        if let made = session.made {
+            HStack {
+                Text(made.text).font(.mono(12)).lineLimit(1)
+                Spacer()
+                Button("Undo") { session.takeBackMade() }
+                    .buttonStyle(TextButtonStyle(palette: palette))
+                Button("Dismiss") { session.dismissMade() }
+                    .buttonStyle(TextButtonStyle(palette: palette))
+            }
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 4)
+            .background(palette.background)
+        }
         if let warning = session.warning {
             HStack {
                 Text(warning).font(.mono(12)).lineLimit(3).textSelection(.enabled)
@@ -128,6 +145,11 @@ struct FolderCullView: View {
                 Text("○ \(c.left)").foregroundStyle(palette.muted)
             }
             .font(.mono(12))
+            HStack(spacing: 0) {
+                FolderToolButton(label: "Multi Crop", symbol: "crop", key: "⌥⌘C", palette: palette) { session.openMultiCrop() }
+                FolderToolButton(label: session.selection.isEmpty ? "Glue" : "Glue \(session.selection.count)", symbol: "rectangle.split.2x1.fill",
+                                 key: "⌥⌘G", palette: palette) { session.openGlue() }
+            }
             HStack(spacing: 14) {
                 modeButton("Grid", .grid)
                 modeButton("Rank", .rank)
@@ -331,6 +353,7 @@ struct FolderCullView: View {
                         session.gridColumns = Self.gridColumns(forWidth: width)
                     }
             }
+            if !session.selection.isEmpty { FolderSelectionBar(session: session) }
         }
         .tableSurface()
     }
@@ -344,7 +367,7 @@ struct FolderCullView: View {
     private var gridHeader: some View {
         HStack {
             Spacer()
-            Text("Click a photo to review it · arrows move · 1-5 stars · 6-9 label · G or Esc to go back")
+            Text("Click a photo to review it · ⌘-click to choose for Glue · arrows move · 1-5 stars · 6-9 label · G or Esc to go back")
                 .font(.mono(11))
                 .foregroundStyle(Theme.table.muted)
         }
@@ -367,13 +390,30 @@ struct FolderCullView: View {
 
     private func gridTile(_ tile: GridTile) -> some View {
         Button {
-            session.show(tile.id)
-            session.mode = .loupe
+            // ⌘-click chooses photos for Glue, ⇧-click a run of them.
+            let flags = NSEvent.modifierFlags
+            if flags.contains(.command) {
+                session.toggleSelect(tile.id)
+            } else if flags.contains(.shift) {
+                session.selectRange(to: tile.id)
+            } else {
+                session.show(tile.id)
+                session.mode = .loupe
+            }
         } label: {
             FolderImage(url: session.url(for: session.items[tile.id]), maxPixel: 480)
                 .overlay { gridDecisionMark(session.decision(at: tile.id)) }
                 .overlay { if let row = session.row(at: tile.id) { TileMetaBadge(row: row) } }
                 .overlay { Rectangle().stroke(tile.id == session.index ? Theme.table.ink : .clear, lineWidth: 3) }
+                .overlay(alignment: .topTrailing) {
+                    if session.selection.contains(tile.id) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Theme.table.accentInk, Theme.table.accent)
+                            .padding(6)
+                    }
+                }
+                .overlay { if session.selection.contains(tile.id) { Rectangle().stroke(Theme.table.accent, lineWidth: 3) } }
         }
         .buttonStyle(.plain)
         .id(tile.id)

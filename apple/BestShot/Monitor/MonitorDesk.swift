@@ -1786,7 +1786,7 @@ extension MonitorDesk {
             onSay("Rankings cleared.")
 
         // The phone's own: they open on the phone (Commands/CommandMenu.swift), or aren't listed here.
-        case .joinVideos, .antiCrop, .keep, .markDelete, .skip, .importPhotos, .importFiles,
+        case .joinVideos, .antiCrop, .glue, .multiCrop, .glueSelected, .keep, .markDelete, .skip, .importPhotos, .importFiles,
              .gridSize, .selecting, .selectAll, .tagSelected,
              .downloadSelected, .joinSelected, .deleteSelected, .exportJSON, .exportCSV, .downloadAll, .projectRemoved:
             break

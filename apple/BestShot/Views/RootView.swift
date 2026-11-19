@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var selection: SidebarSelection?
     @State private var showingNewProject = false
     @State private var showingSettings = false
+    @State private var showingWhatsNew = false
     @State private var escapes = EscapeStack()
     /// On a phone, which column is showing. The menu, the sidebar, is home.
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
@@ -38,6 +39,8 @@ struct RootView: View {
         case allMedia
         case joinVideos
         case antiCrop
+        case glue
+        case multiCrop
         case project(UUID)
     }
 
@@ -65,6 +68,18 @@ struct RootView: View {
                         .tag(SidebarSelection.joinVideos)
                     MenuRow("Anti-Crop", systemImage: "rectangle.split.2x1")
                         .tag(SidebarSelection.antiCrop)
+                    MenuRow("Glue", systemImage: "rectangle.split.2x1.fill")
+                        .tag(SidebarSelection.glue)
+                    MenuRow("Multi Crop", systemImage: "crop")
+                        .tag(SidebarSelection.multiCrop)
+                }
+                #else
+                // On the Mac: Glue and Multi Crop on any files (Folders has them on its photos too).
+                MenuSection("Tools") {
+                    MenuRow("Glue", systemImage: "rectangle.split.2x1.fill")
+                        .tag(SidebarSelection.glue)
+                    MenuRow("Multi Crop", systemImage: "crop")
+                        .tag(SidebarSelection.multiCrop)
                 }
                 #endif
                 MenuSection("Library") {
@@ -143,6 +158,11 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
+        .sheet(isPresented: $showingWhatsNew) { WhatsNewView() }
+        .task {
+            // Once after an update; never under XCTest.
+            if WhatsNew.unseen && NSClassFromString("XCTestCase") == nil { showingWhatsNew = true }
+        }
         .sheet(item: $renaming) { project in
             TextPromptSheet(title: "Rename Project", placeholder: "Name", action: "Rename", text: $newName) {
                 ProjectLibrary.rename(project, to: newName, context: context)
@@ -210,6 +230,8 @@ struct RootView: View {
         case .allMedia: return .allMedia
         case .joinVideos: return .joinVideos
         case .antiCrop: return .antiCrop
+        case .glue: return .glue
+        case .multiCrop: return .multiCrop
         case .project(let id): return .project(id)
         case nil: return .home
         }
@@ -232,6 +254,8 @@ struct RootView: View {
         case .project(let id): selection = .project(id)
         case .joinVideos: selection = .joinVideos
         case .antiCrop: selection = .antiCrop
+        case .glue: selection = .glue
+        case .multiCrop: selection = .multiCrop
         case .newProject(let name): createProject(name: name, description: "")
         case .renameProject(let id, let name):
             if let project = projects.first(where: { $0.uuid == id }) { _ = ProjectLibrary.rename(project, to: name, context: context) }
@@ -276,6 +300,10 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .glue:
+            GlueView()
+        case .multiCrop:
+            MultiCropView()
         case .allMedia:
             AllMediaView()
         case .project(let id):

@@ -18,6 +18,7 @@ struct FullscreenViewerView: View {
     @State private var newTag = ""
     /// The photo open in Anti-Crop, over the viewer.
     @State private var antiCrop: AntiCropRequest?
+    @State private var multiCrop: AntiCropRequest?
 
     private let slideshowInterval: TimeInterval = 3
 
@@ -64,6 +65,9 @@ struct FullscreenViewerView: View {
         .escapeScreen(escape)
         .sheet(item: $antiCrop) { request in
             ToolSheet { AntiCropView(initial: request.url) }
+        }
+        .sheet(item: $multiCrop) { request in
+            ToolSheet { MultiCropView(initial: request.url) }
         }
         .task(id: slideshow) {
             guard slideshow else { return }
@@ -121,6 +125,14 @@ struct FullscreenViewerView: View {
                         Image(systemName: "rectangle.split.2x1").padding(10)
                     }
                     .accessibilityLabel("Anti-Crop")
+                    Button {
+                        slideshow = false
+                        multiCrop = AntiCropRequest(url: item.fileURL)
+                    } label: {
+                        Image(systemName: "crop").padding(10)
+                    }
+                    .accessibilityLabel("Multi Crop")
+                    .help("Multi Crop")
                 }
                 #endif
                 Button { withAnimation { showInfo.toggle() } } label: {

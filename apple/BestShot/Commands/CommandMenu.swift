@@ -87,7 +87,7 @@ enum BestShotCommandMenu {
                 let app = AppCommands.shared
                 if app.place != .project(id) { app.send(.project(id)) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { app.send(command) }
-            case .joinVideos, .antiCrop:
+            case .joinVideos, .antiCrop, .glue, .multiCrop:
                 AppCommands.shared.send(command)
             default:
                 desk.run(command)
@@ -109,7 +109,7 @@ enum BestShotCommandMenu {
             Task { if let said = await task(), !said.isEmpty { app.message = said } }
         }
         switch command {
-        case .go, .project, .joinVideos, .antiCrop, .newProject, .renameProject, .deleteProject:
+        case .go, .project, .joinVideos, .antiCrop, .glue, .multiCrop, .newProject, .renameProject, .deleteProject:
             app.send(command)
 
         // The session's own, so the phone's Undo takes them back in order with the swipes.
@@ -172,7 +172,7 @@ enum BestShotCommandMenu {
         case .doneOrganising: library.leaveOrganise()
 
         case .importPhotos, .importFiles, .compareProject, .projectSort, .projectFilter, .gridSize, .selecting,
-             .selectAll, .tagSelected, .downloadSelected, .joinSelected, .deleteSelected, .exportJSON, .exportCSV,
+             .selectAll, .tagSelected, .downloadSelected, .joinSelected, .glueSelected, .deleteSelected, .exportJSON, .exportCSV,
              .downloadAll, .clearProjectRankings:
             app.send(command)
 

@@ -17,7 +17,7 @@ enum BestShotCommand: Equatable {
     // Places
     case go(MonitorSection)
     case project(UUID)
-    case joinVideos, antiCrop
+    case joinVideos, antiCrop, glue, multiCrop
     case allKeys
 
     // The photo on screen
@@ -81,7 +81,7 @@ enum BestShotCommand: Equatable {
     case selecting(Bool)
     case selectAll
     case tagSelected(String)
-    case downloadSelected, joinSelected, deleteSelected
+    case downloadSelected, joinSelected, glueSelected, deleteSelected
     case exportJSON, exportCSV, downloadAll
     case clearProjectRankings
     /// The monitor removed a project: the phone stops showing it, if it is.
@@ -166,6 +166,7 @@ struct BestShotCommandState: Equatable {
         var selecting = false
         var selected = 0
         var canJoin = false
+        var canGlue = false
         var removal = ""
     }
 
@@ -684,6 +685,10 @@ struct BestShotCommandList: CommandList {
                     rows.append(Row("project.join", "Join the chosen videos", symbol: "film.stack", step: .run(.joinSelected),
                                     synonyms: ["merge", "combine"], context: here))
                 }
+                if p.canGlue {
+                    rows.append(Row("project.glue", "Glue the chosen photos", symbol: "rectangle.split.2x1.fill", step: .run(.glueSelected),
+                                    synonyms: ["combine", "collage", "stitch"], context: here))
+                }
                 rows.append(Row("project.deleteselected", "Delete the chosen…", detail: "Asks first", symbol: "trash",
                                 step: .run(.deleteSelected), confirms: true, synonyms: ["remove", "bin"], destructive: true,
                                 context: here))
@@ -866,6 +871,13 @@ struct BestShotCommandList: CommandList {
                         step: .run(.joinVideos), synonyms: ["tools", "merge", "combine", "video"], onPhone: tools))
         rows.append(Row("go.anticrop", "Anti-Crop", detail: onMonitor ? "On the phone" : nil, symbol: "rectangle.split.2x1",
                         step: .run(.antiCrop), synonyms: ["tools", "band", "cut", "remove middle"], onPhone: tools))
+        #endif
+        #if os(iOS) || os(macOS)
+        let photoTools = onMonitor ? "The tool opens on the phone." : nil
+        rows.append(Row("go.glue", "Glue", detail: onMonitor ? "On the phone" : nil, symbol: "rectangle.split.2x1.fill",
+                        step: .run(.glue), synonyms: ["tools", "join photos", "combine", "collage", "stitch", "side by side"], onPhone: photoTools))
+        rows.append(Row("go.multicrop", "Multi crop", detail: onMonitor ? "On the phone" : nil, symbol: "crop",
+                        step: .run(.multiCrop), synonyms: ["tools", "scan", "split", "contact sheet", "extract photos"], onPhone: photoTools))
         #endif
         if onMonitor {
             rows.append(Row("keys", "All keys", detail: "?", symbol: "keyboard", step: .run(.allKeys),

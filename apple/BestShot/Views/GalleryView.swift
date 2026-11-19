@@ -36,6 +36,7 @@ struct GalleryView: View {
 
     // Tools: the chosen videos, in the grid's order, going into Join Videos.
     @State private var joining: JoinRequest?
+    @State private var gluing: JoinRequest?
 
     // Comparison
     @State private var showingCompareSelection = false
@@ -82,6 +83,7 @@ struct GalleryView: View {
                     BulkActionBar(
                         count: selectedIDs.count,
                         onJoin: joinableVideos.count >= 2 ? { joinSelected() } : nil,
+                        onGlue: gluablePhotos.count >= 2 ? { glueSelected() } : nil,
                         onTag: { showingBulkTag = true },
                         onDownload: bulkDownload,
                         onDelete: bulkDelete,
@@ -102,6 +104,9 @@ struct GalleryView: View {
             }
             .sheet(item: $joining) { request in
                 ToolSheet { VideoJoinView(initial: request.urls) }
+            }
+            .sheet(item: $gluing) { request in
+                ToolSheet { GlueView(initial: request.urls) }
             }
             .sheet(isPresented: $showingCompareSelection) {
                 ComparisonSelectionView(
@@ -321,7 +326,7 @@ struct GalleryView: View {
         BestShotCommandState.OpenProject(
             id: project.uuid, name: project.name, count: project.itemCount, unranked: project.unrankedCount,
             sort: sort, filter: filter, grid: gridSize, selecting: selectionMode, selected: selectedIDs.count,
-            canJoin: joinableVideos.count >= 2)
+            canJoin: joinableVideos.count >= 2, canGlue: gluablePhotos.count >= 2)
     }
 
     /// A command for this project: what its button or menu item does, with the
@@ -344,6 +349,7 @@ struct GalleryView: View {
             applyBulkTag()
         case .downloadSelected: if !selectedIDs.isEmpty { bulkDownload() }
         case .joinSelected: if joinableVideos.count >= 2 { joinSelected() }
+        case .glueSelected: if gluablePhotos.count >= 2 { glueSelected() }
         case .deleteSelected: if !selectedIDs.isEmpty { confirmingBulkDelete = true }
         case .exportJSON: export(.json)
         case .exportCSV: export(.csv)
@@ -461,6 +467,16 @@ struct GalleryView: View {
         #else
         []
         #endif
+    }
+
+    /// The chosen photos in the order they're shown, up to Glue's ten.
+    private var gluablePhotos: [MediaItem] {
+        Array(displayedItems.filter { selectedIDs.contains($0.uuid) && $0.mediaType == .image }.prefix(GlueSession.maxPhotos))
+    }
+
+    private func glueSelected() {
+        gluing = JoinRequest(urls: gluablePhotos.map(\.fileURL))
+        exitSelection()
     }
 
     private func joinSelected() {

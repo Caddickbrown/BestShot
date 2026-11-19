@@ -7,6 +7,8 @@ struct BulkActionBar: View {
     let count: Int
     /// Nil hides Join: fewer than two videos chosen, or on the Mac.
     var onJoin: (() -> Void)? = nil
+    /// Nil hides Glue: fewer than two photos chosen.
+    var onGlue: (() -> Void)? = nil
     let onTag: () -> Void
     let onDownload: () -> Void
     let onDelete: () -> Void
@@ -23,6 +25,13 @@ struct BulkActionBar: View {
                 Button(action: onJoin) {
                     Label("Join Videos", systemImage: "film.stack")
                 }
+            }
+
+            if let onGlue {
+                Button(action: onGlue) {
+                    Label("Glue", systemImage: "rectangle.split.2x1.fill")
+                }
+                .help("Glue the chosen photos")
             }
 
             Button(action: onTag) {

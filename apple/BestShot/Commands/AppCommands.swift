@@ -11,7 +11,7 @@ final class AppCommands {
     static let shared = AppCommands()
 
     enum Place: Equatable {
-        case home, triage, organise, rank, allMedia, folders, joinVideos, antiCrop
+        case home, triage, organise, rank, allMedia, folders, joinVideos, antiCrop, glue, multiCrop
         case project(UUID)
     }
 
@@ -91,7 +91,7 @@ extension BestShotCommandState {
             if s.organiseOpen { s.canUndo = library.organiseCanUndo }
         case .rank: s.screen = rank?.compare == nil ? .rank : .rankCompare
         case .allMedia: s.screen = .allMedia
-        case .joinVideos, .antiCrop: s.screen = .tool
+        case .joinVideos, .antiCrop, .glue, .multiCrop: s.screen = .tool
         case .project:
             s.screen = project == nil ? .home : .project
             s.project = project

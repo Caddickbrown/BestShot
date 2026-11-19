@@ -1,5 +1,7 @@
 //! Versioned local media edits. Platform decoders/renderers consume these plans.
+pub mod glue;
 pub mod image;
+pub mod multicrop;
 pub mod video;
 
 use serde::{Deserialize, Serialize};

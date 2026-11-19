@@ -1,0 +1,506 @@
+{
+  "about": "Multi Crop: plans (output order, names, sizes, exact copy or resampled) and tidy of detected quads.",
+  "cases": [
+    {
+      "config": {
+        "boxes": [
+          {
+            "angle_deg": 2.1,
+            "cx": 3410.0,
+            "cy": 1002.0,
+            "h": 1205,
+            "id": "b2",
+            "kind": "rect",
+            "turn": 0,
+            "w": 1790
+          },
+          {
+            "angle_deg": 0.0,
+            "cx": 1210.0,
+            "cy": 980.0,
+            "h": 1200,
+            "id": "b1",
+            "kind": "rect",
+            "turn": 0,
+            "w": 1800
+          },
+          {
+            "corners": [
+              [
+                3000,
+                3000
+              ],
+              [
+                4900,
+                3050
+              ],
+              [
+                4950,
+                4300
+              ],
+              [
+                2950,
+                4250
+              ]
+            ],
+            "id": "b4",
+            "kind": "quad",
+            "turn": 90
+          }
+        ],
+        "naming": {
+          "existing": [
+            "Scan_004.tif"
+          ],
+          "ext": "jpg",
+          "stem": "Scan_004"
+        },
+        "schema_version": 1,
+        "source": {
+          "height": 4960,
+          "ref": "Scan_004.tif",
+          "width": 7016
+        },
+        "trim_px": 4
+      },
+      "expect": [
+        {
+          "exact": true,
+          "height": 1192,
+          "id": "b1",
+          "name": "Scan_004-1.jpg",
+          "number": 1,
+          "width": 1792
+        },
+        {
+          "exact": false,
+          "height": 1197,
+          "id": "b2",
+          "name": "Scan_004-2.jpg",
+          "number": 2,
+          "width": 1782
+        },
+        {
+          "exact": false,
+          "height": 1943,
+          "id": "b4",
+          "name": "Scan_004-3.jpg",
+          "number": 3,
+          "width": 1243
+        }
+      ],
+      "name": "spec example"
+    },
+    {
+      "config": {
+        "boxes": [
+          {
+            "cx": 50,
+            "cy": 50,
+            "h": 100,
+            "id": "a",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 150,
+            "cy": 50,
+            "h": 100,
+            "id": "b",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 250,
+            "cy": 50,
+            "h": 100,
+            "id": "c",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 350,
+            "cy": 50,
+            "h": 100,
+            "id": "d",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 450,
+            "cy": 50,
+            "h": 100,
+            "id": "e",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 550,
+            "cy": 50,
+            "h": 100,
+            "id": "f",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 50,
+            "cy": 250,
+            "h": 100,
+            "id": "g",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 150,
+            "cy": 250,
+            "h": 100,
+            "id": "h",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 250,
+            "cy": 250,
+            "h": 100,
+            "id": "i",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 350,
+            "cy": 250,
+            "h": 100,
+            "id": "j",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 450,
+            "cy": 250,
+            "h": 100,
+            "id": "k",
+            "kind": "rect",
+            "w": 100
+          },
+          {
+            "cx": 550,
+            "cy": 250,
+            "h": 100,
+            "id": "l",
+            "kind": "rect",
+            "w": 100
+          }
+        ],
+        "naming": {
+          "existing": [
+            "S-03.jpg"
+          ],
+          "ext": "jpg",
+          "stem": "S"
+        },
+        "schema_version": 1,
+        "source": {
+          "height": 400,
+          "ref": "S.jpg",
+          "width": 1200
+        }
+      },
+      "expect": [
+        {
+          "exact": true,
+          "height": 100,
+          "id": "a",
+          "name": "S-01.jpg",
+          "number": 1,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "b",
+          "name": "S-02.jpg",
+          "number": 2,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "c",
+          "name": "S-03-2.jpg",
+          "number": 3,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "d",
+          "name": "S-04.jpg",
+          "number": 4,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "e",
+          "name": "S-05.jpg",
+          "number": 5,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "f",
+          "name": "S-06.jpg",
+          "number": 6,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "g",
+          "name": "S-07.jpg",
+          "number": 7,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "h",
+          "name": "S-08.jpg",
+          "number": 8,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "i",
+          "name": "S-09.jpg",
+          "number": 9,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "j",
+          "name": "S-10.jpg",
+          "number": 10,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "k",
+          "name": "S-11.jpg",
+          "number": 11,
+          "width": 100
+        },
+        {
+          "exact": true,
+          "height": 100,
+          "id": "l",
+          "name": "S-12.jpg",
+          "number": 12,
+          "width": 100
+        }
+      ],
+      "name": "twelve pad and collide"
+    },
+    {
+      "config": {
+        "boxes": [
+          {
+            "cx": 50,
+            "cy": 50,
+            "h": 30,
+            "id": "a",
+            "kind": "rect",
+            "w": 30
+          }
+        ],
+        "schema_version": 1,
+        "source": {
+          "height": 100,
+          "ref": "x",
+          "width": 100
+        },
+        "trim_px": 10
+      },
+      "expect": {
+        "error": "Box 1 is too small: at least 16 px a side after trim."
+      },
+      "name": "too small after trim"
+    },
+    {
+      "expect": [
+        {
+          "angle_deg": 0.0,
+          "cx": 550.0,
+          "cy": 450.0,
+          "h": 500.0,
+          "id": "b1",
+          "kind": "rect",
+          "turn": 0,
+          "w": 700.0
+        },
+        {
+          "angle_deg": 1.2,
+          "cx": 1444.5,
+          "cy": 462.5,
+          "h": 500.0,
+          "id": "b2",
+          "kind": "rect",
+          "turn": 0,
+          "w": 696.0
+        },
+        {
+          "angle_deg": 0.0,
+          "cx": 550.0,
+          "cy": 1050.0,
+          "h": 500.0,
+          "id": "b3",
+          "kind": "rect",
+          "turn": 0,
+          "w": 700.0
+        },
+        {
+          "corners": [
+            [
+              1100.0,
+              800.0
+            ],
+            [
+              1800.0,
+              830.0
+            ],
+            [
+              1760.0,
+              1300.0
+            ],
+            [
+              1150.0,
+              1250.0
+            ]
+          ],
+          "id": "b4",
+          "kind": "quad",
+          "turn": 0
+        }
+      ],
+      "name": "tidy a scan of four prints on a page",
+      "size": [
+        2000,
+        1500
+      ],
+      "tidy": [
+        [
+          [
+            100,
+            100
+          ],
+          [
+            1900,
+            100
+          ],
+          [
+            1900,
+            1400
+          ],
+          [
+            100,
+            1400
+          ]
+        ],
+        [
+          [
+            200,
+            200
+          ],
+          [
+            900,
+            200
+          ],
+          [
+            900,
+            700
+          ],
+          [
+            200,
+            700
+          ]
+        ],
+        [
+          [
+            1102,
+            205
+          ],
+          [
+            1798,
+            220
+          ],
+          [
+            1787,
+            720
+          ],
+          [
+            1091,
+            705
+          ]
+        ],
+        [
+          [
+            200,
+            800
+          ],
+          [
+            900,
+            800
+          ],
+          [
+            900,
+            1300
+          ],
+          [
+            200,
+            1300
+          ]
+        ],
+        [
+          [
+            260,
+            840
+          ],
+          [
+            840,
+            840
+          ],
+          [
+            840,
+            1260
+          ],
+          [
+            260,
+            1260
+          ]
+        ],
+        [
+          [
+            1100,
+            800
+          ],
+          [
+            1800,
+            830
+          ],
+          [
+            1760,
+            1300
+          ],
+          [
+            1150,
+            1250
+          ]
+        ]
+      ]
+    }
+  ]
+}

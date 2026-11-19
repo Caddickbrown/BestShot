@@ -265,10 +265,15 @@ struct BestShotCommandList: CommandList {
                     step: .run(.skip), synonyms: ["later", "pass"], context: here),
             ]
         }
-        let stars = (0...5).map { n in
-            Row("stars.\(n)", n == 0 ? "No stars" : "\(n) star\(n == 1 ? "" : "s")", detail: onMonitor ? "\(n)" : nil,
-                symbol: n == 0 ? "star.slash" : "star.fill", step: .run(.stars(n)),
-                synonyms: [n == 0 ? "unrate" : starText(n), "\(n)"], isCurrent: photo.stars == n)
+        // Typed pieces: as one untyped closure it was too much for the CI Xcode's type checker.
+        let stars: [Row] = (0...5).map { (n: Int) -> Row in
+            let plural: String = n == 1 ? "" : "s"
+            let title: String = n == 0 ? "No stars" : "\(n) star\(plural)"
+            let detail: String? = onMonitor ? "\(n)" : nil
+            let symbol: String = n == 0 ? "star.slash" : "star.fill"
+            let synonyms: [String] = [n == 0 ? "unrate" : starText(n), "\(n)"]
+            return Row("stars.\(n)", title, detail: detail, symbol: symbol, step: .run(.stars(n)),
+                       synonyms: synonyms, isCurrent: photo.stars == n)
         }
         rows.append(Row("photo.stars", "Stars…", detail: photo.stars == 0 ? "None" : starText(photo.stars),
                         symbol: "star", step: .pick(CommandPick(prompt: "How many stars?", choices: stars)),
@@ -413,9 +418,13 @@ struct BestShotCommandList: CommandList {
     }
 
     private var starsFilterPick: Row {
-        let choices = (0...5).map { n in
-            Row("min.\(n)", n == 0 ? "Any stars" : "\(n) star\(n == 1 ? "" : "s") or more", detail: n == 0 ? nil : starText(n),
-                symbol: "star", step: .run(.filterStars(n)), isCurrent: state.filter.minimumStars == n)
+        // Typed pieces, as above: the untyped closure timed out on the CI type checker.
+        let choices: [Row] = (0...5).map { (n: Int) -> Row in
+            let plural: String = n == 1 ? "" : "s"
+            let title: String = n == 0 ? "Any stars" : "\(n) star\(plural) or more"
+            let detail: String? = n == 0 ? nil : starText(n)
+            return Row("min.\(n)", title, detail: detail, symbol: "star", step: .run(.filterStars(n)),
+                       isCurrent: state.filter.minimumStars == n)
         }
         return Row("triage.minstars", "At least…", detail: state.filter.minimumStars == 0 ? "Any stars" : starText(state.filter.minimumStars),
                    symbol: "star", step: .pick(CommandPick(prompt: "How many stars at least?", choices: choices)),

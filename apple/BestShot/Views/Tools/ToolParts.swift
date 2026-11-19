@@ -10,6 +10,8 @@ import SwiftUI
 /// tapped; a photo is picked with one tap.
 struct ToolProjectPicker: View {
     let kind: MediaType
+    /// Several at once, in the order tapped: videos always, photos for Glue.
+    var multiple: Bool? = nil
     let choose: ([URL]) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -17,7 +19,7 @@ struct ToolProjectPicker: View {
     @State private var picked: [UUID] = []
 
     private var matching: [MediaItem] { items.filter { $0.mediaType == kind } }
-    private var many: Bool { kind == .video }
+    private var many: Bool { multiple ?? (kind == .video) }
 
     var body: some View {
         NavigationStack {
@@ -27,7 +29,7 @@ struct ToolProjectPicker: View {
                                message: "Nothing like this has been imported into a project yet.")
                 } else {
                     List {
-                        TableSection(many ? "Tap in the order to join" : "Tap a photo") {
+                        TableSection(many ? (kind == .video ? "Tap in the order to join" : "Tap in the order to glue") : "Tap a photo") {
                             ForEach(matching) { item in
                                 Button { tap(item) } label: { row(item) }
                                     .buttonStyle(.plain)

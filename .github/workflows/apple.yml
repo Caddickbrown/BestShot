@@ -2,6 +2,7 @@ name: Apple app
 
 on:
   push:
+    branches: [main]
     paths:
       - "apple/**"
       - "core/**"
@@ -11,6 +12,10 @@ on:
       - "apple/**"
       - "core/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   core-tests:

@@ -168,11 +168,19 @@ final class GlueMultiCropTests: XCTestCase {
   func testLineUpFindsTheOverlap() throws {
     let workspace = try MediaWorkspace()
     let (w, h) = (400, 200)
-    // Blocky noise: something for the registration to hold on to.
-    var rng = SystemRandomNumberGenerator()
-    let blocks = (0..<(w / 8 * h / 8)).map { _ in UInt8.random(in: 0...255, using: &rng) }
+    // Seeded, non-repeating texture (blocks of uneven size plus a vertical
+    // ramp) so registration has one clear answer on every machine. Random
+    // equal-size blocks let Vision lock onto a whole-block vertical shift on CI.
+    var seed: UInt64 = 0x9E3779B97F4A7C15
+    func next() -> UInt8 { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return UInt8(truncatingIfNeeded: seed >> 56) }
+    let cols = (0..<w).map { x in x / 5 + (x * x) % 7 }, rows = (0..<h).map { y in y / 6 + (y * 3) % 5 }
+    let cells = (0..<((cols.max()! + 1) * (rows.max()! + 1))).map { _ in next() }
     var whole: [UInt8] = []
-    for y in 0..<h { for x in 0..<w { let v = blocks[(y / 8) * (w / 8) + x / 8]; whole += [v, 255 &- v, v / 2, 255] } }
+    for y in 0..<h { for x in 0..<w {
+      let n = Int(cells[rows[y] * (cols.max()! + 1) + cols[x]])
+      let v = UInt8(min(255, n * 3 / 4 + y * 64 / h))
+      whole += [v, 255 &- v, UInt8((n + x) % 256), 255]
+    } }
     func crop(_ x0: Int, _ x1: Int) -> [UInt8] {
       var out: [UInt8] = []
       for y in 0..<h { out += whole[(y * w + x0) * 4..<(y * w + x1) * 4] }

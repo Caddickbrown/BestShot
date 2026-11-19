@@ -1,6 +1,6 @@
 # BestShot — Glue and Multi Crop
 
-**Status:** Spec for review. Nothing is built.<br>
+**Status:** Agreed with Dan on 19 November (see [Decisions, 19 Nov](#decisions-19-nov), which wins wherever the text below still differs). Being built: Multi Crop first, then Glue.<br>
 **Date:** 19 November 2026<br>
 **Feature IDs:** BS-MT-003 (Glue), BS-MT-004 (Multi Crop)<br>
 **Builds on:** [media-tools-spec.md](media-tools-spec.md) and what shipped in [media-tools-implementation.md](media-tools-implementation.md) (Anti-Crop's RGBA row pipeline, `MediaWorkspace`, `ToolParts.swift`, `bestshot-media`).<br>
@@ -41,7 +41,7 @@ The two tools have the same frame. Each is an editor that opens on one or more s
 
 - **Where:** beside the source in Folders (Mac), meaning the same directory as the first source (Glue) or as the source (Multi Crop). On iPhone and iPad the tools work as they do today: Save to Photos, Share (which includes Save to Files), or into the open project.
 - **Written safely:** render to `MediaWorkspace`, encode to `name.partial.<ext>` in the destination directory under file coordination, then rename with `create_new` semantics. A failure or cancel removes the partial. Nothing existing is ever replaced. A name that is taken gets `-2`, `-3`, and so on (rule in Rust, tested).
-- **Format:** by default the same as the source (first source for Glue). JPEG stays JPEG at quality 0.92, HEIC stays HEIC, PNG and TIFF stay lossless, and **RAW becomes JPEG** (a RAW can't be written). A picker offers JPEG, HEIC, PNG and TIFF, plus a quality slider for the lossy two. The choice is kept per tool between launches.
+- **Format:** **JPEG by default, whatever the source** (quality 0.92), including HEIC, PNG and RAW sources (Dan, 19 Nov). The editor's ⋯ options menu offers JPEG, HEIC, PNG and TIFF. The choice is kept per tool between launches.
 - **Pixels:** 8-bit RGBA in one working space (see 0.4). Alpha is kept for PNG and TIFF and flattened onto the background colour for JPEG and HEIC.
 
 ### 0.3 Metadata on the new files
@@ -49,16 +49,18 @@ The two tools have the same frame. Each is an editor that opens on one or more s
 | What | Glue | Multi Crop | Why |
 |---|---|---|---|
 | EXIF capture date, camera, lens, exposure | From the **first** source | From the source | So the new photo sorts beside its originals by date, in Folders and in Photos |
-| GPS | From the first source, **if** the "Keep location" setting is on (default on, as the originals already carry it) | Same | Matches the sources. Anti-Crop drops it, so this needs Dan's call (Q7) |
+| GPS | **Kept**, from the first source (Dan, 19 Nov) | Same | Matches the sources |
 | Orientation | Reset to 1 (pixels are already upright) | Same | Otherwise a viewer would rotate it twice |
 | Pixel size, DPI | New size; DPI from first source | New size; **scanner DPI kept** | DPI lets a scan's crops print at their real size |
 | Embedded thumbnail, maker notes, `crs:*` (Camera Raw / Lightroom develop settings) | **Dropped** | **Dropped** | A stale thumbnail shows the wrong picture. A copied `crs:` crop or develop would re-apply to the new image in Lightroom or ACR |
 | Keywords (`dc:subject`) | **Union** of all sources, in first-seen order | Copied from the source | Cheap, and nearly always what's wanted |
-| Stars (`xmp:Rating`) | **Not carried** (new photo is unrated) | **Not carried** | It hasn't been culled. Optional "Copy stars and label too" (Q6) |
+| Stars (`xmp:Rating`) | **Not carried** (new photo is unrated) | **Not carried** | It's a new file and hasn't been culled. No "copy stars" option (Dan, 19 Nov) |
 | Colour label (`xmp:Label`) | **Not carried** | **Not carried** | In BestShot, red means reject and green means keep. A carried red would put the new photo in the next "Trash the reds" |
 | Provenance | `xmpMM:DerivedFrom` (first source) plus `xmpMM:Ingredients` listing every source by relative path | `xmpMM:DerivedFrom` (source) and `bestshot:CropIndex` | Shows what a file was made from. Adobe apps keep these fields |
 
-**How it's written.** The new file joins the folder's catalog through one new core call, `Catalog::adopt_new(rel, fields)`. It writes the XMP the way any mark is written: the sidecar always, and into the JPEG too when **Also write into JPEGs** is on, through the existing `write` path. That keeps the sidecar/embedded rules in one place. `xmp.rs` today knows rating, label, label colour and keywords; it needs `DerivedFrom` and `Ingredients` added to `new_packet` (a small extension with its own tests). EXIF and TIFF tags (date, camera, GPS, DPI) are copied by ImageIO when encoding, from a whitelist and never as a blind copy of the source dictionary.
+**How it's written (v1, 19 Nov).** The new file is ours, so its keywords and provenance go into the new file's own embedded XMP as it is encoded (ImageIO `CGImageMetadata`), with no sidecar; a Folders session rescans to pick it up. `Catalog::adopt_new` and sidecar writing, described next, are deferred until a reason appears (a RAW-only output, which can't happen while outputs are JPEG/HEIC/PNG/TIFF).
+
+**Original design.** The new file joins the folder's catalog through one new core call, `Catalog::adopt_new(rel, fields)`. It writes the XMP the way any mark is written: the sidecar always, and into the JPEG too when **Also write into JPEGs** is on, through the existing `write` path. That keeps the sidecar/embedded rules in one place. `xmp.rs` today knows rating, label, label colour and keywords; it needs `DerivedFrom` and `Ingredients` added to `new_packet` (a small extension with its own tests). EXIF and TIFF tags (date, camera, GPS, DPI) are copied by ImageIO when encoding, from a whitelist and never as a blind copy of the source dictionary.
 
 **Bridge.** A new file shows up in Bridge on its next refresh, like any file dropped into the folder. For a JPEG, Bridge reads the embedded XMP and not the sidecar. With "Also write into JPEGs" off, Bridge shows no keywords on a new JPEG, which is how BestShot's JPEG marks already behave today; the spec doesn't change that. For HEIC, PNG and TIFF, Bridge reads the sidecar. Provenance appears in Bridge under File Info ▸ Raw Data only. Nothing a Bridge user relies on (labels, ratings, the Reject rating) is set on the new file, so nothing surprises them.
 
@@ -105,7 +107,7 @@ Folders has one "current" photo today and no selection. Glue needs one. The sele
 
 ### 1.1 What it is
 
-Glue puts 2–6 photos edge to edge in a row or a column. They can butt straight up against each other, sit apart with a gap, or overlap with a hand-placed seam and an optional fade across it. The output is one new photo. The intent is quick and manual. It's not a panorama stitcher (see 1.9).
+Glue puts 2–10 photos edge to edge in a row, a column or a grid, or lets them be placed freely ("jagged") on a background. They can butt straight up against each other, sit apart with a gap, or overlap with a hand-placed seam and an optional fade across it. The output is one new photo. The intent is quick and manual. It's not a panorama stitcher (see 1.9).
 
 ### 1.2 Flow
 
@@ -258,8 +260,8 @@ Full-resolution decode happens only on **Glue**. The editor works on ≤ 2048 px
 ### 1.9 Not included, and the cheap option
 
 - **No automatic panorama stitching.** No feature matching, homography warps, cylindrical projection or exposure matching. Glue never moves pixels except to scale them uniformly and slide them along the join.
-- **No grids** (2×2 and beyond) in v1. Rows and columns only. A grid is one more layout in the same plan, about +1.5 days, if wanted (Q2).
-- **Option, cheap with Vision: "Line up".** An icon that runs `VNTranslationalImageRegistrationRequest` on the two neighbouring previews and sets **overlap and offset** from the translation it finds. It's a pure translation (no rotation or warp), on 2048 px previews, in well under a second. It fits Glue's model exactly, since it only fills in the numbers the person could set by hand, and the person can still drag afterwards. If the result is implausible (overlap outside the allowed range), it says "Couldn't line these up" and changes nothing. About +1 day. Recommended as a v1.1 add-on (Q3). Anything beyond this (`VNHomographicImageRegistrationRequest` with warping and blending) is panorama territory and out of scope.
+- ~~No grids in v1.~~ **Grids and free layouts are in v1** (Dan, 19 Nov): see Decisions.
+- **Option, cheap with Vision: "Line up".** An icon that runs `VNTranslationalImageRegistrationRequest` on the two neighbouring previews and sets **overlap and offset** from the translation it finds. It's a pure translation (no rotation or warp), on 2048 px previews, in well under a second. It fits Glue's model exactly, since it only fills in the numbers the person could set by hand, and the person can still drag afterwards. If the result is implausible (overlap outside the allowed range), it says "Couldn't line these up" and changes nothing. About +1 day. **In v1** (Dan, 19 Nov). Anything beyond this (`VNHomographicImageRegistrationRequest` with warping and blending) is panorama territory and out of scope.
 
 ---
 
@@ -425,7 +427,7 @@ Crops are made one after another, so cancelling stops before the next. A cancell
 - Content-aware fill of the corners a rotation leaves. A rotated rect is always cut **inside** the source, so there's nothing to fill.
 - Automatic colour restoration or fade correction of old prints.
 - Splitting video frames, or PDFs with several pages (a PDF's first page could be decoded later if asked).
-- Batch Multi Crop over many scans at once. One source per editor in v1. "Apply the same boxes to the next scan" (good for a feeder of same-layout pages) is a natural v1.1 (Q14).
+- Batch Multi Crop over many scans at once. One source per editor in v1, but **"Use last crop" is in v1** (Dan, 19 Nov): it puts the previous image's boxes on this one.
 
 ---
 
@@ -475,6 +477,8 @@ Suggested order: shared parts → **Multi Crop first**, as the more useful on it
 
 ## 5. Open questions for Dan (each with a recommended default)
 
+All answered on 19 November: see [Decisions, 19 Nov](#decisions-19-nov). Where Dan didn't say otherwise, the recommended default below stands.
+
 1. **Two landscapes: stacked or side by side by default?** The "closest to square" rule stacks them, which suits two separate photos; side by side suits halves of a wide view. **Recommend: closest to square, with `o` to flip.** It's predictable, one key fixes it, and Glue remembers the last flip for the session.
 2. **More than two photos, and grids?** **Recommend: 2–6 in a row or column for v1, no grids.** A grid is +1.5 days when wanted.
 3. **Add "Line up" (Vision translation) to Glue?** **Recommend: yes, as v1.1** (+1 day). It only fills in overlap and offset; no warping, no stitching.
@@ -490,3 +494,34 @@ Suggested order: shared parts → **Multi Crop first**, as the more useful on it
 13. **Change the date on scan crops** (scan date ≠ when the print was taken)? **Recommend: out of scope for these tools.** A general "Set date" action in Folders would serve scans and more.
 14. **"Same boxes on the next scan"** for a batch of same-layout pages? **Recommend: v1.1** (+1.5 days), if Dan scans in batches.
 15. **After Multi Crop, do anything to the source** (a label, a keyword "cropped")? **Recommend: nothing.** Never change an original. The `DerivedFrom` on each crop already says where it came from.
+
+---
+
+## Decisions, 19 Nov
+
+Dan's answers. These win wherever the sections above still say otherwise.
+
+**Both tools**
+- **New files are new files.** No stars and no colour label are carried, and there's no "copy stars" option. Keywords are carried as the metadata table says (Glue: the union; Multi Crop: the source's). Location (GPS) is kept.
+- **Output is JPEG by default** for every source, HEIC, PNG and RAW included, at quality 0.92. The ⋯ options menu offers HEIC, PNG and TIFF; the choice is remembered per tool.
+- **Quick rotate before saving matters more than guessing.** Every photo (Glue) and every box (Multi Crop) has a rotate icon, and `r` / `⇧R` turn the focused one 90° right / left. Face-based "which way up" (Q11) is fine but not important, so it's left out of v1.
+- **Keywords and provenance are embedded in the new file's XMP** at encode time (no sidecar, no `Catalog::adopt_new` in v1). Folders rescans after making files.
+- Every other open question takes the recommended default in section 5.
+
+**Multi Crop**
+- As specced. Plus **Use last crop** (`l`, and an icon): the previous image's boxes, kept in proportion to the image, are put on this one, so a run of same-layout scans takes one key each.
+- Q10 Find runs on open, Q5 names `Scan_004-1.jpg` beside the source, Q15 nothing is done to the source.
+
+**Glue**
+- **Up to 10 photos** (was 2–6).
+- **Layouts:** horizontal or vertical, as a **line** (row or column), a **grid** (rows of N, or columns of N when vertical), or **free**. Free ("jagged") lets each photo be resized on its own (aspect kept) and placed anywhere, so edges needn't line up; whatever isn't covered is background. Switching to Free starts from the current line or grid, so the tidy layout is the starting point for the jagged one.
+- **Background:** a colour picker (white and black one tap away), plus **Blurred fill**, which fills the background with a soft, extended blur of the photos themselves (a push-pull fill of a small copy, then blurred). It's cheap in the same Rust pass, so it's in. A separate "extend edges" isn't offered: in a free layout there's no single edge to extend, and the blurred fill covers the same need.
+- **Zoom the canvas freely:** pinch, ⌘+ / ⌘−, and ⌘0 (or the icon) to fit.
+- **Kept from the spec:** the gap ↔ overlap Join control and the seam with a straight or feathered (smoothstep) fade. In a grid the join applies within rows and between rows. In Free, the fade is a feather on the edges of each photo that sits over another.
+- **Line up (Vision) is in v1**: on a line layout it sets each join's overlap and offset from `VNTranslationalImageRegistrationRequest`, per neighbouring pair (so joins can differ after Line up). Implausible results change nothing and say "Couldn't line these up".
+- Q1 closest-to-square layout with `o` to flip, Q4 `IMG_0012-glued.jpg`.
+
+**How it's split (as built)**
+- Rust (`bestshot-media`, `glue.rs` and `multicrop.rs`): edit models and validation, layouts (line, grid, free), placements and blend ramps, output names and collisions, box tidy and reading order, box geometry, the exact-copy and bicubic perspective extract, and the compositor (fade, gap, border, colour or blurred background). Shared vectors in `core/bestshot-media/tests/vectors/`.
+- Swift: decode, colour, and **scaling each Glue photo to its planned size while staging** (Core Image Lanczos, the plain alternative section 1.5 allows; Rust then composites 1:1, so unscaled photos are exact copies), Vision, encode with the EXIF whitelist and XMP, the editors, keys, and file placement.
+- Originals are never written: tests hash the source bytes before and after.

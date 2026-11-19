@@ -319,51 +319,73 @@ struct FolderCullView: View {
 
     // MARK: - Grid
 
+    // Split into pieces: as one expression it was too big for the CI Xcode's type checker.
     private var grid: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Text("Click a photo to review it · arrows move · 1-5 stars · 6-9 label · G or Esc to go back")
-                    .font(.mono(11))
-                    .foregroundStyle(Theme.table.muted)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 6)
+            gridHeader
             HairlineRule()
             GeometryReader { geo in
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        ContactSheet(data: session.visible.map(GridTile.init), minimum: 150) { tile in
-                            Button {
-                                session.show(tile.id)
-                                session.mode = .loupe
-                            } label: {
-                                FolderImage(url: session.url(for: session.items[tile.id]), maxPixel: 480)
-                                    .overlay {
-                                        switch session.decision(at: tile.id) {
-                                        case .keep: GreasePencilMark(shape: .circle, lineWidth: 3).padding(8)
-                                        case .reject: GreasePencilMark(shape: .cross, lineWidth: 3).padding(8)
-                                        case nil: EmptyView()
-                                        }
-                                    }
-                                    .overlay { if let row = session.row(at: tile.id) { TileMetaBadge(row: row) } }
-                                    .overlay { Rectangle().stroke(tile.id == session.index ? Theme.table.ink : .clear, lineWidth: 3) }
-                            }
-                            .buttonStyle(.plain)
-                            .id(tile.id)
-                        }
-                        .padding(4)
+                gridScroll
+                    // Matches ContactSheet's adaptive columns, for up and down.
+                    .onChange(of: geo.size.width, initial: true) { _, width in
+                        session.gridColumns = Self.gridColumns(forWidth: width)
                     }
-                    .onChange(of: session.index) { _, i in proxy.scrollTo(i) }
-                    .onAppear { proxy.scrollTo(session.index, anchor: .center) }
-                }
-                // Matches ContactSheet's adaptive columns, for up and down.
-                .onChange(of: geo.size.width, initial: true) { _, width in
-                    session.gridColumns = max(Int((width - 8 + 4) / 154), 1)
-                }
             }
         }
         .tableSurface()
+    }
+
+    /// ContactSheet's adaptive column count: 150pt minimum tiles, 4pt gutters, 4pt padding each side.
+    private static func gridColumns(forWidth width: CGFloat) -> Int {
+        let usable: CGFloat = width - 8 + 4
+        return max(Int(usable / 154), 1)
+    }
+
+    private var gridHeader: some View {
+        HStack {
+            Spacer()
+            Text("Click a photo to review it · arrows move · 1-5 stars · 6-9 label · G or Esc to go back")
+                .font(.mono(11))
+                .foregroundStyle(Theme.table.muted)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 6)
+    }
+
+    private var gridScroll: some View {
+        ScrollViewReader { (proxy: ScrollViewProxy) in
+            ScrollView {
+                ContactSheet(data: session.visible.map(GridTile.init), minimum: 150) { (tile: GridTile) in
+                    gridTile(tile)
+                }
+                .padding(4)
+            }
+            .onChange(of: session.index) { _, i in proxy.scrollTo(i) }
+            .onAppear { proxy.scrollTo(session.index, anchor: .center) }
+        }
+    }
+
+    private func gridTile(_ tile: GridTile) -> some View {
+        Button {
+            session.show(tile.id)
+            session.mode = .loupe
+        } label: {
+            FolderImage(url: session.url(for: session.items[tile.id]), maxPixel: 480)
+                .overlay { gridDecisionMark(session.decision(at: tile.id)) }
+                .overlay { if let row = session.row(at: tile.id) { TileMetaBadge(row: row) } }
+                .overlay { Rectangle().stroke(tile.id == session.index ? Theme.table.ink : .clear, lineWidth: 3) }
+        }
+        .buttonStyle(.plain)
+        .id(tile.id)
+    }
+
+    @ViewBuilder
+    private func gridDecisionMark(_ decision: Decision?) -> some View {
+        switch decision {
+        case .keep: GreasePencilMark(shape: .circle, lineWidth: 3).padding(8)
+        case .reject: GreasePencilMark(shape: .cross, lineWidth: 3).padding(8)
+        case nil: EmptyView()
+        }
     }
 
     private struct GridTile: Identifiable { let id: Int }

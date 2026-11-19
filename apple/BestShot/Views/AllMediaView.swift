@@ -22,6 +22,8 @@ struct AllMediaView: View {
         return n == allItems.count ? "\(n) item\(n == 1 ? "" : "s")" : "\(n) of \(allItems.count)"
     }
 
+    @Environment(\.reselectSignal) private var reselectSignal
+
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: "Library", title: "All Media", status: allItems.isEmpty ? nil : status)
@@ -33,7 +35,11 @@ struct AllMediaView: View {
                 } else if displayed.isEmpty {
                     EmptyState("No results for “\(searchText)”", message: "Check the spelling or try a new search.")
                 } else {
+                    // All Media's sidebar row tapped again: back to the first items.
+                    ScrollViewReader { proxy in
                     ScrollView {
+                        VStack(spacing: 0) {
+                        ScrollTop.anchor
                         LazyVGrid(
                             columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: Theme.Space.gutter)],
                             spacing: Theme.Space.gutter
@@ -53,6 +59,9 @@ struct AllMediaView: View {
                             }
                         }
                         .padding(Theme.Space.gutter)
+                        }
+                    }
+                    .scrollsToTopOnReselect(proxy, signal: reselectSignal, target: ScrollTop.id)
                     }
                 }
             }

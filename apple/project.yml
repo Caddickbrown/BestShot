@@ -33,6 +33,8 @@ targets:
       - path: BestShot
       # App Kit's command menu: the rules and keys; the app supplies the commands.
       - path: ../kit/swift/CommandPalette.swift
+      # App Kit's tab re-tap: the place already open, tapped again, goes back to its top.
+      - path: ../kit/swift/TabReselect.swift
     dependencies:
       # Shared Rust core (../core), built by scripts/build-core.sh.
       - framework: Frameworks/BestShotCore.xcframework

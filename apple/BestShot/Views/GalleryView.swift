@@ -66,6 +66,8 @@ struct GalleryView: View {
         return "\(ranked) ranked · \(project.unrankedCount) new"
     }
 
+    @Environment(\.reselectSignal) private var reselectSignal
+
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: project.projectDescription.isEmpty ? "Project" : project.projectDescription,
@@ -172,16 +174,23 @@ struct GalleryView: View {
         if project.items.isEmpty {
             emptyState
         } else {
-            ScrollView {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: Theme.Space.gutter)],
-                    spacing: Theme.Space.gutter
-                ) {
-                    ForEach(displayedItems) { item in
-                        cell(for: item)
+            // The project's sidebar row tapped again: back to the first photos.
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ScrollTop.anchor
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: gridSize.minCellWidth), spacing: Theme.Space.gutter)],
+                            spacing: Theme.Space.gutter
+                        ) {
+                            ForEach(displayedItems) { item in
+                                cell(for: item)
+                            }
+                        }
+                        .padding(Theme.Space.gutter)
                     }
                 }
-                .padding(Theme.Space.gutter)
+                .scrollsToTopOnReselect(proxy, signal: reselectSignal, target: ScrollTop.id)
             }
         }
     }

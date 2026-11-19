@@ -8,6 +8,8 @@ struct RankBoardView: View {
     var extraAction: (title: String, run: () -> Void)?
     @State private var confirmingClear = false
 
+    @Environment(\.reselectSignal) private var reselectSignal
+
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: board.title, title: "Rank", status: status) {
@@ -19,8 +21,11 @@ struct RankBoardView: View {
             if board.pool.isEmpty {
                 emptyState
             } else {
+                // Rank's sidebar row tapped again: back to the top of the ranking.
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        ScrollTop.anchor
                         rankedSheet
                         if !board.unranked.isEmpty {
                             SheetLabel("Not ranked yet · \(board.unranked.count)")
@@ -34,6 +39,8 @@ struct RankBoardView: View {
                         }
                     }
                     .padding(Theme.Space.gutter)
+                }
+                .scrollsToTopOnReselect(proxy, signal: reselectSignal, target: ScrollTop.id)
                 }
             }
         }

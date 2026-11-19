@@ -30,6 +30,11 @@ struct RootView: View {
     @State private var projectProblem: String?
     /// The ⌘K menu's requests and what the screens tell it.
     @State private var commands = AppCommands.shared
+    /// Re-taps of the place already open (GUIDE, 19 Nov): the pane beside the
+    /// sidebar scrolls back to its top. Only beside it: on a phone the menu is a
+    /// screen of its own, and a row tapped there opens the place.
+    @State private var reselects = TabReselect<SidebarSelection>()
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     enum SidebarSelection: Hashable {
         case triage
@@ -46,7 +51,9 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
-            List(selection: $selection) {
+            List(selection: $selection.reselecting { place in
+                if let place, sizeClass != .compact { reselects.tapped(place, current: place) }
+            }) {
                 MenuSection("Review") {
                     MenuRow("Triage", systemImage: "rectangle.stack.badge.person.crop")
                         .tag(SidebarSelection.triage)
@@ -143,6 +150,7 @@ struct RootView: View {
         } detail: {
             detailView
                 .environment(\.showRank, ShowRankAction { selection = .rank })
+                .environment(\.reselectSignal, selection.map { reselects.signal($0) } ?? 0)
                 #if os(iOS)
                 .toolbar {
                     // In the bar's ⋯ menu. A project has its own Options menu, with Commands in it.
@@ -520,6 +528,25 @@ struct ShowRankAction {
     var action: () -> Void = {}
     func callAsFunction() { action() }
     init(_ action: @escaping () -> Void = {}) { self.action = action }
+}
+
+/// How many times the open place's sidebar row has been tapped again. Its pane
+/// scrolls to the top on each (`scrollsToTopOnReselect`, kit/swift/TabReselect.swift).
+private struct ReselectSignalKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
+extension EnvironmentValues {
+    var reselectSignal: Int {
+        get { self[ReselectSignalKey.self] }
+        set { self[ReselectSignalKey.self] = newValue }
+    }
+}
+
+/// The head of a pane's ScrollView, for a re-tap to scroll back to.
+enum ScrollTop {
+    static let id = "bestshot.scroll.top"
+    static var anchor: some View { Color.clear.frame(height: 0).id(id).accessibilityHidden(true) }
 }
 
 private struct ShowRankKey: EnvironmentKey {

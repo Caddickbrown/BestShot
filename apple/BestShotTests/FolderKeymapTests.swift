@@ -35,5 +35,12 @@ final class FolderKeymapTests: XCTestCase {
         XCTAssertEqual(FolderKeymap.command(key: .rightArrow, characters: "", modifiers: [], on: .grid), .next)
         XCTAssertEqual(FolderKeymap.command(key: .delete, characters: "", modifiers: .command, on: .loupe), .trashRed)
     }
+
+    func testPhotoToolKeys() {
+        XCTAssertEqual(FolderKeymap.command(key: KeyEquivalent("c"), characters: "ç", modifiers: [.command, .option], on: .loupe), .multiCrop)
+        XCTAssertEqual(FolderKeymap.command(key: KeyEquivalent("g"), characters: "©", modifiers: [.command, .option], on: .grid), .glue)
+        XCTAssertEqual(command("a", on: .grid, modifiers: .command), .selectAll)
+        XCTAssertNil(command("a", on: .loupe, modifiers: .command))
+    }
 }
 #endif

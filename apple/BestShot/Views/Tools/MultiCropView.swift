@@ -439,7 +439,7 @@ struct MultiCropView: View {
                 if b.rect {
                     let q = b.quad
                     let opposite = q[(i + 2) % 4]
-                    let a = b.angle * .pi / 180
+                    let a = CGFloat(b.angle) * .pi / 180
                     let (dx, dy) = (p.x - opposite.x, p.y - opposite.y)
                     let lx = dx * cos(a) + dy * sin(a)
                     let ly = -dx * sin(a) + dy * cos(a)

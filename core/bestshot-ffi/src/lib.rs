@@ -901,6 +901,24 @@ mod tests {
     }
 
     #[test]
+    fn glue_and_multicrop_through_the_ffi() {
+        let plan = media_glue_plan(r#"{"schema_version":1,"sources":[{"ref":"a","width":4,"height":6},{"ref":"b","width":4,"height":6}]}"#.into()).unwrap();
+        assert!(plan.contains("\"width\":8"));
+        assert!(media_glue_plan("{}".into()).is_err());
+        assert_eq!(media_glue_name("IMG".into(), "jpg".into(), vec!["IMG-glued.jpg".into()]), "IMG-glued-2.jpg");
+        let boxes = media_multicrop_tidy("[[[10,10],[110,10],[110,90],[10,90]]]".into(), 200, 200).unwrap();
+        assert!(boxes.contains("\"kind\":\"rect\""));
+        let config = format!(r#"{{"schema_version":1,"source":{{"ref":"s","width":200,"height":200}},"boxes":{boxes}}}"#);
+        assert!(media_multicrop_plan(config.clone()).unwrap().contains("\"exact\":true"));
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::write(&src, vec![7u8; 200 * 200 * 4]).unwrap();
+        let out = dir.path().join("out");
+        MediaRenderJob::new().multicrop_extract(config, "b1".into(), src.to_string_lossy().into(), out.to_string_lossy().into()).unwrap();
+        assert_eq!(std::fs::read(&out).unwrap().len(), 100 * 80 * 4);
+    }
+
+    #[test]
     fn rank_session_through_the_ffi() {
         let s = RankSession::new(vec!["a".into(), "b".into(), "c".into()], vec![], RankScope::All);
         while let Some(pair) = s.current_pair() {
@@ -924,6 +942,32 @@ pub fn media_video_plan(config_json: String) -> Result<String, CoreError> {
     let edit: bestshot_media::video::VideoJoin = bestshot_media::decode(&config_json).map_err(|e| io_error(e.to_string()))?;
     bestshot_media::encode(&edit.plan().map_err(|e| io_error(e.to_string()))?).map_err(|e| io_error(e.to_string()))
 }
+fn media_err(e: bestshot_media::MediaError) -> CoreError { io_error(e.to_string()) }
+
+/// Multi Crop: the plan (order, names, sizes) for a configuration.
+#[uniffi::export]
+pub fn media_multicrop_plan(config_json: String) -> Result<String, CoreError> {
+    let edit: bestshot_media::multicrop::MultiCrop = bestshot_media::decode(&config_json).map_err(media_err)?;
+    bestshot_media::encode(&edit.plan().map_err(media_err)?).map_err(media_err)
+}
+/// Multi Crop: detected quads (JSON `[[[x,y]×4], …]` in upright pixels) to tidy boxes.
+#[uniffi::export]
+pub fn media_multicrop_tidy(quads_json: String, width: u32, height: u32) -> Result<String, CoreError> {
+    let quads: Vec<[[f64; 2]; 4]> = bestshot_media::decode(&quads_json).map_err(media_err)?;
+    bestshot_media::encode(&bestshot_media::multicrop::tidy_boxes(&quads, width, height)).map_err(media_err)
+}
+/// Glue: the plan (canvas, placements, ramps) for a configuration.
+#[uniffi::export]
+pub fn media_glue_plan(config_json: String) -> Result<String, CoreError> {
+    let edit: bestshot_media::glue::Glue = bestshot_media::decode(&config_json).map_err(media_err)?;
+    bestshot_media::encode(&edit.plan().map_err(media_err)?).map_err(media_err)
+}
+/// Glue's output name beside the first photo: `{stem}-glued.{ext}`, then `-glued-2`…
+#[uniffi::export]
+pub fn media_glue_name(stem: String, ext: String, existing: Vec<String>) -> String {
+    bestshot_media::multicrop::glue_name(&stem, &ext, &existing)
+}
+
 #[derive(uniffi::Object)]
 pub struct MediaRenderJob { cancelled: std::sync::atomic::AtomicBool }
 #[uniffi::export]
@@ -935,5 +979,18 @@ impl MediaRenderJob {
         let edit = bestshot_media::decode(&config_json).map_err(|e| io_error(e.to_string()))?;
         bestshot_media::image::crop_rgba(&edit,width,height,Path::new(&source),Path::new(&destination),&self.cancelled)
             .map(|_| ()).map_err(|e| io_error(e.to_string()))
+    }
+    /// Writes one Multi Crop box's RGBA rows to a new file.
+    pub fn multicrop_extract(&self, config_json: String, box_id: String, source: String, destination: String) -> Result<(), CoreError> {
+        let edit: bestshot_media::multicrop::MultiCrop = bestshot_media::decode(&config_json).map_err(media_err)?;
+        bestshot_media::multicrop::extract_rgba(&edit, &box_id, Path::new(&source), Path::new(&destination), &self.cancelled)
+            .map(|_| ()).map_err(media_err)
+    }
+    /// Composites staged photos (one per plan item, in plan order) into a new RGBA file.
+    pub fn glue_compose(&self, config_json: String, inputs: Vec<String>, destination: String) -> Result<(), CoreError> {
+        let edit: bestshot_media::glue::Glue = bestshot_media::decode(&config_json).map_err(media_err)?;
+        let inputs: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
+        bestshot_media::glue::compose_rgba(&edit, &inputs, Path::new(&destination), &self.cancelled)
+            .map(|_| ()).map_err(media_err)
     }
 }

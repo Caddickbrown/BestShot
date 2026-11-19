@@ -328,7 +328,11 @@ extension EscapeChord {
         let c = UIKeyCommand(input: self == .escape ? UIKeyCommand.inputEscape : input,
                              modifierFlags: command ? .command : [], action: action)
         c.wantsPriorityOverSystemBehavior = true
-        c.repeatBehavior = .nonRepeatable
+        // repeatBehavior is iOS 26 API (Xcode 26 SDK); the deployment target is iOS 17 and
+        // CI's Xcode has an older SDK, so guard it both at compile time and at run time.
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) { c.repeatBehavior = .nonRepeatable }
+        #endif
         return c
     }
 }

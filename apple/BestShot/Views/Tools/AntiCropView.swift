@@ -19,7 +19,13 @@ struct AntiCropView: View {
     @State private var zoom: CGFloat = 1
     @State private var pinchStart: CGFloat?
 
+    // Built in stages so each part type-checks on its own: one long
+    // modifier chain was too slow for CI's compiler.
     var body: some View {
+        withLifecycle(withPickers(screen))
+    }
+
+    private var screen: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: "Tools", title: "Anti-Crop", status: status)
             if let source = session.source {
@@ -61,37 +67,45 @@ struct AntiCropView: View {
                 }
             }
         }
-        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
-        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
-            switch result {
-            case .success(let url): session.open(url)
-            case .failure(let error): session.error = error.localizedDescription
+    }
+
+    private func withPickers<V: View>(_ base: V) -> some View {
+        base
+            .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+            .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
+                switch result {
+                case .success(let url): session.open(url)
+                case .failure(let error): session.error = error.localizedDescription
+                }
             }
-        }
-        .sheet(isPresented: $choosingProject) {
-            ToolProjectPicker(kind: .image) { urls in if let url = urls.first { session.open(url) } }
-        }
-        .onChange(of: photo) { _, item in
-            if let item {
-                session.openPhoto(item)
-                photo = nil
+            .sheet(isPresented: $choosingProject) {
+                ToolProjectPicker(kind: .image) { urls in if let url = urls.first { session.open(url) } }
             }
-        }
-        .onChange(of: session.edit) { old, _ in session.record(old) }
-        .onChange(of: session.source?.url) {
-            zoom = 1
-            after = false
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background && session.busy {
-                session.cancel()
-                session.error = "Stopped when BestShot went into the background. Keep it open while exporting."
+            .onChange(of: photo) { _, item in
+                if let item {
+                    session.openPhoto(item)
+                    photo = nil
+                }
             }
-        }
-        .task {
-            if let initial, session.source == nil { session.open(initial) }
-        }
-        .onDisappear { session.cancel() }
+    }
+
+    private func withLifecycle<V: View>(_ base: V) -> some View {
+        base
+            .onChange(of: session.edit) { old, _ in session.record(old) }
+            .onChange(of: session.source?.url) {
+                zoom = 1
+                after = false
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background && session.busy {
+                    session.cancel()
+                    session.error = "Stopped when BestShot went into the background. Keep it open while exporting."
+                }
+            }
+            .task {
+                if let initial, session.source == nil { session.open(initial) }
+            }
+            .onDisappear { session.cancel() }
     }
 
     private var status: String? {

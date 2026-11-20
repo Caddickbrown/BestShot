@@ -81,34 +81,48 @@ struct CommandPanel: View {
         .frame(minHeight: text * 3.2)
     }
 
+    /// Tall enough for the capped number of rows and the headings among them.
+    private var listHeight: CGFloat {
+        let headings: Int = menu.sections.filter { $0.title != nil }.count
+        let rows: CGFloat = CGFloat(min(menu.rows.count, CommandPaletteLimit.rows))
+        return rows * rowHeight + CGFloat(headings) * caption * 2.4
+    }
+
     private var list: some View {
-        let headings = menu.sections.filter { $0.title != nil }.count
-        let shown = CGFloat(min(menu.rows.count, CommandPaletteLimit.rows)) * rowHeight + CGFloat(headings) * caption * 2.4
-        return ScrollViewReader { proxy in
+        ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(menu.sections) { section in
-                        if let title = section.title {
-                            Text(title.uppercased()).font(.mono(caption, medium: true)).foregroundStyle(palette.muted)
-                                .lineLimit(1)
-                                .padding(.horizontal, text).padding(.top, caption * 0.9).padding(.bottom, caption * 0.3)
-                                .accessibilityAddTraits(.isHeader)
-                        }
-                        ForEach(section.rows) { row in
-                            Button { choose(row.id) } label: {
-                                rowView(row, lit: row.id == menu.selected).frame(height: rowHeight)
-                            }
-                            .buttonStyle(.plain)
-                            .onHover { inside in if inside { hover(row.id) } }
-                            .id(row.id)
-                        }
+                    ForEach(menu.sections) { (section: CommandSection<BestShotCommand>) in
+                        sectionView(section)
                     }
                 }
             }
-            .frame(maxHeight: shown)
+            .frame(maxHeight: listHeight)
             .onAppear { if let id = menu.selected { proxy.scrollTo(id) } }
             .onChange(of: menu.selected) { _, id in if let id { proxy.scrollTo(id) } }
         }
+    }
+
+    @ViewBuilder
+    private func sectionView(_ section: CommandSection<BestShotCommand>) -> some View {
+        if let title = section.title {
+            Text(title.uppercased()).font(.mono(caption, medium: true)).foregroundStyle(palette.muted)
+                .lineLimit(1)
+                .padding(.horizontal, text).padding(.top, caption * 0.9).padding(.bottom, caption * 0.3)
+                .accessibilityAddTraits(.isHeader)
+        }
+        ForEach(section.rows) { (row: CommandRow<BestShotCommand>) in
+            rowButton(row)
+        }
+    }
+
+    private func rowButton(_ row: CommandRow<BestShotCommand>) -> some View {
+        Button { choose(row.id) } label: {
+            rowView(row, lit: row.id == menu.selected).frame(height: rowHeight)
+        }
+        .buttonStyle(.plain)
+        .onHover { (inside: Bool) in if inside { hover(row.id) } }
+        .id(row.id)
     }
 
     private func rowView(_ row: CommandRow<BestShotCommand>, lit: Bool) -> some View {

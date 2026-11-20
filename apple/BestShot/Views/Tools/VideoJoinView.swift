@@ -16,7 +16,13 @@ struct VideoJoinView: View {
     @State private var choosingFiles = false
     @State private var choosingProject = false
 
+    // Built in stages (screen, pickers, change handlers) so each part
+    // type-checks on its own; one long chain was too slow for CI's compiler.
     var body: some View {
+        withLifecycle(withChangeHandlers(withPickers(screen)))
+    }
+
+    private var screen: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: "Tools", title: "Join Videos", status: status)
             if session.clips.isEmpty {
@@ -29,89 +35,111 @@ struct VideoJoinView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !session.clips.isEmpty || session.busy {
-                ToolBottomBar(
-                    busy: session.busy, phase: session.phase,
-                    progress: session.phase == "Exporting MP4…" ? session.progress : nil,
-                    cancel: session.cancel, result: session.result, isVideo: true
-                ) {
-                    // A failed preview or export says so here, where the buttons are,
-                    // not at the foot of a form that may be scrolled away.
-                    if let error = session.error, !session.busy, !session.clips.isEmpty {
-                        ToolError(text: error)
-                    }
-                    HStack(spacing: Theme.Space.actions) {
-                        Button("Preview") { session.render(export: false) }
-                            .buttonStyle(.text)
-                        Button { session.render(export: true) } label: {
-                            Text("Export MP4").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.pill)
-                    }
-                    .disabled(session.validation != nil)
-                }
-            }
-        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         // The preview opens in front of everything. In the form it sat at the top,
         // out of sight once the clips were scrolled to, so Preview seemed to do nothing.
         .onChange(of: session.player) { _, player in previewing = player != nil }
-        .sheet(isPresented: $previewing, onDismiss: { session.player?.pause() }) {
-            if let player = session.player {
-                NavigationStack {
-                    VideoPlayer(player: player)
-                        .ignoresSafeArea(edges: .bottom)
-                        .navigationTitle("Preview")
-                        #if os(iOS)
-                        .navigationBarTitleDisplayMode(.inline)
-                        #endif
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { previewing = false }
-                            }
-                        }
+        .sheet(isPresented: $previewing, onDismiss: { session.player?.pause() }) { previewSheet }
+    }
+
+    @ViewBuilder
+    private var bottomBar: some View {
+        if !session.clips.isEmpty || session.busy {
+            ToolBottomBar(
+                busy: session.busy, phase: session.phase,
+                progress: session.phase == "Exporting MP4…" ? session.progress : nil,
+                cancel: session.cancel, result: session.result, isVideo: true
+            ) {
+                // A failed preview or export says so here, where the buttons are,
+                // not at the foot of a form that may be scrolled away.
+                if let error = session.error, !session.busy, !session.clips.isEmpty {
+                    ToolError(text: error)
                 }
-                .presentationDetents([.large])
+                exportButtons
             }
         }
-        .photosPicker(isPresented: $choosingPhotos, selection: $photos, maxSelectionCount: 30,
-                      selectionBehavior: .ordered, matching: .videos)
-        .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.movie], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): session.add(urls)
-            case .failure(let error): session.error = error.localizedDescription
+    }
+
+    private var exportButtons: some View {
+        HStack(spacing: Theme.Space.actions) {
+            Button("Preview") { session.render(export: false) }
+                .buttonStyle(.text)
+            Button { session.render(export: true) } label: {
+                Text("Export MP4").frame(maxWidth: .infinity)
             }
+            .buttonStyle(.pill)
         }
-        .sheet(isPresented: $choosingProject) {
-            ToolProjectPicker(kind: .video) { session.add($0) }
-        }
-        .onChange(of: photos) { _, items in
-            if !items.isEmpty {
-                session.addPhotos(items)
-                photos = []
+        .disabled(session.validation != nil)
+    }
+
+    @ViewBuilder
+    private var previewSheet: some View {
+        if let player = session.player {
+            NavigationStack {
+                VideoPlayer(player: player)
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle("Preview")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { previewing = false }
+                        }
+                    }
             }
+            .presentationDetents([.large])
         }
-        .onChange(of: session.output.width) {
-            session.confirmedMixedSize = false
-            session.invalidate()
-        }
-        .onChange(of: session.output.height) {
-            session.confirmedMixedSize = false
-            session.invalidate()
-        }
-        .onChange(of: session.output.frame_rate) { session.invalidate() }
-        .onChange(of: session.output.codec) { session.invalidate() }
-        .onChange(of: session.transition) { session.invalidate() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background && session.busy {
-                session.cancel()
-                session.error = "Stopped when BestShot went into the background. Keep it open while exporting."
+    }
+
+    private func withPickers<V: View>(_ base: V) -> some View {
+        base
+            .photosPicker(isPresented: $choosingPhotos, selection: $photos, maxSelectionCount: 30,
+                          selectionBehavior: .ordered, matching: .videos)
+            .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.movie], allowsMultipleSelection: true) { (result: Result<[URL], Error>) in
+                switch result {
+                case .success(let urls): session.add(urls)
+                case .failure(let error): session.error = error.localizedDescription
+                }
             }
-        }
-        .task {
-            if !initial.isEmpty && session.clips.isEmpty { session.add(initial) }
-        }
-        .onDisappear { session.cancel() }
+            .sheet(isPresented: $choosingProject) {
+                ToolProjectPicker(kind: .video) { session.add($0) }
+            }
+            .onChange(of: photos) { (_: [PhotosPickerItem], items: [PhotosPickerItem]) in
+                if !items.isEmpty {
+                    session.addPhotos(items)
+                    photos = []
+                }
+            }
+    }
+
+    private func withChangeHandlers<V: View>(_ base: V) -> some View {
+        base
+            .onChange(of: session.output.width) {
+                session.confirmedMixedSize = false
+                session.invalidate()
+            }
+            .onChange(of: session.output.height) {
+                session.confirmedMixedSize = false
+                session.invalidate()
+            }
+            .onChange(of: session.output.frame_rate) { session.invalidate() }
+            .onChange(of: session.output.codec) { session.invalidate() }
+            .onChange(of: session.transition) { session.invalidate() }
+    }
+
+    private func withLifecycle<V: View>(_ base: V) -> some View {
+        base
+            .onChange(of: scenePhase) { (_: ScenePhase, phase: ScenePhase) in
+                if phase == .background && session.busy {
+                    session.cancel()
+                    session.error = "Stopped when BestShot went into the background. Keep it open while exporting."
+                }
+            }
+            .task {
+                if !initial.isEmpty && session.clips.isEmpty { session.add(initial) }
+            }
+            .onDisappear { session.cancel() }
     }
 
     private var status: String? {

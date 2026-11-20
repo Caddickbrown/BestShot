@@ -148,15 +148,24 @@ struct CompareRunView: View {
         .accessibilityLabel("Choose \(board.media.caption(id))")
     }
 
-    private var results: some View {
+    /// "12 photos ranked in 30 comparisons, with 4 worked out automatically (60% fewer…)."
+    private var resultsSummary: String {
         let p = run.progress
-        let saved = p.totalPairs > 0 ? Int((1 - Double(p.asked) / Double(p.totalPairs)) * 100) : 0
-        return VStack(spacing: 14) {
+        let asked: Int = Int(p.asked)
+        let inferred: Int = Int(p.inferred)
+        let total: Int = Int(p.totalPairs)
+        let saved: Int = total > 0 ? Int((1 - Double(asked) / Double(total)) * 100) : 0
+        var text: String = "\(run.session.order().count) photos ranked in \(asked) comparisons"
+        if inferred > 0 { text += ", with \(inferred) worked out automatically" }
+        text += saved > 0 ? " (\(saved)% fewer than comparing every pair)." : "."
+        return text
+    }
+
+    private var results: some View {
+        VStack(spacing: 14) {
             Text("Ranking ready")
                 .font(.panelTitle)
-            Text("\(run.session.order().count) photos ranked in \(p.asked) comparisons"
-                 + (p.inferred > 0 ? ", with \(p.inferred) worked out automatically" : "")
-                 + (saved > 0 ? " (\(saved)% fewer than comparing every pair)." : "."))
+            Text(resultsSummary)
                 .font(.note)
                 .foregroundStyle(Theme.viewfinder.muted)
                 .multilineTextAlignment(.center)

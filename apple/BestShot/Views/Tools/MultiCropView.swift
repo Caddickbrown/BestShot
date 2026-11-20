@@ -33,7 +33,13 @@ struct MultiCropView: View {
         case rotate(String)
     }
 
+    // Built in stages so each part type-checks on its own: one long
+    // modifier chain was too slow for CI's compiler.
     var body: some View {
+        withLifecycle(withPickers(screen))
+    }
+
+    private var screen: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: "Tools", title: "Multi Crop", status: status)
             if let source = session.source {
@@ -59,37 +65,45 @@ struct MultiCropView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { if session.source != nil || session.busy { bottomBar } }
-        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
-        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
-            switch result {
-            case .success(let url): session.open(url)
-            case .failure(let error): session.error = error.localizedDescription
+    }
+
+    private func withPickers<V: View>(_ base: V) -> some View {
+        base
+            .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+            .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
+                switch result {
+                case .success(let url): session.open(url)
+                case .failure(let error): session.error = error.localizedDescription
+                }
             }
-        }
-        .sheet(isPresented: $choosingProject) {
-            ToolProjectPicker(kind: .image) { urls in if let url = urls.first { session.open(url) } }
-        }
-        .onChange(of: photo) { _, item in
-            if let item {
-                session.openPhoto(item)
-                photo = nil
+            .sheet(isPresented: $choosingProject) {
+                ToolProjectPicker(kind: .image) { urls in if let url = urls.first { session.open(url) } }
             }
-        }
-        .onChange(of: session.source?.id) { zoom = 1 }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background && session.busy {
-                session.cancel()
-                session.error = "Stopped when BestShot went into the background. Keep it open while making photos."
+            .onChange(of: photo) { _, item in
+                if let item {
+                    session.openPhoto(item)
+                    photo = nil
+                }
             }
-        }
-        .task {
-            session.beside = beside
-            session.onMade = onMade
-            if let initial, session.source == nil {
-                session.open(initial, extraKeywords: keywords, stageCopy: beside == nil)
+    }
+
+    private func withLifecycle<V: View>(_ base: V) -> some View {
+        base
+            .onChange(of: session.source?.id) { zoom = 1 }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background && session.busy {
+                    session.cancel()
+                    session.error = "Stopped when BestShot went into the background. Keep it open while making photos."
+                }
             }
-        }
-        .onDisappear { session.cancel() }
+            .task {
+                session.beside = beside
+                session.onMade = onMade
+                if let initial, session.source == nil {
+                    session.open(initial, extraKeywords: keywords, stageCopy: beside == nil)
+                }
+            }
+            .onDisappear { session.cancel() }
     }
 
     private var status: String? {
@@ -309,19 +323,32 @@ struct MultiCropView: View {
     @State private var drawCurrent: CGPoint?
 
     private func boxAccessibility(scale: CGFloat) -> some View {
-        let numbers = session.numbers
-        return ForEach(session.edit.boxes) { box in
-            Rectangle()
-                .frame(width: box.bounds.width * scale, height: box.bounds.height * scale)
-                .position(x: box.bounds.midX * scale, y: box.bounds.midY * scale)
-                .accessibilityLabel("Box \(numbers[box.id] ?? 0) of \(session.edit.boxes.count)\(box.rect && box.angle != 0 ? ", rotated \(box.angle) degrees" : "")\(box.turn != 0 ? ", turned \(box.turn)" : "")")
-                .accessibilityAddTraits(box.id == session.focused ? .isSelected : [])
-                .accessibilityAction { session.focused = box.id }
-                .accessibilityAdjustableAction { direction in
-                    session.focused = box.id
-                    session.nudge(dx: direction == .increment ? 10 : -10, dy: 0)
-                }
+        let numbers: [String: Int] = session.numbers
+        return ForEach(session.edit.boxes) { (box: CropBoxModel) in
+            boxElement(box, number: numbers[box.id] ?? 0, scale: scale)
         }
+    }
+
+    /// "Box 2 of 5, rotated 4 degrees, turned 90".
+    private func boxLabel(_ box: CropBoxModel, number: Int) -> String {
+        var text: String = "Box \(number) of \(session.edit.boxes.count)"
+        if box.rect && box.angle != 0 { text += ", rotated \(box.angle) degrees" }
+        if box.turn != 0 { text += ", turned \(box.turn)" }
+        return text
+    }
+
+    private func boxElement(_ box: CropBoxModel, number: Int, scale: CGFloat) -> some View {
+        let bounds: CGRect = box.bounds
+        return Rectangle()
+            .frame(width: bounds.width * scale, height: bounds.height * scale)
+            .position(x: bounds.midX * scale, y: bounds.midY * scale)
+            .accessibilityLabel(boxLabel(box, number: number))
+            .accessibilityAddTraits(box.id == session.focused ? .isSelected : [])
+            .accessibilityAction { session.focused = box.id }
+            .accessibilityAdjustableAction { (direction: AccessibilityAdjustmentDirection) in
+                session.focused = box.id
+                session.nudge(dx: direction == .increment ? 10 : -10, dy: 0)
+            }
     }
 
     private func midTop(_ q: [CGPoint]) -> CGPoint { CGPoint(x: (q[0].x + q[1].x) / 2, y: (q[0].y + q[1].y) / 2) }

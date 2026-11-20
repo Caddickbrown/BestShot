@@ -24,7 +24,13 @@ struct GlueView: View {
     @State private var dragging: (index: Int, last: CGPoint, resize: Bool)?
     @FocusState private var keys: Bool
 
+    // Built in stages so each part type-checks on its own: one long
+    // modifier chain was too slow for CI's compiler.
     var body: some View {
+        withLifecycle(withPickers(screen))
+    }
+
+    private var screen: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: "Tools", title: "Glue", status: status)
             if session.images.isEmpty {
@@ -38,37 +44,45 @@ struct GlueView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .safeAreaInset(edge: .bottom, spacing: 0) { if !session.images.isEmpty || session.busy { bottomBar } }
-        .photosPicker(isPresented: $choosingPhoto, selection: $photos, maxSelectionCount: GlueSession.maxPhotos - session.images.count,
-                      selectionBehavior: .ordered, matching: .images)
-        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): session.add(urls)
-            case .failure(let error): session.error = error.localizedDescription
+    }
+
+    private func withPickers<V: View>(_ base: V) -> some View {
+        base
+            .photosPicker(isPresented: $choosingPhoto, selection: $photos, maxSelectionCount: GlueSession.maxPhotos - session.images.count,
+                          selectionBehavior: .ordered, matching: .images)
+            .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
+                switch result {
+                case .success(let urls): session.add(urls)
+                case .failure(let error): session.error = error.localizedDescription
+                }
             }
-        }
-        .sheet(isPresented: $choosingProject) {
-            ToolProjectPicker(kind: .image, multiple: true) { urls in session.add(urls) }
-        }
-        .onChange(of: photos) { _, items in
-            if !items.isEmpty {
-                session.addPhotos(items)
-                photos = []
+            .sheet(isPresented: $choosingProject) {
+                ToolProjectPicker(kind: .image, multiple: true) { urls in session.add(urls) }
             }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background && session.busy {
-                session.cancel()
-                session.error = "Stopped when BestShot went into the background. Keep it open while gluing."
+            .onChange(of: photos) { _, items in
+                if !items.isEmpty {
+                    session.addPhotos(items)
+                    photos = []
+                }
             }
-        }
-        .task {
-            session.beside = beside
-            session.onMade = onMade
-            if !initial.isEmpty, session.images.isEmpty {
-                session.add(initial, keywords: keywords, stageCopy: beside == nil)
+    }
+
+    private func withLifecycle<V: View>(_ base: V) -> some View {
+        base
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background && session.busy {
+                    session.cancel()
+                    session.error = "Stopped when BestShot went into the background. Keep it open while gluing."
+                }
             }
-        }
-        .onDisappear { session.cancel() }
+            .task {
+                session.beside = beside
+                session.onMade = onMade
+                if !initial.isEmpty, session.images.isEmpty {
+                    session.add(initial, keywords: keywords, stageCopy: beside == nil)
+                }
+            }
+            .onDisappear { session.cancel() }
     }
 
     private var status: String? {
@@ -143,54 +157,70 @@ struct GlueView: View {
         VStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
-                    ToolIcon(label: session.vertical ? "Side by side" : "Stacked", symbol: session.vertical ? "rectangle.split.2x1" : "rectangle.split.1x2", key: "O") { session.flipLayout() }
-                    ToolIcon(label: "In a line", symbol: "rectangle.split.3x1", active: session.edit.arrangement == "line") { session.setArrangement("line") }
-                    ToolIcon(label: "In a grid", symbol: "square.grid.2x2", active: session.edit.arrangement == "grid") { session.setArrangement("grid") }
-                    ToolIcon(label: "Free (jagged)", symbol: "square.on.square.dashed", active: session.isFree) { session.setArrangement("free") }
-                    if session.edit.arrangement == "grid" {
-                        Stepper(value: Binding(get: { columns }, set: { v in session.change { $0.columns = max(1, min(session.images.count, v)) } }), in: 1...max(1, session.images.count)) {
-                            Text("\(columns) across").font(.small).monospacedDigit()
-                        }
-                        .fixedSize().padding(.horizontal, 8)
-                    }
-                    if !session.isFree {
-                        Menu {
-                            Picker("Size", selection: Binding(get: { session.edit.size }, set: { v in session.change { $0.size = v } })) {
-                                Text("Match smaller").tag("match_smaller")
-                                Text("Match larger").tag("match_larger")
-                                Text("Keep pixels").tag("keep")
-                            }
-                        } label: {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
-                        }
-                        .menuIndicator(.hidden).fixedSize().help("Size (M)").accessibilityLabel("Size")
-                    }
+                    layoutButtons
                     Divider().frame(height: 24).padding(.horizontal, 4)
-                    ToolIcon(label: "Turn left", symbol: "rotate.left", key: "⇧R") { session.turn(-90) }.disabled(session.focused == nil)
-                    ToolIcon(label: "Turn right", symbol: "rotate.right", key: "R") { session.turn(90) }.disabled(session.focused == nil)
-                    ToolIcon(label: "Earlier", symbol: "arrow.backward.square", key: "⌘←") { if let i = session.focused { session.move(i, by: -1) } }
-                        .disabled((session.focused ?? 0) == 0)
-                    ToolIcon(label: "Later", symbol: "arrow.forward.square", key: "⌘→") { if let i = session.focused { session.move(i, by: 1) } }
-                        .disabled(session.focused.map { $0 >= session.images.count - 1 } ?? true)
-                    ToolIcon(label: "Take out of the glue", symbol: "minus.square", key: "⌫") { if let i = session.focused { session.removePhoto(i) } }
-                        .disabled(session.focused == nil)
-                    addMenu
-                    ToolIcon(label: "Line up", symbol: "wand.and.rays", key: "L") { session.lineUp() }
-                        .disabled(session.edit.arrangement != "line" || session.images.count < 2)
+                    photoButtons
                     Divider().frame(height: 24).padding(.horizontal, 4)
-                    ToolIcon(label: "Zoom out", symbol: "minus.magnifyingglass", key: "⌘−") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomOut) }
-                    ToolIcon(label: "Zoom to fit", symbol: "arrow.down.right.and.arrow.up.left", key: "⌘0") { zoom = 1 }
-                    ToolIcon(label: "Zoom in", symbol: "plus.magnifyingglass", key: "⌘+") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomIn) }
-                    #if os(iOS)
-                    ToolIcon(label: panning ? "Move photos" : "Pan", symbol: panning ? "hand.point.up.left" : "hand.raised", active: panning) { panning.toggle() }
-                    #endif
-                    ToolOptionsMenu(format: $session.format)
+                    viewButtons
                 }
                 .padding(.horizontal, Theme.Space.screen - 12)
             }
             .overlay(alignment: .top) { HairlineRule() }
             sliders
         }
+    }
+
+    // The bar in three groups, so each type-checks on its own.
+    @ViewBuilder
+    private var layoutButtons: some View {
+            ToolIcon(label: session.vertical ? "Side by side" : "Stacked", symbol: session.vertical ? "rectangle.split.2x1" : "rectangle.split.1x2", key: "O") { session.flipLayout() }
+            ToolIcon(label: "In a line", symbol: "rectangle.split.3x1", active: session.edit.arrangement == "line") { session.setArrangement("line") }
+            ToolIcon(label: "In a grid", symbol: "square.grid.2x2", active: session.edit.arrangement == "grid") { session.setArrangement("grid") }
+            ToolIcon(label: "Free (jagged)", symbol: "square.on.square.dashed", active: session.isFree) { session.setArrangement("free") }
+            if session.edit.arrangement == "grid" {
+                Stepper(value: Binding(get: { columns }, set: { v in session.change { $0.columns = max(1, min(session.images.count, v)) } }), in: 1...max(1, session.images.count)) {
+                    Text("\(columns) across").font(.small).monospacedDigit()
+                }
+                .fixedSize().padding(.horizontal, 8)
+            }
+            if !session.isFree {
+                Menu {
+                    Picker("Size", selection: Binding(get: { session.edit.size }, set: { v in session.change { $0.size = v } })) {
+                        Text("Match smaller").tag("match_smaller")
+                        Text("Match larger").tag("match_larger")
+                        Text("Keep pixels").tag("keep")
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
+                }
+                .menuIndicator(.hidden).fixedSize().help("Size (M)").accessibilityLabel("Size")
+            }
+    }
+
+    @ViewBuilder
+    private var photoButtons: some View {
+            ToolIcon(label: "Turn left", symbol: "rotate.left", key: "⇧R") { session.turn(-90) }.disabled(session.focused == nil)
+            ToolIcon(label: "Turn right", symbol: "rotate.right", key: "R") { session.turn(90) }.disabled(session.focused == nil)
+            ToolIcon(label: "Earlier", symbol: "arrow.backward.square", key: "⌘←") { if let i = session.focused { session.move(i, by: -1) } }
+                .disabled((session.focused ?? 0) == 0)
+            ToolIcon(label: "Later", symbol: "arrow.forward.square", key: "⌘→") { if let i = session.focused { session.move(i, by: 1) } }
+                .disabled(session.focused.map { $0 >= session.images.count - 1 } ?? true)
+            ToolIcon(label: "Take out of the glue", symbol: "minus.square", key: "⌫") { if let i = session.focused { session.removePhoto(i) } }
+                .disabled(session.focused == nil)
+            addMenu
+            ToolIcon(label: "Line up", symbol: "wand.and.rays", key: "L") { session.lineUp() }
+                .disabled(session.edit.arrangement != "line" || session.images.count < 2)
+    }
+
+    @ViewBuilder
+    private var viewButtons: some View {
+            ToolIcon(label: "Zoom out", symbol: "minus.magnifyingglass", key: "⌘−") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomOut) }
+            ToolIcon(label: "Zoom to fit", symbol: "arrow.down.right.and.arrow.up.left", key: "⌘0") { zoom = 1 }
+            ToolIcon(label: "Zoom in", symbol: "plus.magnifyingglass", key: "⌘+") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomIn) }
+            #if os(iOS)
+            ToolIcon(label: panning ? "Move photos" : "Pan", symbol: panning ? "hand.point.up.left" : "hand.raised", active: panning) { panning.toggle() }
+            #endif
+            ToolOptionsMenu(format: $session.format)
     }
 
     private var columns: Int {
@@ -369,25 +399,9 @@ struct GlueView: View {
     private func canvas(_ plan: GluePlan, scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             backgroundLayer(plan, scale: scale)
-            ForEach(Array(plan.items.enumerated()), id: \.offset) { _, item in
+            ForEach(Array(plan.items.enumerated()), id: \.offset) { (_: Int, item: GluePlacement) in
                 if let image = session.preview(item.index) {
-                    let f = item.frame
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: f.width * scale, height: f.height * scale)
-                        .mask { rampMask(item) }
-                        .overlay {
-                            Rectangle().stroke(session.focused == item.index ? Theme.table.accent : .clear, lineWidth: 2)
-                        }
-                        .overlay(alignment: .bottomTrailing) {
-                            if session.isFree && session.focused == item.index {
-                                Circle().fill(Theme.table.accent).frame(width: 16, height: 16).offset(x: 8, y: 8)
-                            }
-                        }
-                        .offset(x: f.minX * scale, y: f.minY * scale)
-                        .accessibilityLabel("\(session.images[item.index].name), photo \(item.index + 1) of \(plan.items.count)")
-                        .accessibilityAddTraits(session.focused == item.index ? .isSelected : [])
+                    placed(image, item, count: plan.items.count, scale: scale)
                 }
             }
             seamMarks(plan, scale: scale)
@@ -400,6 +414,28 @@ struct GlueView: View {
             session.focused = hit(plan, CGPoint(x: tap.location.x / scale, y: tap.location.y / scale))
             keys = true
         })
+    }
+
+    /// One photo where the plan puts it, with its fade, focus ring and handle.
+    private func placed(_ image: CGImage, _ item: GluePlacement, count: Int, scale: CGFloat) -> some View {
+        let f: CGRect = item.frame
+        let focused: Bool = session.focused == item.index
+        let ring: Color = focused ? Theme.table.accent : .clear
+        let label: String = "\(session.images[item.index].name), photo \(item.index + 1) of \(count)"
+        return Image(decorative: image, scale: 1)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: f.width * scale, height: f.height * scale)
+            .mask { rampMask(item) }
+            .overlay { Rectangle().stroke(ring, lineWidth: 2) }
+            .overlay(alignment: .bottomTrailing) {
+                if session.isFree && focused {
+                    Circle().fill(Theme.table.accent).frame(width: 16, height: 16).offset(x: 8, y: 8)
+                }
+            }
+            .offset(x: f.minX * scale, y: f.minY * scale)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(focused ? .isSelected : [])
     }
 
     @ViewBuilder

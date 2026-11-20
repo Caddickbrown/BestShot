@@ -49,104 +49,15 @@ struct RootView: View {
         case project(UUID)
     }
 
+    // Built in stages (split view, sheets, alerts, commands) so each part
+    // type-checks on its own; one long chain was too slow for CI's compiler.
     var body: some View {
+        withCommands(withAlerts(withSheets(splitView)))
+    }
+
+    private var splitView: some View {
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
-            List(selection: $selection.reselecting { place in
-                if let place, sizeClass != .compact { reselects.tapped(place, current: place) }
-            }) {
-                MenuSection("Review") {
-                    MenuRow("Triage", systemImage: "rectangle.stack.badge.person.crop")
-                        .tag(SidebarSelection.triage)
-                    MenuRow("Organise", systemImage: "folder.badge.plus")
-                        .tag(SidebarSelection.organise)
-                    MenuRow("Rank", systemImage: "list.number")
-                        .tag(SidebarSelection.rank)
-                }
-                #if os(macOS)
-                MenuSection("Folders") {
-                    MenuRow("Cull a folder", systemImage: "folder")
-                        .tag(SidebarSelection.folders)
-                }
-                #endif
-                #if os(iOS)
-                // iPhone and iPad only for now: the Mac and the other apps don't have them.
-                MenuSection("Tools") {
-                    MenuRow("Join Videos", systemImage: "film.stack")
-                        .tag(SidebarSelection.joinVideos)
-                    MenuRow("Anti-Crop", systemImage: "rectangle.split.2x1")
-                        .tag(SidebarSelection.antiCrop)
-                    MenuRow("Glue", systemImage: "rectangle.split.2x1.fill")
-                        .tag(SidebarSelection.glue)
-                    MenuRow("Multi Crop", systemImage: "crop")
-                        .tag(SidebarSelection.multiCrop)
-                }
-                #else
-                // On the Mac: Glue and Multi Crop on any files (Folders has them on its photos too).
-                MenuSection("Tools") {
-                    MenuRow("Glue", systemImage: "rectangle.split.2x1.fill")
-                        .tag(SidebarSelection.glue)
-                    MenuRow("Multi Crop", systemImage: "crop")
-                        .tag(SidebarSelection.multiCrop)
-                }
-                #endif
-                MenuSection("Library") {
-                    MenuRow("All Media", systemImage: "square.grid.2x2")
-                        .tag(SidebarSelection.allMedia)
-                }
-                MenuSection("Projects") {
-                    if projects.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            FormNote("Nothing here yet. A project is a set of photos you import to rank together, apart from your library.")
-                            Button("New Project") { showingNewProject = true }
-                                .buttonStyle(.text)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    ForEach(projects) { project in
-                        projectRow(project)
-                    }
-                }
-            }
-            .tableSurfaceList()
-            // The mark and the name head the menu, as a screen's header heads it.
-            .safeAreaInset(edge: .top, spacing: 0) { BrandHeader() }
-            #if os(macOS)
-            // Wide enough for the name on one line: narrower, the Mac stacked
-            // "BestShot" a letter per line and cut the rows short (18 Nov run).
-            .navigationSplitViewColumnWidth(min: 230, ideal: 250, max: 320)
-            #endif
-            .navigationTitle("BestShot")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                #if os(iOS)
-                // The mark and the name, centred in the bar's own row.
-                ToolbarItem(placement: .principal) { BrandBarTitle() }
-                #endif
-                // Both in plain sight. A secondary item folds into the bar's own
-                // overflow button, which put one More menu inside another.
-                ToolbarItemGroup(placement: .primaryAction) {
-                    #if os(iOS)
-                    // The way into the command menu without a keyboard.
-                    Button {
-                        CommandRoute.presentMenu()
-                    } label: {
-                        Label("Commands", systemImage: "command")
-                    }
-                    #endif
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    Button {
-                        showingNewProject = true
-                    } label: {
-                        Label("New Project", systemImage: "plus")
-                    }
-                }
-            }
+            sidebar
         } detail: {
             detailView
                 .environment(\.showRank, ShowRankAction { selection = .rank })
@@ -160,65 +71,179 @@ struct RootView: View {
                 }
                 #endif
         }
-        .sheet(isPresented: $showingNewProject) {
-            NewProjectSheet(name: $projectName, description: $projectDescription) { name, description in
-                createProject(name: name, description: description)
+    }
+
+    private var sidebar: some View {
+        List(selection: $selection.reselecting { place in
+            if let place, sizeClass != .compact { reselects.tapped(place, current: place) }
+        }) {
+            MenuSection("Review") {
+                MenuRow("Triage", systemImage: "rectangle.stack.badge.person.crop")
+                    .tag(SidebarSelection.triage)
+                MenuRow("Organise", systemImage: "folder.badge.plus")
+                    .tag(SidebarSelection.organise)
+                MenuRow("Rank", systemImage: "list.number")
+                    .tag(SidebarSelection.rank)
             }
-        }
-        .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
-        .sheet(isPresented: $showingWhatsNew) { WhatsNewView() }
-        .task {
-            // Once after an update; never under XCTest.
-            if WhatsNew.unseen && NSClassFromString("XCTestCase") == nil { showingWhatsNew = true }
-        }
-        .sheet(item: $renaming) { project in
-            TextPromptSheet(title: "Rename Project", placeholder: "Name", action: "Rename", text: $newName) {
-                ProjectLibrary.rename(project, to: newName, context: context)
-                newName = ""
+            #if os(macOS)
+            MenuSection("Folders") {
+                MenuRow("Cull a folder", systemImage: "folder")
+                    .tag(SidebarSelection.folders)
             }
-        }
-        .alert("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
-            get: { deleting != nil }, set: { if !$0 { deleting = nil } }
-        ), presenting: deleting) { project in
-            Button("Delete Project", role: .destructive) { delete(project) }
-            Button("Cancel", role: .cancel) { deleting = nil }
-        } message: { project in
-            Text(ProjectLibrary.removalMessage(for: project))
-        }
-        .alert("Couldn't delete the project", isPresented: Binding(
-            get: { projectProblem != nil }, set: { if !$0 { projectProblem = nil } }
-        ), presenting: projectProblem) { _ in
-            Button("OK") { projectProblem = nil }
-        } message: { Text($0) }
-        .escapeCloses(when: deleting != nil) { deleting = nil }
-        .escapeCloses(when: projectProblem != nil) { projectProblem = nil }
-        // Choosing a place in the menu opens it, on a phone too.
-        .onChange(of: selection, initial: true) { _, new in
-            if new != nil { compactColumn = .detail }
-            commands.place = Self.place(new)
-        }
-        .onChange(of: commands.request?.id) { _, _ in
-            if let command = commands.request?.command { carryOut(command) }
-        }
-        .alert("BestShot", isPresented: Binding(
-            get: { commands.message != nil }, set: { if !$0 { commands.message = nil } }
-        )) {
-            Button("OK") { commands.message = nil }
-        } message: { Text(commands.message ?? "") }
-        .escapeCloses(when: commands.message != nil) { commands.message = nil }
-        // Esc's last step is the main menu. A Triage session waits behind Resume.
-        .escapeRoot(escapes) {
-            selection = nil
-            compactColumn = .sidebar
-            columns = .all
-        }
-        .onAppear {
-            commands.leaveSheet = { [escapes] in if escapes.hasSheet { escapes.press() } }
-            #if os(macOS) && DEBUG
-            // `BESTSHOT_FOLDER=<path>` opens Folders on that folder, for test runs.
-            if FolderHomeView.launchFolder != nil { selection = .folders }
             #endif
+            #if os(iOS)
+            // iPhone and iPad only for now: the Mac and the other apps don't have them.
+            MenuSection("Tools") {
+                MenuRow("Join Videos", systemImage: "film.stack")
+                    .tag(SidebarSelection.joinVideos)
+                MenuRow("Anti-Crop", systemImage: "rectangle.split.2x1")
+                    .tag(SidebarSelection.antiCrop)
+                MenuRow("Glue", systemImage: "rectangle.split.2x1.fill")
+                    .tag(SidebarSelection.glue)
+                MenuRow("Multi Crop", systemImage: "crop")
+                    .tag(SidebarSelection.multiCrop)
+            }
+            #else
+            // On the Mac: Glue and Multi Crop on any files (Folders has them on its photos too).
+            MenuSection("Tools") {
+                MenuRow("Glue", systemImage: "rectangle.split.2x1.fill")
+                    .tag(SidebarSelection.glue)
+                MenuRow("Multi Crop", systemImage: "crop")
+                    .tag(SidebarSelection.multiCrop)
+            }
+            #endif
+            MenuSection("Library") {
+                MenuRow("All Media", systemImage: "square.grid.2x2")
+                    .tag(SidebarSelection.allMedia)
+            }
+            MenuSection("Projects") {
+                if projects.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        FormNote("Nothing here yet. A project is a set of photos you import to rank together, apart from your library.")
+                        Button("New Project") { showingNewProject = true }
+                            .buttonStyle(.text)
+                    }
+                    .padding(.vertical, 2)
+                }
+                ForEach(projects) { project in
+                    projectRow(project)
+                }
+            }
         }
+        .tableSurfaceList()
+        // The mark and the name head the menu, as a screen's header heads it.
+        .safeAreaInset(edge: .top, spacing: 0) { BrandHeader() }
+        #if os(macOS)
+        // Wide enough for the name on one line: narrower, the Mac stacked
+        // "BestShot" a letter per line and cut the rows short (18 Nov run).
+        .navigationSplitViewColumnWidth(min: 230, ideal: 250, max: 320)
+        #endif
+        .navigationTitle("BestShot")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar { sidebarToolbar }
+    }
+
+    @ToolbarContentBuilder
+    private var sidebarToolbar: some ToolbarContent {
+        #if os(iOS)
+        // The mark and the name, centred in the bar's own row.
+        ToolbarItem(placement: .principal) { BrandBarTitle() }
+        #endif
+        // Both in plain sight. A secondary item folds into the bar's own
+        // overflow button, which put one More menu inside another.
+        ToolbarItemGroup(placement: .primaryAction) {
+            #if os(iOS)
+            // The way into the command menu without a keyboard.
+            Button {
+                CommandRoute.presentMenu()
+            } label: {
+                Label("Commands", systemImage: "command")
+            }
+            #endif
+            Button {
+                showingSettings = true
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            Button {
+                showingNewProject = true
+            } label: {
+                Label("New Project", systemImage: "plus")
+            }
+        }
+    }
+
+    private func withSheets<V: View>(_ base: V) -> some View {
+        base
+            .sheet(isPresented: $showingNewProject) {
+                NewProjectSheet(name: $projectName, description: $projectDescription) { name, description in
+                    createProject(name: name, description: description)
+                }
+            }
+            .sheet(isPresented: $showingSettings) { SettingsView(names: $labelDrafts) }
+            .sheet(isPresented: $showingWhatsNew) { WhatsNewView() }
+            .task {
+                // Once after an update; never under XCTest.
+                if WhatsNew.unseen && NSClassFromString("XCTestCase") == nil { showingWhatsNew = true }
+            }
+            .sheet(item: $renaming) { project in
+                TextPromptSheet(title: "Rename Project", placeholder: "Name", action: "Rename", text: $newName) {
+                    ProjectLibrary.rename(project, to: newName, context: context)
+                    newName = ""
+                }
+            }
+    }
+
+    private func withAlerts<V: View>(_ base: V) -> some View {
+        base
+            .alert("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
+                get: { deleting != nil }, set: { if !$0 { deleting = nil } }
+            ), presenting: deleting) { project in
+                Button("Delete Project", role: .destructive) { delete(project) }
+                Button("Cancel", role: .cancel) { deleting = nil }
+            } message: { project in
+                Text(ProjectLibrary.removalMessage(for: project))
+            }
+            .alert("Couldn't delete the project", isPresented: Binding(
+                get: { projectProblem != nil }, set: { if !$0 { projectProblem = nil } }
+            ), presenting: projectProblem) { _ in
+                Button("OK") { projectProblem = nil }
+            } message: { Text($0) }
+            .escapeCloses(when: deleting != nil) { deleting = nil }
+            .escapeCloses(when: projectProblem != nil) { projectProblem = nil }
+    }
+
+    private func withCommands<V: View>(_ base: V) -> some View {
+        base
+            // Choosing a place in the menu opens it, on a phone too.
+            .onChange(of: selection, initial: true) { _, new in
+                if new != nil { compactColumn = .detail }
+                commands.place = Self.place(new)
+            }
+            .onChange(of: commands.request?.id) { _, _ in
+                if let command = commands.request?.command { carryOut(command) }
+            }
+            .alert("BestShot", isPresented: Binding(
+                get: { commands.message != nil }, set: { if !$0 { commands.message = nil } }
+            )) {
+                Button("OK") { commands.message = nil }
+            } message: { Text(commands.message ?? "") }
+            .escapeCloses(when: commands.message != nil) { commands.message = nil }
+            // Esc's last step is the main menu. A Triage session waits behind Resume.
+            .escapeRoot(escapes) {
+                selection = nil
+                compactColumn = .sidebar
+                columns = .all
+            }
+            .onAppear {
+                commands.leaveSheet = { [escapes] in if escapes.hasSheet { escapes.press() } }
+                #if os(macOS) && DEBUG
+                // `BESTSHOT_FOLDER=<path>` opens Folders on that folder, for test runs.
+                if FolderHomeView.launchFolder != nil { selection = .folders }
+                #endif
+            }
     }
 
     /// Every screen but a project's, which has Commands in its Options menu.

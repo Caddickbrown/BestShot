@@ -68,7 +68,14 @@ struct GalleryView: View {
 
     @Environment(\.reselectSignal) private var reselectSignal
 
+    // The body is built in stages (screen, sheets, alerts, keys) so each
+    // piece type-checks on its own: one long modifier chain took CI's
+    // compiler past its time limit.
     var body: some View {
+        withKeys(withAlerts(withSheets(screen)))
+    }
+
+    private var screen: some View {
         VStack(spacing: 0) {
             ScreenHeader(eyebrow: project.projectDescription.isEmpty ? "Project" : project.projectDescription,
                          title: project.name, status: project.items.isEmpty ? nil : status)
@@ -80,19 +87,7 @@ struct GalleryView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar { toolbarContent }
-            .safeAreaInset(edge: .bottom) {
-                if selectionMode {
-                    BulkActionBar(
-                        count: selectedIDs.count,
-                        onJoin: joinableVideos.count >= 2 ? { joinSelected() } : nil,
-                        onGlue: gluablePhotos.count >= 2 ? { glueSelected() } : nil,
-                        onTag: { showingBulkTag = true },
-                        onDownload: bulkDownload,
-                        onDelete: bulkDelete,
-                        onCancel: exitSelection
-                    )
-                }
-            }
+            .safeAreaInset(edge: .bottom) { bulkBar }
             .overlay { if isImporting { importOverlay } }
             .onChange(of: photoItems) { _, newItems in importFromPhotos(newItems) }
             .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItems, matching: .any(of: [.images, .videos]))
@@ -101,15 +96,49 @@ struct GalleryView: View {
                 allowedContentTypes: [.image, .movie, .video],
                 allowsMultipleSelection: true
             ) { result in importFromFiles(result) }
-            .fullScreenCoverCompat(item: $viewerItem) { item in
+    }
+
+    @ViewBuilder
+    private var bulkBar: some View {
+        if selectionMode {
+            BulkActionBar(
+                count: selectedIDs.count,
+                onJoin: joinableVideos.count >= 2 ? { joinSelected() } : nil,
+                onGlue: gluablePhotos.count >= 2 ? { glueSelected() } : nil,
+                onTag: { showingBulkTag = true },
+                onDownload: bulkDownload,
+                onDelete: bulkDelete,
+                onCancel: exitSelection
+            )
+        }
+    }
+
+    private func withSheets<V: View>(_ base: V) -> some View {
+        withComparisonSheets(withToolSheets(base))
+    }
+
+    private func withToolSheets<V: View>(_ base: V) -> some View {
+        base
+            .fullScreenCoverCompat(item: $viewerItem) { (item: MediaItem) in
                 FullscreenViewerView(items: displayedItems, initial: item)
             }
-            .sheet(item: $joining) { request in
+            .sheet(item: $joining) { (request: JoinRequest) in
                 ToolSheet { VideoJoinView(initial: request.urls) }
             }
-            .sheet(item: $gluing) { request in
+            .sheet(item: $gluing) { (request: JoinRequest) in
                 ToolSheet { GlueView(initial: request.urls) }
             }
+            .sheet(isPresented: $showingBulkTag) {
+                TextPromptSheet(title: "Add Tag", placeholder: "Tag", action: "Add",
+                                text: $bulkTagText, onCommit: applyBulkTag)
+            }
+            .sheet(item: $shareURL) { (wrapper: ShareableURL) in
+                ShareSheet(url: wrapper.url)
+            }
+    }
+
+    private func withComparisonSheets<V: View>(_ base: V) -> some View {
+        base
             .sheet(isPresented: $showingCompareSelection) {
                 ComparisonSelectionView(
                     allCount: project.itemCount,
@@ -118,14 +147,14 @@ struct GalleryView: View {
                     startComparison(scope: scope)
                 }
             }
-            .fullScreenCoverCompat(item: $session) { session in
+            .fullScreenCoverCompat(item: $session) { (session: ComparisonSession) in
                 ComparisonView(session: session) {
                     // On finish, transition to results.
                     resultsSession = session
                     self.session = nil
                 }
             }
-            .sheet(item: $resultsSession) { session in
+            .sheet(item: $resultsSession) { (session: ComparisonSession) in
                 ComparisonResultsView(session: session) {
                     RankingService.applyRanking(
                         orderedNames: session.finalOrderNames(),
@@ -135,10 +164,17 @@ struct GalleryView: View {
                     resultsSession = nil
                 }
             }
-            .sheet(isPresented: $showingBulkTag) {
-                TextPromptSheet(title: "Add Tag", placeholder: "Tag", action: "Add",
-                                text: $bulkTagText, onCommit: applyBulkTag)
-            }
+    }
+
+    private var importMessageShown: Binding<Bool> {
+        Binding(
+            get: { importMessage != nil },
+            set: { if !$0 { importMessage = nil } }
+        )
+    }
+
+    private func withAlerts<V: View>(_ base: V) -> some View {
+        base
             .alert("Clear all rankings?", isPresented: $showingClearConfirm) {
                 Button("Clear", role: .destructive) {
                     RankingService.clearRankings(project: project, context: context)
@@ -147,17 +183,15 @@ struct GalleryView: View {
             } message: {
                 Text("Every item returns to \"New\". This can't be undone.")
             }
-            .alert("Import", isPresented: Binding(
-                get: { importMessage != nil },
-                set: { if !$0 { importMessage = nil } }
-            ), presenting: importMessage) { _ in
+            .alert("Import", isPresented: importMessageShown, presenting: importMessage) { (_: String) in
                 Button("OK") { importMessage = nil }
-            } message: { message in
+            } message: { (message: String) in
                 Text(message)
             }
-            .sheet(item: $shareURL) { wrapper in
-                ShareSheet(url: wrapper.url)
-            }
+    }
+
+    private func withKeys<V: View>(_ base: V) -> some View {
+        base
             .modifier(GalleryCommands(state: commandState, selected: selectedIDs.count,
                                       confirmingDelete: $confirmingBulkDelete, delete: bulkDelete, carryOut: carryOut))
             .modifier(GalleryEscapes(

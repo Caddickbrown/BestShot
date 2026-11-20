@@ -33,35 +33,46 @@ struct MonitorRoot: View {
     @AppStorage(Appearance.key) private var appearance = Appearance.fallback
 
     var body: some View {
-        GeometryReader { geo in
-            let metrics = MonitorMetrics(size: geo.size, scale: desk.textScale, pixels: pixels)
-            let palette = desk.isJudging ? Theme.viewfinder : Theme.table
-            VStack(spacing: 0) {
-                // A photo, a list or a name only ever draw down the last branch.
-                if desk.isLocked {
-                    MonitorNotice(title: "BestShot", line: "Unlock your phone and open BestShot to continue.",
-                                  palette: Theme.viewfinder, metrics: metrics)
-                } else if desk.isPaused {
-                    MonitorNotice(title: "Paused", line: "esc or ⌥⌘P to resume", palette: Theme.viewfinder, metrics: metrics)
-                    MonitorHintBar(keys: desk.keys, palette: Theme.viewfinder, metrics: metrics)
-                } else {
-                    MonitorScreen(desk: desk, palette: palette, metrics: metrics, size: geo.size)
-                        .overlay { MonitorOverlayView(desk: desk, palette: palette, metrics: metrics) }
-                        .overlay(alignment: .bottom) { notices(metrics) }
-                        .overlay { commandPanel(metrics) }
-                    if let hints = commandHints {
-                        CommandHintBar(hints: hints, palette: palette, metrics: metrics)
-                    } else {
-                        MonitorHintBar(keys: desk.keys, palette: palette, metrics: metrics)
-                    }
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .background(backdrop(palette).ignoresSafeArea())
-            .onChange(of: metrics.photoEdge, initial: true) { _, edge in desk.photoEdge = edge }
+        GeometryReader { (geo: GeometryProxy) in
+            screen(geo.size)
         }
         .ignoresSafeArea()
-        .environment(\.colorScheme, desk.isLocked || desk.isPaused || desk.isJudging ? .dark : appearance.scheme ?? system)
+        .environment(\.colorScheme, scheme)
+    }
+
+    /// Dark while locked, paused or judging; otherwise the chosen look, or the system's.
+    private var scheme: ColorScheme {
+        if desk.isLocked || desk.isPaused || desk.isJudging { return .dark }
+        let chosen: ColorScheme? = appearance.scheme
+        return chosen ?? system
+    }
+
+    private func screen(_ size: CGSize) -> some View {
+        let metrics: MonitorMetrics = MonitorMetrics(size: size, scale: desk.textScale, pixels: pixels)
+        let palette: Theme.Palette = desk.isJudging ? Theme.viewfinder : Theme.table
+        return VStack(spacing: 0) {
+            // A photo, a list or a name only ever draw down the last branch.
+            if desk.isLocked {
+                MonitorNotice(title: "BestShot", line: "Unlock your phone and open BestShot to continue.",
+                              palette: Theme.viewfinder, metrics: metrics)
+            } else if desk.isPaused {
+                MonitorNotice(title: "Paused", line: "esc or ⌥⌘P to resume", palette: Theme.viewfinder, metrics: metrics)
+                MonitorHintBar(keys: desk.keys, palette: Theme.viewfinder, metrics: metrics)
+            } else {
+                MonitorScreen(desk: desk, palette: palette, metrics: metrics, size: size)
+                    .overlay { MonitorOverlayView(desk: desk, palette: palette, metrics: metrics) }
+                    .overlay(alignment: .bottom) { notices(metrics) }
+                    .overlay { commandPanel(metrics) }
+                if let hints = commandHints {
+                    CommandHintBar(hints: hints, palette: palette, metrics: metrics)
+                } else {
+                    MonitorHintBar(keys: desk.keys, palette: palette, metrics: metrics)
+                }
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .background(backdrop(palette).ignoresSafeArea())
+        .onChange(of: metrics.photoEdge, initial: true) { _, edge in desk.photoEdge = edge }
     }
 
     private func backdrop(_ palette: Theme.Palette) -> Color {

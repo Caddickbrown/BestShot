@@ -910,44 +910,76 @@ struct BestShotCommandList: CommandList {
 
     // MARK: - Settings
 
+    // In pieces, each with its types written out: as one getter it took
+    // the compiler over half a second to type-check.
     private var settingsRows: [Row] {
-        let looks = Appearance.allCases.map {
-            Row("look.\($0.rawValue)", $0.title, symbol: "circle.lefthalf.filled", step: .run(.appearance($0)),
-                preview: .appearance($0), isCurrent: state.appearance == $0)
-        }
-        var rows: [Row] = [
-            Row("appearance", "Appearance…", detail: state.appearance.title, symbol: "circle.lefthalf.filled",
-                step: .pick(CommandPick(prompt: "Light or dark?", choices: looks, revert: .appearance(state.appearance))),
-                synonyms: ["theme", "dark mode", "light mode", "look", "night"]),
-        ]
-        let labels = LabelColour.allCases.map { colour in
-            let name = state.name(colour)
-            return Row("label.\(colour.slug)", name, detail: name == colour.title ? nil : colour.title, symbol: "circle.fill",
-                       step: .ask(CommandAsk(prompt: "A name for \(colour.title.lowercased())", initial: name,
-                                             title: { "Call \(colour.title.lowercased()) “\($0)”" },
-                                             make: { text in
-                                                 let t = text.trimmingCharacters(in: .whitespaces)
-                                                 return t.isEmpty || t == name ? nil : .renameLabel(colour, t)
-                                             })))
-        }
-        rows.append(Row("labels", "Rename a colour label…", symbol: "tag",
-                        step: .pick(CommandPick(prompt: "Which colour?", choices: labels, searchable: false)),
-                        synonyms: ["label names", "colour names", "color names"]))
-        if state.monitorConnected {
-            rows.append(Row.toggle("monitor.pause", isOn: state.monitorPaused, turnOn: "Pause monitor", turnOff: "Resume monitor",
-                                   states: ("Paused", "Showing"), detail: "⌥⌘P", symbol: "pause.rectangle", action: .pause,
-                                   synonyms: ["blank", "hide screen"]))
-            let percent = "\(Int((state.textScale * 100).rounded()))%"
-            if state.textScale < (MonitorDesk.textScales.last ?? 1) - 0.001 {
-                rows.append(Row("monitor.larger", "Monitor text larger", detail: "⌥⌘= · now \(percent)", symbol: "textformat.size.larger",
-                                step: .run(.textSize(1)), synonyms: ["bigger", "zoom in", "text size"]))
-            }
-            if state.textScale > (MonitorDesk.textScales.first ?? 1) + 0.001 {
-                rows.append(Row("monitor.smaller", "Monitor text smaller", detail: "⌥⌘− · now \(percent)", symbol: "textformat.size.smaller",
-                                step: .run(.textSize(-1)), synonyms: ["zoom out", "text size"]))
-            }
-        }
+        var rows: [Row] = [appearanceRow, labelsRow]
+        if state.monitorConnected { rows += monitorRows }
         return rows
+    }
+
+    private var appearanceRow: Row {
+        let looks: [Row] = Appearance.allCases.map { (look: Appearance) -> Row in
+            Row("look.\(look.rawValue)", look.title, symbol: "circle.lefthalf.filled", step: .run(.appearance(look)),
+                preview: .appearance(look), isCurrent: state.appearance == look)
+        }
+        let pick = CommandPick<BestShotCommand>(prompt: "Light or dark?", choices: looks, revert: .appearance(state.appearance))
+        return Row("appearance", "Appearance…", detail: state.appearance.title, symbol: "circle.lefthalf.filled",
+                   step: .pick(pick), synonyms: ["theme", "dark mode", "light mode", "look", "night"])
+    }
+
+    private var labelsRow: Row {
+        let labels: [Row] = LabelColour.allCases.map { (colour: LabelColour) -> Row in labelRow(colour) }
+        let pick = CommandPick<BestShotCommand>(prompt: "Which colour?", choices: labels, searchable: false)
+        return Row("labels", "Rename a colour label…", symbol: "tag", step: .pick(pick),
+                   synonyms: ["label names", "colour names", "color names"])
+    }
+
+    private func labelRow(_ colour: LabelColour) -> Row {
+        let name: String = state.name(colour)
+        let lower: String = colour.title.lowercased()
+        let make: (String) -> BestShotCommand? = { (text: String) -> BestShotCommand? in
+            let t: String = text.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty || t == name ? nil : .renameLabel(colour, t)
+        }
+        let ask = CommandAsk<BestShotCommand>(prompt: "A name for \(lower)", initial: name,
+                                              title: { (typed: String) -> String in "Call \(lower) “\(typed)”" },
+                                              make: make)
+        return Row("label.\(colour.slug)", name, detail: name == colour.title ? nil : colour.title, symbol: "circle.fill",
+                   step: .ask(ask))
+    }
+
+    private var monitorRows: [Row] {
+        var rows: [Row] = [pauseRow]
+        let scale: Double = state.textScale
+        let percent: String = String(Int((scale * 100).rounded())) + "%"
+        let scales: [Double] = MonitorDesk.textScales
+        let largest: Double = scales.last ?? 1.0
+        let smallest: Double = scales.first ?? 1.0
+        if scale < largest - 0.001 { rows.append(largerRow(percent)) }
+        if scale > smallest + 0.001 { rows.append(smallerRow(percent)) }
+        return rows
+    }
+
+    private var pauseRow: Row {
+        let states: (on: String, off: String) = ("Paused", "Showing")
+        let synonyms: [String] = ["blank", "hide screen"]
+        return Row.toggle("monitor.pause", isOn: state.monitorPaused, turnOn: "Pause monitor", turnOff: "Resume monitor",
+                          states: states, detail: "⌥⌘P", symbol: "pause.rectangle", action: .pause, synonyms: synonyms)
+    }
+
+    private func largerRow(_ percent: String) -> Row {
+        let detail: String = "⌥⌘= · now " + percent
+        let synonyms: [String] = ["bigger", "zoom in", "text size"]
+        return Row("monitor.larger", "Monitor text larger", detail: detail, symbol: "textformat.size.larger",
+                   step: .run(.textSize(1)), synonyms: synonyms)
+    }
+
+    private func smallerRow(_ percent: String) -> Row {
+        let detail: String = "⌥⌘− · now " + percent
+        let synonyms: [String] = ["zoom out", "text size"]
+        return Row("monitor.smaller", "Monitor text smaller", detail: detail, symbol: "textformat.size.smaller",
+                   step: .run(.textSize(-1)), synonyms: synonyms)
     }
 }
 

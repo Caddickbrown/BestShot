@@ -170,22 +170,11 @@ struct TriageView: View {
     /// share. A colour stays on the photo, so pressing it again clears it; green
     /// keeps, yellow skips, red marks it for deleting. Keys 1-5, 0 and 6-9 too.
     private func labels(_ asset: PHAsset) -> some View {
-        let rating = session.mark(for: asset).rating
-        let shown = session.shownColour(for: asset)
-        let names = LabelStore.shared
+        let rating: Int = session.mark(for: asset).rating
+        let shown: LabelColour? = session.shownColour(for: asset)
         return HStack(spacing: 0) {
-            ForEach(1...5, id: \.self) { n in
-                Button { session.rate(rating == n ? 0 : n) } label: {
-                    Image(systemName: n <= rating ? "star.fill" : "star")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(n <= rating ? Theme.viewfinder.ink : Theme.viewfinder.muted)
-                        .frame(width: 30, height: 40)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .modifier(LabelKey(key: String(n), on: keysHere))
-                .accessibilityLabel(n == 1 ? "1 star" : "\(n) stars")
-                .accessibilityAddTraits(n == rating ? .isSelected : [])
+            ForEach(1...5, id: \.self) { (n: Int) in
+                starButton(n, rating: rating)
             }
             // 0 clears the stars, as in Folders.
             Button { session.rate(0) } label: { EmptyView() }
@@ -194,27 +183,49 @@ struct TriageView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
             Spacer(minLength: 8)
-            ForEach(LabelColour.allCases) { colour in
-                let on = shown == colour
-                Button { Theme.Motion.run(Theme.Motion.snap) { session.toggleColour(colour) } } label: {
-                    Circle()
-                        .fill(Theme.label(colour))
-                        .frame(width: on ? 22 : 16, height: on ? 22 : 16)
-                        .overlay(Circle().strokeBorder(Theme.viewfinder.ink, lineWidth: on ? 2 : 0))
-                        .frame(width: 34, height: 40)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .modifier(LabelKey(key: colour.key, on: keysHere))
-                .accessibilityLabel(names.name(colour))
-                .accessibilityHint(on ? "Takes the colour off" : colour.triageHint)
-                .accessibilityAddTraits(on ? .isSelected : [])
-                .help(names.name(colour) + (colour.key.map { " (\($0))" } ?? ""))
+            ForEach(LabelColour.allCases) { (colour: LabelColour) in
+                colourButton(colour, on: shown == colour)
             }
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
         .background(Color.black)
+    }
+
+    private func starButton(_ n: Int, rating: Int) -> some View {
+        let filled: Bool = n <= rating
+        let tint: Color = filled ? Theme.viewfinder.ink : Theme.viewfinder.muted
+        return Button { session.rate(rating == n ? 0 : n) } label: {
+            Image(systemName: filled ? "star.fill" : "star")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .modifier(LabelKey(key: String(n), on: keysHere))
+        .accessibilityLabel(n == 1 ? "1 star" : "\(n) stars")
+        .accessibilityAddTraits(n == rating ? .isSelected : [])
+    }
+
+    private func colourButton(_ colour: LabelColour, on: Bool) -> some View {
+        let name: String = LabelStore.shared.name(colour)
+        let size: CGFloat = on ? 22 : 16
+        let keyHint: String = colour.key.map { " (\($0))" } ?? ""
+        return Button { Theme.Motion.run(Theme.Motion.snap) { session.toggleColour(colour) } } label: {
+            Circle()
+                .fill(Theme.label(colour))
+                .frame(width: size, height: size)
+                .overlay(Circle().strokeBorder(Theme.viewfinder.ink, lineWidth: on ? 2 : 0))
+                .frame(width: 34, height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .modifier(LabelKey(key: colour.key, on: keysHere))
+        .accessibilityLabel(name)
+        .accessibilityHint(on ? "Takes the colour off" : colour.triageHint)
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .help(name + keyHint)
     }
 
     /// With a monitor up, the keyboard is the monitor's: its own keys set these there.

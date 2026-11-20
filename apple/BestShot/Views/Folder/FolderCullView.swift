@@ -111,65 +111,92 @@ struct FolderCullView: View {
     private var palette: Theme.Palette { session.mode == .loupe ? Theme.viewfinder : Theme.table }
 
     private var topBar: some View {
-        let c = session.counts
-        let total = max(session.items.count, 1)
+        let c: FolderCounts = session.counts
         return HStack(spacing: 20) {
             Button("‹ Folders", action: onClose)
                 .buttonStyle(TextButtonStyle(palette: palette))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.name)
-                    .font(.barTitle)
-                if let item = session.current {
-                    Text("\(session.position.map { String($0 + 1) } ?? "–") / \(session.visible.count) · \(item.rel)")
-                        .font(.mono(11))
-                        .foregroundStyle(palette.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-            .frame(maxWidth: 360, alignment: .leading)
-            GeometryReader { geo in
-                HStack(spacing: 0) {
-                    Rectangle().fill(palette.ink).frame(width: geo.size.width * CGFloat(c.keep) / CGFloat(total))
-                    Rectangle().fill(palette.accent).frame(width: geo.size.width * CGFloat(c.reject) / CGFloat(total))
-                    Rectangle().fill(palette.muted).frame(width: geo.size.width * CGFloat(c.other) / CGFloat(total))
-                    Spacer(minLength: 0)
-                }
-                .background(palette.rule)
-            }
-            .frame(height: 2)
-            HStack(spacing: 12) {
-                Text("✓ \(c.keep)")
-                Text("✕ \(c.reject)").foregroundStyle(palette.accent)
-                if c.other > 0 { Text("? \(c.other)").foregroundStyle(palette.muted) }
-                Text("○ \(c.left)").foregroundStyle(palette.muted)
-            }
-            .font(.mono(12))
-            HStack(spacing: 0) {
-                FolderToolButton(label: "Multi Crop", symbol: "crop", key: "⌥⌘C", palette: palette) { session.openMultiCrop() }
-                FolderToolButton(label: session.selection.isEmpty ? "Glue" : "Glue \(session.selection.count)", symbol: "rectangle.split.2x1.fill",
-                                 key: "⌥⌘G", palette: palette) { session.openGlue() }
-            }
-            HStack(spacing: 14) {
-                modeButton("Grid", .grid)
-                modeButton("Rank", .rank)
-                if session.mode == .loupe {
-                    Button("Info") { session.showInfo.toggle() }.buttonStyle(TextButtonStyle(palette: palette))
-                    Button("Keywords") { session.toggleKeywords() }.buttonStyle(TextButtonStyle(palette: palette))
-                }
-                if c.reject > 0 {
-                    Button("Trash all red…") { session.confirmTrashRed() }
-                        .buttonStyle(TextButtonStyle(palette: palette, destructive: true))
-                        .help("⌘⌫")
-                }
-                Button("Clear out…") { session.confirmFinish() }
-                    .buttonStyle(PillButtonStyle(palette: palette))
-            }
+            titleBlock
+            progressBar(c)
+            countsRow(c)
+            toolButtons
+            modeButtons(c)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .foregroundStyle(palette.ink)
         .background(session.mode == .loupe ? Color.black : Theme.table.background)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.name)
+                .font(.barTitle)
+            if let item = session.current {
+                Text(positionText(item.rel))
+                    .font(.mono(11))
+                    .foregroundStyle(palette.muted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(maxWidth: 360, alignment: .leading)
+    }
+
+    private func positionText(_ rel: String) -> String {
+        let at: String = session.position.map { String($0 + 1) } ?? "–"
+        return "\(at) / \(session.visible.count) · \(rel)"
+    }
+
+    private func progressBar(_ c: FolderCounts) -> some View {
+        let total: CGFloat = CGFloat(max(session.items.count, 1))
+        return GeometryReader { (geo: GeometryProxy) in
+            let w: CGFloat = geo.size.width
+            HStack(spacing: 0) {
+                Rectangle().fill(palette.ink).frame(width: w * CGFloat(c.keep) / total)
+                Rectangle().fill(palette.accent).frame(width: w * CGFloat(c.reject) / total)
+                Rectangle().fill(palette.muted).frame(width: w * CGFloat(c.other) / total)
+                Spacer(minLength: 0)
+            }
+            .background(palette.rule)
+        }
+        .frame(height: 2)
+    }
+
+    private func countsRow(_ c: FolderCounts) -> some View {
+        HStack(spacing: 12) {
+            Text("✓ \(c.keep)")
+            Text("✕ \(c.reject)").foregroundStyle(palette.accent)
+            if c.other > 0 { Text("? \(c.other)").foregroundStyle(palette.muted) }
+            Text("○ \(c.left)").foregroundStyle(palette.muted)
+        }
+        .font(.mono(12))
+    }
+
+    private var toolButtons: some View {
+        let glue: String = session.selection.isEmpty ? "Glue" : "Glue \(session.selection.count)"
+        return HStack(spacing: 0) {
+            FolderToolButton(label: "Multi Crop", symbol: "crop", key: "⌥⌘C", palette: palette) { session.openMultiCrop() }
+            FolderToolButton(label: glue, symbol: "rectangle.split.2x1.fill",
+                             key: "⌥⌘G", palette: palette) { session.openGlue() }
+        }
+    }
+
+    private func modeButtons(_ c: FolderCounts) -> some View {
+        HStack(spacing: 14) {
+            modeButton("Grid", .grid)
+            modeButton("Rank", .rank)
+            if session.mode == .loupe {
+                Button("Info") { session.showInfo.toggle() }.buttonStyle(TextButtonStyle(palette: palette))
+                Button("Keywords") { session.toggleKeywords() }.buttonStyle(TextButtonStyle(palette: palette))
+            }
+            if c.reject > 0 {
+                Button("Trash all red…") { session.confirmTrashRed() }
+                    .buttonStyle(TextButtonStyle(palette: palette, destructive: true))
+                    .help("⌘⌫")
+            }
+            Button("Clear out…") { session.confirmFinish() }
+                .buttonStyle(PillButtonStyle(palette: palette))
+        }
     }
 
     private func modeButton(_ title: String, _ mode: FolderCullSession.Mode) -> some View {

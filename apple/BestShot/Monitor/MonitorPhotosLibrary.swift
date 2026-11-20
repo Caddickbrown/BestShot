@@ -26,12 +26,15 @@ final class MonitorPhotosLibrary: MonitorLibrary {
     @ObservationIgnored private var idCache: (session: ObjectIdentifier, ids: [String])?
     private var organise: OrganiseSession? { organiseHolder.session }
 
-    init(context: ModelContext, triage: TriageHolder = .shared, organise: OrganiseHolder = .shared,
-         rank: RankHolder = .shared) {
+    /// The holders default to the app's shared ones. They're looked up in the
+    /// body, on the main actor: a default argument (`= .shared`) is evaluated
+    /// by the caller outside the actor, which Swift 6 rejects.
+    init(context: ModelContext, triage: TriageHolder? = nil, organise: OrganiseHolder? = nil,
+         rank: RankHolder? = nil) {
         self.context = context
-        self.triage = triage
-        self.organiseHolder = organise
-        self.rank = rank
+        self.triage = triage ?? .shared
+        self.organiseHolder = organise ?? .shared
+        self.rank = rank ?? .shared
     }
 
     // MARK: Photos access

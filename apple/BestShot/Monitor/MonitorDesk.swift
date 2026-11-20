@@ -236,7 +236,7 @@ extension MonitorLibrary {
 @Observable
 @MainActor
 final class MonitorDesk {
-    static let textScales: [Double] = [0.8, 0.9, 1, 1.12, 1.25, 1.4, 1.7]
+    nonisolated static let textScales: [Double] = [0.8, 0.9, 1, 1.12, 1.25, 1.4, 1.7]
     static let zoomSteps: [CGFloat] = [1, 2, 4]
     private static let scaleKey = "monitor.textScale"
 

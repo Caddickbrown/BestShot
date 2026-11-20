@@ -30,8 +30,7 @@ final class GlueMultiCropTests: XCTestCase {
       workspace: workspace, job: MediaRenderJob(), progress: { _ in })
     XCTAssertEqual(made.map(\.lastPathComponent), ["Scan_004-1.png", "Scan_004-2.png"])
     let original = try rgba(source)
-    var expected: [UInt8] = []
-    for y in 6..<26 { for x in 4..<28 { expected += original[(y * w + x) * 4..<(y * w + x) * 4 + 4] } }
+    let expected: [UInt8] = pixelBlock(original, width: w, xs: 4..<28, ys: Array(6..<26))
     XCTAssertEqual(try rgba(made[0]), expected, "an axis-aligned box is an exact copy")
     let second = try XCTUnwrap(CGImageSourceCreateWithURL(made[1] as CFURL, nil))
     let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(second, 0, nil) as? [CFString: Any])
@@ -182,9 +181,7 @@ final class GlueMultiCropTests: XCTestCase {
       whole += [v, 255 &- v, UInt8((n + x) % 256), 255]
     } }
     func crop(_ x0: Int, _ x1: Int) -> [UInt8] {
-      var out: [UInt8] = []
-      for y in 0..<h { out += whole[(y * w + x0) * 4..<(y * w + x1) * 4] }
-      return out
+      pixelBlock(whole, width: w, xs: x0..<x1, ys: Array(0..<h))
     }
     let a = workspace.url("png"), b = workspace.url("png")
     try writeImage(crop(0, 250), width: 250, height: h, to: a, type: .png)

@@ -141,20 +141,25 @@ struct MultiCropPlan: Decodable {
 
 enum MultiCropBridge {
   static func config(
-    source: ToolImage, boxes: [CropBoxModel], trim: Int, stem: String = "", ext: String = "", existing: [String] = []
+    source: ToolImage, boxes: [CropBoxModel], trim: Int, order: [String] = [], stem: String = "", ext: String = "",
+    existing: [String] = []
   ) throws -> String {
     let object: [String: Any] = [
       "schema_version": 1,
       "source": ["ref": source.name, "width": source.width, "height": source.height],
       "boxes": boxes.map(\.json),
+      "order": order,
       "trim_px": trim,
       "naming": ["stem": stem, "ext": ext, "existing": existing, "start": 1],
     ]
     return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
   }
 
-  static func plan(source: ToolImage, boxes: [CropBoxModel], trim: Int, stem: String = "", ext: String = "", existing: [String] = []) throws -> MultiCropPlan {
-    let json = try config(source: source, boxes: boxes, trim: trim, stem: stem, ext: ext, existing: existing)
+  static func plan(
+    source: ToolImage, boxes: [CropBoxModel], trim: Int, order: [String] = [], stem: String = "", ext: String = "",
+    existing: [String] = []
+  ) throws -> MultiCropPlan {
+    let json = try config(source: source, boxes: boxes, trim: trim, order: order, stem: stem, ext: ext, existing: existing)
     return try JSONDecoder().decode(MultiCropPlan.self, from: Data(mediaMulticropPlan(configJson: json).utf8))
   }
 
@@ -188,10 +193,11 @@ enum MultiCropBridge {
   /// Makes one new file per box into `workspace` (named as they'll be
   /// published), in output order. The source is only read.
   static func export(
-    source: ToolImage, boxes: [CropBoxModel], trim: Int, format: ToolOutputFormat, existing: [String],
+    source: ToolImage, boxes: [CropBoxModel], trim: Int, order: [String] = [], format: ToolOutputFormat, existing: [String],
     workspace: MediaWorkspace, job: MediaRenderJob, progress: @escaping @Sendable (Double) -> Void
   ) throws -> [URL] {
-    let json = try config(source: source, boxes: boxes, trim: trim, stem: source.stem, ext: format.ext, existing: existing)
+    let json = try config(
+      source: source, boxes: boxes, trim: trim, order: order, stem: source.stem, ext: format.ext, existing: existing)
     let plan = try JSONDecoder().decode(MultiCropPlan.self, from: Data(mediaMulticropPlan(configJson: json).utf8))
     let space = ToolImaging.workingSpace([source])
     let staged = workspace.url("rgba")
@@ -222,5 +228,113 @@ enum MultiCropBridge {
       throw error
     }
     return made
+  }
+}
+
+// MARK: - The output strip
+
+extension MultiCropBridge {
+  /// Each box as it will be saved (straightened, trimmed, turned), cut from
+  /// the preview by the same core extract the export uses, so the strip shows
+  /// the made pixels at preview size. A box that can't be made (too small at
+  /// this size) has no thumbnail and doesn't stop the others.
+  static func thumbnails(
+    source: ToolImage, boxes: [CropBoxModel], trim: Int, workspace: MediaWorkspace
+  ) -> [String: CGImage] {
+    let preview = source.preview
+    let (w, h) = (preview.width, preview.height)
+    guard w > 0, h > 0, !boxes.isEmpty else { return [:] }
+    let s = Double(w) / Double(max(source.width, 1))
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    let staged = workspace.url("rgba")
+    defer { try? FileManager.default.removeItem(at: staged) }
+    var bytes = [UInt8](repeating: 0, count: w * h * 4)
+    let drawn = bytes.withUnsafeMutableBytes { data -> Bool in
+      guard let context = CGContext(
+        data: data.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+      else { return false }
+      context.draw(preview, in: CGRect(x: 0, y: 0, width: w, height: h))
+      return true
+    }
+    guard drawn, (try? Data(bytes).write(to: staged)) != nil else { return [:] }
+    let small = ToolImage(
+      url: source.url, origin: source.origin, width: w, height: h, preview: preview, hasAlpha: source.hasAlpha,
+      wide: false, properties: [:], keywords: [])
+    let job = MediaRenderJob()
+    var out: [String: CGImage] = [:]
+    for box in boxes {
+      let scaled = box.scaled(sx: s, sy: s)
+      guard let json = try? config(source: small, boxes: [scaled], trim: Int((Double(trim) * s).rounded())),
+        let plan = try? JSONDecoder().decode(MultiCropPlan.self, from: Data(mediaMulticropPlan(configJson: json).utf8)),
+        let planned = plan.boxes.first
+      else { continue }
+      let cut = workspace.url("rgba")
+      defer { try? FileManager.default.removeItem(at: cut) }
+      guard (try? job.multicropExtract(configJson: json, boxId: box.id, source: staged.path, destination: cut.path)) != nil,
+        let pixels = try? Data(contentsOf: cut), pixels.count == planned.width * planned.height * 4,
+        let provider = CGDataProvider(data: pixels as CFData),
+        let image = CGImage(
+          width: planned.width, height: planned.height, bitsPerComponent: 8, bitsPerPixel: 32,
+          bytesPerRow: planned.width * 4, space: space,
+          bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider,
+          decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+      else { continue }
+      out[box.id] = image
+    }
+    return out
+  }
+}
+
+// MARK: - Snapping
+
+/// Where a box's edges snap while it's dragged (spec 2.2): the image's edges
+/// and the other boxes' edges, and the other boxes' sizes, so a contact
+/// sheet's boxes come out the same size. Pure, in image pixels.
+enum CropSnap {
+  struct Lines: Equatable {
+    var xs: [CGFloat]
+    var ys: [CGFloat]
+    var widths: [CGFloat]
+    var heights: [CGFloat]
+  }
+
+  /// The lines from the image and every box but `except`. Sizes only come
+  /// from straight boxes: a turned box's bounds aren't its size.
+  static func lines(boxes: [CropBoxModel], except id: String?, width: Int, height: Int) -> Lines {
+    var l = Lines(xs: [0, CGFloat(width)], ys: [0, CGFloat(height)], widths: [], heights: [])
+    for b in boxes where b.id != id {
+      let r = b.bounds
+      l.xs += [r.minX, r.maxX]
+      l.ys += [r.minY, r.maxY]
+      if b.rect && b.angle == 0 {
+        if !l.widths.contains(r.width) { l.widths.append(r.width) }
+        if !l.heights.contains(r.height) { l.heights.append(r.height) }
+      }
+    }
+    return l
+  }
+
+  /// `v` moved onto the nearest line within `reach`, or left as it is.
+  static func value(_ v: CGFloat, to lines: [CGFloat], reach: CGFloat) -> CGFloat {
+    var best: CGFloat?
+    for line in lines where abs(line - v) <= reach && abs(line - v) < abs((best ?? .infinity) - v) { best = line }
+    return best ?? v
+  }
+
+  /// The shift that puts the nearest of a rectangle's edges onto a line, per axis.
+  static func shift(_ r: CGRect, to lines: Lines, reach: CGFloat) -> CGVector {
+    func axis(_ lo: CGFloat, _ hi: CGFloat, _ targets: [CGFloat]) -> CGFloat {
+      var best: CGFloat = 0
+      var found = false
+      for edge in [lo, hi] {
+        for t in targets where abs(t - edge) <= reach && (!found || abs(t - edge) < abs(best)) {
+          best = t - edge
+          found = true
+        }
+      }
+      return best
+    }
+    return CGVector(dx: axis(r.minX, r.maxX, lines.xs), dy: axis(r.minY, r.maxY, lines.ys))
   }
 }

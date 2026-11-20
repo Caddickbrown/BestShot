@@ -17,6 +17,12 @@ final class GlueSession {
   var phase = ""
   var beside: URL?
   var onMade: (([URL], String) -> Void)?
+  /// Leaves the editor (Folders' sheet); nil where it's a place of its own.
+  var onClose: (() -> Void)?
+  /// The canvas zoom (1 fits), shared by the keys, the phone and the monitor.
+  var zoom: CGFloat = 1
+  /// Showing "before": the photos butted with no settings (`\`).
+  var before = false
 
   private(set) var history = EditHistory<GlueConfiguration>()
   private var workspace: MediaWorkspace?
@@ -27,6 +33,13 @@ final class GlueSession {
   static let maxPhotos = 10
 
   var plan: GluePlan? { images.count >= 2 ? try? edit.plan() : nil }
+  /// What the canvas shows: the plan, or the before view's.
+  var shownPlan: GluePlan? {
+    guard before else { return plan }
+    return images.count >= 2 ? try? edit.before.plan() : nil
+  }
+  /// The edit behind `shownPlan`, for its fades.
+  var shownEdit: GlueConfiguration { before ? edit.before : edit }
   var validation: String? {
     guard images.count >= 2 else { return images.isEmpty ? nil : "Add at least one more photo." }
     do {
@@ -137,16 +150,53 @@ final class GlueSession {
     images.remove(at: index)
     focused = images.isEmpty ? nil : min(index, images.count - 1)
   }
+  /// The focused photo's join: the one after it (before it, for the last).
+  /// Only a line's joins are numbered one per neighbouring pair.
+  var focusedJoin: Int? {
+    guard let plan, let i = focused, edit.arrangement == "line", !plan.joins.isEmpty else { return nil }
+    return min(i, plan.joins.count - 1)
+  }
   func moveSeam(_ delta: Double) {
-    guard let plan, let i = focused else { return }
-    // The focused photo's join is the one after it (before it, for the last).
-    let k = min(i, plan.joins.count - 1)
-    guard k >= 0, plan.joins[k].join_px < 0, plan.joins[k].axis == (vertical ? "y" : "x") else { return }
+    guard let k = focusedJoin else { return }
+    change { $0 = Self.seamMoved($0, plan: plan, join: k, by: delta) }
+  }
+  /// Dragging a seam: no Undo step per move (`beginDrag`/`endDrag` make one).
+  func dragSeam(_ k: Int, by delta: Double) {
+    edit = Self.seamMoved(edit, plan: plan, join: k, by: delta)
+  }
+  /// The seam of join `k` moved `delta` output pixels along its overlap, kept inside it.
+  static func seamMoved(_ e: GlueConfiguration, plan: GluePlan?, join k: Int, by delta: Double) -> GlueConfiguration {
+    guard let plan, plan.joins.indices.contains(k), plan.joins[k].join_px < 0 else { return e }
     let overlap = Double(-plan.joins[k].join_px)
+    var e = e
+    while e.seams.count <= k { e.seams.append(.init()) }
+    e.seams[k].position = max(0, min(1, e.seams[k].position + delta / overlap))
+    return e
+  }
+  /// The join whose seam is within `reach` of `p` (output pixels), on a line with an overlap.
+  static func seamHit(_ plan: GluePlan, at p: CGPoint, reach: Double, line: Bool) -> Int? {
+    guard line else { return nil }
+    var best: (Int, Double)?
+    for (k, join) in plan.joins.enumerated() where join.join_px < 0 {
+      let d = abs((join.axis == "x" ? p.x : p.y) - join.seam_px)
+      if d <= reach, d < (best?.1 ?? .infinity) { best = (k, d) }
+    }
+    return best?.0
+  }
+  /// The fade at join `k`: its own, or the shared one.
+  func fade(atJoin k: Int) -> Int { edit.seams.indices.contains(k) ? edit.seams[k].fade_px ?? edit.fade_px : edit.fade_px }
+  func hasOwnFade(_ k: Int) -> Bool { edit.seams.indices.contains(k) && edit.seams[k].fade_px != nil }
+  /// Join `k`'s own fade; nil goes back to the shared one.
+  func setJoinFade(_ k: Int, _ value: Int?) {
     change { e in
       while e.seams.count <= k { e.seams.append(.init()) }
-      e.seams[k].position = max(0, min(1, e.seams[k].position + delta / overlap))
+      e.seams[k].fade_px = value.map { max(0, min(4000, $0)) }
     }
+  }
+  /// For the slider: no Undo step per move.
+  func dragJoinFade(_ k: Int, _ value: Int) {
+    while edit.seams.count <= k { edit.seams.append(.init()) }
+    edit.seams[k].fade_px = max(0, min(4000, value))
   }
   func offset(_ delta: Int) {
     guard let i = focused, edit.arrangement == "line" else { return }
@@ -191,6 +241,50 @@ final class GlueSession {
         }
       } catch { notice = "Couldn't line these up." }
     }
+  }
+
+  // MARK: - Keys
+
+  /// One editor command, from the keyboard on the phone, the Mac or the monitor.
+  /// False when it does nothing here (Esc with nothing to close).
+  @discardableResult
+  func perform(_ command: GlueCommand) -> Bool {
+    switch command {
+    case .flipLayout: flipLayout()
+    case .cycleArrangement: cycleArrangement()
+    case .cycleSize: cycleSize()
+    case .next: focusStep(1)
+    case .previous: focusStep(-1)
+    case .seam(let d): moveSeam(d)
+    case .offset(let d): offset(d)
+    case .move(let dx, let dy): nudgeFree(dx: dx, dy: dy)
+    case .moveEarlier: if let i = focused { move(i, by: -1) }
+    case .moveLater: if let i = focused { move(i, by: 1) }
+    case .join(let d): setJoin(edit.join_px + d)
+    case .fade(let d): setFade(edit.fade_px + d)
+    case .joinFade(let d):
+      guard let k = focusedJoin else { return true }
+      setJoinFade(k, fade(atJoin: k) + d)
+    case .before(let on): before = on ?? !before
+    case .turn(let d): turn(d)
+    case .remove: if let i = focused { removePhoto(i) }
+    case .lineUp: lineUp()
+    case .glue: glue()
+    case .undo: undo()
+    case .redo: redo()
+    case .zoom(let z): zoom = ZoomCanvas<EmptyView>.step(zoom, z)
+    case .escape:
+      if before {
+        before = false
+      } else if focused != nil {
+        focused = nil
+      } else if let onClose {
+        onClose()
+      } else {
+        return false
+      }
+    }
+    return true
   }
 
   // MARK: - Opening

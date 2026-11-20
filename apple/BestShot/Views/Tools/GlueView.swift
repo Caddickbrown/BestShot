@@ -19,9 +19,10 @@ struct GlueView: View {
     @State private var choosingPhoto = false
     @State private var choosingFile = false
     @State private var choosingProject = false
-    @State private var zoom: CGFloat = 1
     @State private var panning = false
     @State private var dragging: (index: Int, last: CGPoint, resize: Bool)?
+    /// A seam being dragged: its join and the last point along it.
+    @State private var seamDrag: (join: Int, last: CGFloat)?
     @FocusState private var keys: Bool
 
     // Built in stages so each part type-checks on its own: one long
@@ -78,11 +79,16 @@ struct GlueView: View {
             .task {
                 session.beside = beside
                 session.onMade = onMade
+                session.onClose = onClose
                 if !initial.isEmpty, session.images.isEmpty {
                     session.add(initial, keywords: keywords, stageCopy: beside == nil)
                 }
             }
-            .onDisappear { session.cancel() }
+            .onAppear { ToolHolder.shared.show(.glue(session)) }
+            .onDisappear {
+                session.cancel()
+                ToolHolder.shared.hide(session)
+            }
     }
 
     private var status: String? {
@@ -119,8 +125,8 @@ struct GlueView: View {
 
     private var editor: some View {
         VStack(spacing: 0) {
-            if let plan = session.plan {
-                ZoomCanvas(size: CGSize(width: plan.width, height: plan.height), zoom: $zoom, panning: panning) { scale in
+            if let plan = session.shownPlan {
+                ZoomCanvas(size: CGSize(width: plan.width, height: plan.height), zoom: $session.zoom, panning: panning) { scale in
                     canvas(plan, scale: scale)
                 }
                 .layoutPriority(1)
@@ -133,7 +139,7 @@ struct GlueView: View {
         .focused($keys)
         .focusEffectDisabled()
         .onAppear { keys = true }
-        .onKeyPress(phases: [.down, .repeat]) { press in handle(press) }
+        .onKeyPress(phases: [.down, .repeat, .up]) { press in handle(press) }
         .disabled(session.busy)
     }
 
@@ -210,13 +216,17 @@ struct GlueView: View {
             addMenu
             ToolIcon(label: "Line up", symbol: "wand.and.rays", key: "L") { session.lineUp() }
                 .disabled(session.edit.arrangement != "line" || session.images.count < 2)
+            ToolIcon(label: session.before ? "Show after" : "Show before", symbol: "square.split.2x1", key: "\\", active: session.before) {
+                session.before.toggle()
+            }
+            .disabled(session.images.count < 2)
     }
 
     @ViewBuilder
     private var viewButtons: some View {
-            ToolIcon(label: "Zoom out", symbol: "minus.magnifyingglass", key: "⌘−") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomOut) }
-            ToolIcon(label: "Zoom to fit", symbol: "arrow.down.right.and.arrow.up.left", key: "⌘0") { zoom = 1 }
-            ToolIcon(label: "Zoom in", symbol: "plus.magnifyingglass", key: "⌘+") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomIn) }
+            ToolIcon(label: "Zoom out", symbol: "minus.magnifyingglass", key: "⌘−") { session.zoom = ZoomCanvas<EmptyView>.step(session.zoom, .zoomOut) }
+            ToolIcon(label: "Zoom to fit", symbol: "arrow.down.right.and.arrow.up.left", key: "⌘0") { session.zoom = 1 }
+            ToolIcon(label: "Zoom in", symbol: "plus.magnifyingglass", key: "⌘+") { session.zoom = ZoomCanvas<EmptyView>.step(session.zoom, .zoomIn) }
             #if os(iOS)
             ToolIcon(label: panning ? "Move photos" : "Pan", symbol: panning ? "hand.point.up.left" : "hand.raised", active: panning) { panning.toggle() }
             #endif
@@ -243,46 +253,91 @@ struct GlueView: View {
         #endif
     }
 
+    // In parts, each with explicit types, so CI's compiler type-checks them in time.
     private var sliders: some View {
-        let plan = session.plan
-        let maxOverlap = Double(max(plan?.max_overlap_px ?? 0, 0))
-        let overlap = Double(max(0, -session.edit.join_px))
+        let plan: GluePlan? = session.plan
+        let overlap: Double = Double(max(0, -session.edit.join_px))
         return VStack(alignment: .leading, spacing: 4) {
-            if !session.isFree {
-                HStack(spacing: 10) {
-                    Text("Gap").font(.small).foregroundStyle(Theme.table.muted)
-                    Slider(value: Binding(get: { Double(-session.edit.join_px) }, set: { session.edit.join_px = -Int($0.rounded()) }),
-                           in: -200...max(maxOverlap, 1), onEditingChanged: { editing in editing ? session.beginDrag() : session.endDrag() })
-                    Text("Overlap").font(.small).foregroundStyle(Theme.table.muted)
-                    Text(session.edit.join_px < 0 ? "\(overlap.formatted()) px" : "\(session.edit.join_px) px")
-                        .font(.small).monospacedDigit().frame(width: 64, alignment: .trailing)
-                }
-                .help("Gap ↔ overlap (- / =)")
+            if !session.isFree { joinRow(plan) }
+            fadeRow(overlap)
+            if let k = session.focusedJoin, let plan, plan.joins.indices.contains(k), plan.joins[k].join_px < 0 {
+                joinFadeRow(k, overlap: Double(-plan.joins[k].join_px))
             }
-            HStack(spacing: 10) {
-                Text("Fade").font(.small).foregroundStyle(Theme.table.muted)
-                Slider(value: Binding(get: { Double(session.edit.fade_px) }, set: { session.edit.fade_px = Int($0.rounded()) }),
-                       in: 0...max(session.isFree ? 400 : overlap, 1), onEditingChanged: { editing in editing ? session.beginDrag() : session.endDrag() })
-                    .disabled(!session.isFree && overlap == 0)
-                Text(session.edit.fade_px == 0 ? "Straight" : "\(session.edit.fade_px) px").font(.small).monospacedDigit().frame(width: 64, alignment: .trailing)
-            }
-            .help(session.isFree ? "Feather the edges of photos over others ([ / ])" : "0 is a straight edge at the seam ([ / ])")
-            HStack(spacing: 10) {
-                Text("Border").font(.small).foregroundStyle(Theme.table.muted)
-                Slider(value: Binding(get: { Double(session.edit.border_px) }, set: { session.edit.border_px = Int($0.rounded()) }), in: 0...200, onEditingChanged: { editing in
-                    editing ? session.beginDrag() : session.endDrag()
-                })
-                .frame(maxWidth: 160)
-                Spacer(minLength: 8)
-                background
-            }
-            if let validation = session.validation { ToolError(text: validation) }
-            else if let plan, !plan.upscaled.isEmpty { FormNote("Scaled up past 150%: \(plan.upscaled.map { session.images[$0].name }.joined(separator: ", ")).") }
-            else if let notice = session.notice, session.result == nil { FormNote(notice) }
-            if let error = session.error { ToolError(text: error) }
+            borderRow
+            notes(plan)
         }
         .padding(.horizontal, Theme.Space.screen)
         .padding(.vertical, 6)
+    }
+
+    private func editing(_ on: Bool) { if on { session.beginDrag() } else { session.endDrag() } }
+
+    private func joinRow(_ plan: GluePlan?) -> some View {
+        let maxOverlap: Double = Double(max(plan?.max_overlap_px ?? 0, 0))
+        let join: Int = session.edit.join_px
+        let value: Binding<Double> = Binding(get: { Double(-session.edit.join_px) }, set: { session.edit.join_px = -Int($0.rounded()) })
+        let label: String = join < 0 ? "\(-join) px" : "\(join) px"
+        return HStack(spacing: 10) {
+            Text("Gap").font(.small).foregroundStyle(Theme.table.muted)
+            Slider(value: value, in: -200...max(maxOverlap, 1), onEditingChanged: editing)
+            Text("Overlap").font(.small).foregroundStyle(Theme.table.muted)
+            Text(label).font(.small).monospacedDigit().frame(width: 64, alignment: .trailing)
+        }
+        .help("Gap ↔ overlap (- / =)")
+    }
+
+    private func fadeRow(_ overlap: Double) -> some View {
+        let free: Bool = session.isFree
+        let fade: Int = session.edit.fade_px
+        let value: Binding<Double> = Binding(get: { Double(session.edit.fade_px) }, set: { session.edit.fade_px = Int($0.rounded()) })
+        let upper: Double = max(free ? 400 : overlap, 1)
+        let help: String = free ? "Feather the edges of photos over others ([ / ])" : "0 is a straight edge at the seam ([ / ])"
+        return HStack(spacing: 10) {
+            Text("Fade").font(.small).foregroundStyle(Theme.table.muted)
+            Slider(value: value, in: 0...upper, onEditingChanged: editing)
+                .disabled(!free && overlap == 0)
+            Text(fade == 0 ? "Straight" : "\(fade) px").font(.small).monospacedDigit().frame(width: 64, alignment: .trailing)
+        }
+        .help(help)
+    }
+
+    private var borderRow: some View {
+        let value: Binding<Double> = Binding(get: { Double(session.edit.border_px) }, set: { session.edit.border_px = Int($0.rounded()) })
+        return HStack(spacing: 10) {
+            Text("Border").font(.small).foregroundStyle(Theme.table.muted)
+            Slider(value: value, in: 0...200, onEditingChanged: editing)
+                .frame(maxWidth: 160)
+            Spacer(minLength: 8)
+            background
+        }
+    }
+
+    @ViewBuilder
+    private func notes(_ plan: GluePlan?) -> some View {
+        if let validation = session.validation {
+            ToolError(text: validation)
+        } else if let plan, !plan.upscaled.isEmpty {
+            let names: String = plan.upscaled.map { session.images[$0].name }.joined(separator: ", ")
+            FormNote("Scaled up past 150%: \(names).")
+        } else if let notice = session.notice, session.result == nil {
+            FormNote(notice)
+        }
+        if let error = session.error { ToolError(text: error) }
+    }
+
+    /// The focused join's own fade (Dan: a fade per join), or the shared one.
+    private func joinFadeRow(_ k: Int, overlap: Double) -> some View {
+        let own = session.hasOwnFade(k)
+        let value = session.fade(atJoin: k)
+        return HStack(spacing: 10) {
+            Text("This join").font(.small).foregroundStyle(Theme.table.muted)
+            Slider(value: Binding(get: { Double(value) }, set: { session.dragJoinFade(k, Int($0.rounded())) }),
+                   in: 0...max(overlap, 1), onEditingChanged: editing)
+            Text(value == 0 ? "Straight" : "\(value) px").font(.small).monospacedDigit().frame(width: 64, alignment: .trailing)
+            ToolIcon(label: "Same fade as the others", symbol: "link", active: !own) { session.setJoinFade(k, nil) }
+                .disabled(!own)
+        }
+        .help("The fade at the join after the focused photo (⌥[ / ⌥])")
     }
 
     private var background: some View {
@@ -368,135 +423,26 @@ struct GlueView: View {
         guard let command = GlueKeymap.command(key: press.key, characters: press.characters, modifiers: press.modifiers,
                                                vertical: session.vertical, free: session.isFree)
         else { return .ignored }
-        switch command {
-        case .flipLayout: session.flipLayout()
-        case .cycleArrangement: session.cycleArrangement()
-        case .cycleSize: session.cycleSize()
-        case .next: session.focusStep(1)
-        case .previous: session.focusStep(-1)
-        case .seam(let d): session.moveSeam(d)
-        case .offset(let d): session.offset(d)
-        case .move(let dx, let dy): session.nudgeFree(dx: dx, dy: dy)
-        case .moveEarlier: if let i = session.focused { session.move(i, by: -1) }
-        case .moveLater: if let i = session.focused { session.move(i, by: 1) }
-        case .join(let d): session.setJoin(session.edit.join_px + d)
-        case .fade(let d): session.setFade(session.edit.fade_px + d)
-        case .turn(let d): session.turn(d)
-        case .remove: if let i = session.focused { session.removePhoto(i) }
-        case .lineUp: session.lineUp()
-        case .glue: session.glue()
-        case .undo: session.undo()
-        case .redo: session.redo()
-        case .zoom(let z): zoom = ZoomCanvas<EmptyView>.step(zoom, z)
-        case .escape:
-            if session.focused != nil { session.focused = nil } else if let onClose { onClose() }
+        // `\` is held for before; every other key acts on its press.
+        if case .before = command {
+            if press.phase == .repeat { return .handled }
+            return session.perform(.before(press.phase == .down)) ? .handled : .ignored
         }
-        return .handled
+        guard press.phase != .up else { return .ignored }
+        return session.perform(command) ? .handled : .ignored
     }
 
     // MARK: - Canvas
 
     private func canvas(_ plan: GluePlan, scale: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            backgroundLayer(plan, scale: scale)
-            ForEach(Array(plan.items.enumerated()), id: \.offset) { (_: Int, item: GluePlacement) in
-                if let image = session.preview(item.index) {
-                    placed(image, item, count: plan.items.count, scale: scale)
-                }
-            }
-            seamMarks(plan, scale: scale)
-        }
-        .frame(width: CGFloat(plan.width) * scale, height: CGFloat(plan.height) * scale, alignment: .topLeading)
-        .clipped()
-        .contentShape(Rectangle())
-        .gesture(dragGesture(plan, scale: scale))
-        .simultaneousGesture(SpatialTapGesture().onEnded { tap in
-            session.focused = hit(plan, CGPoint(x: tap.location.x / scale, y: tap.location.y / scale))
-            keys = true
-        })
-    }
-
-    /// One photo where the plan puts it, with its fade, focus ring and handle.
-    private func placed(_ image: CGImage, _ item: GluePlacement, count: Int, scale: CGFloat) -> some View {
-        let f: CGRect = item.frame
-        let focused: Bool = session.focused == item.index
-        let ring: Color = focused ? Theme.table.accent : .clear
-        let label: String = "\(session.images[item.index].name), photo \(item.index + 1) of \(count)"
-        return Image(decorative: image, scale: 1)
-            .resizable()
-            .interpolation(.high)
-            .frame(width: f.width * scale, height: f.height * scale)
-            .mask { rampMask(item) }
-            .overlay { Rectangle().stroke(ring, lineWidth: 2) }
-            .overlay(alignment: .bottomTrailing) {
-                if session.isFree && focused {
-                    Circle().fill(Theme.table.accent).frame(width: 16, height: 16).offset(x: 8, y: 8)
-                }
-            }
-            .offset(x: f.minX * scale, y: f.minY * scale)
-            .accessibilityLabel(label)
-            .accessibilityAddTraits(focused ? .isSelected : [])
-    }
-
-    @ViewBuilder
-    private func backgroundLayer(_ plan: GluePlan, scale: CGFloat) -> some View {
-        let size = CGSize(width: CGFloat(plan.width) * scale, height: CGFloat(plan.height) * scale)
-        if session.edit.background.kind == "blur", let first = plan.items.first, let image = session.preview(first.index) {
-            // A stand-in for the core's blurred fill: the made file uses the real one.
-            Image(decorative: image, scale: 1).resizable().scaledToFill()
-                .frame(width: size.width, height: size.height)
-                .blur(radius: max(size.width, size.height) / 18)
-                .clipped()
-        } else {
-            Rectangle().fill(Color(hexString: session.edit.background.colour) ?? .white)
-                .frame(width: size.width, height: size.height)
-        }
-    }
-
-    private func seamMarks(_ plan: GluePlan, scale: CGFloat) -> some View {
-        Canvas { context, size in
-            for join in plan.joins where join.join_px < 0 {
-                var path = Path()
-                if join.axis == "x" {
-                    path.move(to: CGPoint(x: join.seam_px * scale, y: 0))
-                    path.addLine(to: CGPoint(x: join.seam_px * scale, y: size.height))
-                } else {
-                    path.move(to: CGPoint(x: 0, y: join.seam_px * scale))
-                    path.addLine(to: CGPoint(x: size.width, y: join.seam_px * scale))
-                }
-                context.stroke(path, with: .color(Theme.table.accent.opacity(0.7)), style: StrokeStyle(lineWidth: 1, dash: [5, 5]))
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    /// The fade as a mask, the same smoothstep the core blends with.
-    private func rampMask(_ item: GluePlacement) -> some View {
-        LinearGradient(stops: Self.stops(rising: item.ramps.left, falling: item.ramps.right, origin: Double(item.x), length: Double(item.w)),
-                       startPoint: .leading, endPoint: .trailing)
-            .mask(LinearGradient(stops: Self.stops(rising: item.ramps.top, falling: item.ramps.bottom, origin: Double(item.y), length: Double(item.h)),
-                                 startPoint: .top, endPoint: .bottom))
-    }
-
-    static func stops(rising: GlueRamp?, falling: GlueRamp?, origin: Double, length: Double) -> [Gradient.Stop] {
-        func smooth(_ t: Double) -> Double { let t = min(max(t, 0), 1); return t * t * (3 - 2 * t) }
-        func weight(_ x: Double) -> Double {
-            var w = 1.0
-            if let r = rising { w *= r.b <= r.a ? (x < r.a ? 0 : 1) : smooth((x - r.a) / (r.b - r.a)) }
-            if let r = falling { w *= r.b <= r.a ? (x >= r.b ? 0 : 1) : 1 - smooth((x - r.a) / (r.b - r.a)) }
-            return w
-        }
-        var xs: [Double] = [origin, origin + length]
-        for r in [rising, falling].compactMap({ $0 }) {
-            if r.b <= r.a {
-                xs += [r.a - 0.01, r.a]
-            } else {
-                xs += (0...8).map { r.a + (r.b - r.a) * Double($0) / 8 }
-            }
-        }
-        return xs.filter { $0 >= origin && $0 <= origin + length }.sorted().map { x in
-            Gradient.Stop(color: .black.opacity(weight(x)), location: length > 0 ? (x - origin) / length : 0)
-        }
+        GlueCanvasPicture(session: session, plan: plan, scale: scale, activeSeam: seamDrag?.join)
+            .contentShape(Rectangle())
+            .gesture(dragGesture(plan, scale: scale))
+            .simultaneousGesture(SpatialTapGesture().onEnded { tap in
+                guard !session.before else { return }
+                session.focused = hit(plan, CGPoint(x: tap.location.x / scale, y: tap.location.y / scale))
+                keys = true
+            })
     }
 
     private func hit(_ plan: GluePlan, _ p: CGPoint) -> Int? {
@@ -507,8 +453,24 @@ struct GlueView: View {
         DragGesture(minimumDistance: 3)
             .onChanged { value in
                 let p = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
+                guard !session.before else { return }
+                if let drag = seamDrag {
+                    let along = plan.joins[drag.join].axis == "x" ? p.x : p.y
+                    session.dragSeam(drag.join, by: along - drag.last)
+                    seamDrag = (drag.join, along)
+                    return
+                }
                 if dragging == nil {
                     let start = CGPoint(x: value.startLocation.x / scale, y: value.startLocation.y / scale)
+                    // A seam, dragged where it is (a line with an overlap).
+                    if let k = GlueSession.seamHit(plan, at: start, reach: 14 / scale, line: session.edit.arrangement == "line") {
+                        session.beginDrag()
+                        let along = plan.joins[k].axis == "x" ? start.x : start.y
+                        session.dragSeam(k, by: (plan.joins[k].axis == "x" ? p.x : p.y) - along)
+                        seamDrag = (k, plan.joins[k].axis == "x" ? p.x : p.y)
+                        if session.focusedJoin != k { session.focused = plan.items.indices.contains(k) ? plan.items[k].index : session.focused }
+                        return
+                    }
                     // The free resize handle on the focused photo's corner.
                     if session.isFree, let i = session.focused, let item = plan.items.first(where: { $0.index == i }),
                        hypot(start.x - item.frame.maxX, start.y - item.frame.maxY) <= 22 / scale {
@@ -545,8 +507,9 @@ struct GlueView: View {
                 }
             }
             .onEnded { _ in
-                if dragging != nil { session.endDrag() }
+                if dragging != nil || seamDrag != nil { session.endDrag() }
                 dragging = nil
+                seamDrag = nil
                 keys = true
             }
     }

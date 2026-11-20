@@ -95,11 +95,16 @@ enum MonitorAction: Equatable {
 struct MonitorSituation: Equatable {
     enum Surface: Equatable {
         case locked, paused, phoneSheet
+        /// Glue or Multi Crop is open on the phone: the monitor draws it and its keys are the editor's.
+        case tool
         case help, entry, finish
         case list, loupe, grid, rankCompare, mediaPhoto
     }
 
     var surface = Surface.list
+    enum Tool: Equatable { case glue, multiCrop }
+    /// Which editor, on `.tool`.
+    var tool: Tool?
     /// Esc has somewhere to go.
     var canStepBack = false
     var hasPhoto = false
@@ -172,6 +177,8 @@ enum MonitorKeymap {
             return [MonitorBinding("esc ⌥⌘P", "Resume", .pause) { $0.matches(.escape) || isPause($0) }, textSize]
         case .phoneSheet:
             return [MonitorBinding("esc", "Close what's on the phone", .escape) { $0.matches(.escape) }]
+        case .tool:
+            return toolKeys(s.tool) + [MonitorBinding("⌘K", "Menu", .menu) { $0.matches(.char("k"), .command) }] + monitorKeys
         case .help:
             return [move("↑↓ jk", "Scroll"),
                     MonitorBinding("esc ?", "Close", .escape) { $0.matches(.escape) || isHelp($0) }] + monitorKeys
@@ -182,6 +189,28 @@ enum MonitorKeymap {
         case .grid: return grid(s) + everywhere(s)
         case .mediaPhoto: return mediaPhoto(s) + everywhere(s)
         case .rankCompare: return rankCompare + everywhere(s)
+        }
+    }
+
+    // MARK: Glue and Multi Crop
+
+    /// The editor's keys, for the hint bar and the list of all keys. The keys
+    /// themselves go to the editor (`ToolHolder.handle`), so these resolve nothing.
+    private static func toolKeys(_ tool: MonitorSituation.Tool?) -> [MonitorBinding] {
+        func hint(_ keys: String, _ label: String) -> MonitorBinding { MonitorBinding(keys, label) { _ in nil } }
+        switch tool {
+        case .glue:
+            return [hint("tab", "Next photo"), hint("← →", "Seam"), hint("↑ ↓", "Slide across"), hint("- =", "Gap / overlap"),
+                    hint("[ ]", "Fade"), hint("⌥[ ⌥]", "Fade at this join"), hint("\\", "Before"), hint("o", "Flip layout"),
+                    hint("a", "Line, grid, free"), hint("m", "Size"), hint("r ⇧R", "Turn"), hint("l", "Line up"),
+                    hint("⌘+ ⌘− ⌘0", "Zoom"), hint("⌘Z", "Undo"), hint("↵", "Glue"), hint("esc", "Back")]
+        case .multiCrop:
+            return [hint("tab", "Next box"), hint("←→↑↓", "Move"), hint("⌥ arrows", "Resize"), hint("[ ]", "Straighten"),
+                    hint("r ⇧R", "Turn"), hint("p", "Four corners"), hint("f", "Find"), hint("n", "New box"),
+                    hint("space", "Leave out"), hint("#", "Renumber (then 1–9)"), hint("v", "Strip"), hint("l", "Use last crop"),
+                    hint("⌫", "Remove"), hint("⌘Z", "Undo"), hint("↵", "Make"), hint("esc", "Back")]
+        case nil:
+            return []
         }
     }
 

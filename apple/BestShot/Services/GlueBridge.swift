@@ -14,6 +14,8 @@ struct GlueConfiguration: Codable, Equatable {
   struct Seam: Codable, Equatable {
     var position = 0.5
     var join_px: Int?
+    /// This join's own fade width; nil uses the shared `fade_px`.
+    var fade_px: Int?
   }
   struct Place: Codable, Equatable {
     var x: Double
@@ -43,6 +45,21 @@ struct GlueConfiguration: Codable, Equatable {
   var background = Background()
   var free: [Place] = []
   var max_pixels: UInt64 = ToolImaging.maxOutputPixels
+
+  /// The "before" view: the same photos, order and layout, butted with
+  /// nothing else set (no gap or overlap, fade, offsets or border). A free
+  /// layout shows as the line it started from.
+  var before: GlueConfiguration {
+    var b = self
+    if b.arrangement == "free" { b.arrangement = "line" }
+    b.join_px = 0
+    b.fade_px = 0
+    b.seams = []
+    b.offsets_px = []
+    b.border_px = 0
+    b.background = Background()
+    return b
+  }
 
   func json() throws -> String { String(decoding: try JSONEncoder().encode(self), as: UTF8.self) }
   func plan() throws -> GluePlan {

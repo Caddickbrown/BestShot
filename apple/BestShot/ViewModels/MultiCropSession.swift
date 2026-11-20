@@ -9,6 +9,10 @@ final class MultiCropSession {
   struct Edit: Equatable {
     var boxes: [CropBoxModel] = []
     var trim = 0
+    /// Boxes left out of what's made (tapped off in the strip, or Space).
+    var off: Set<String> = []
+    /// The output order picked with `#`; empty is reading order.
+    var order: [String] = []
   }
 
   var source: ToolImage?
@@ -25,6 +29,19 @@ final class MultiCropSession {
   var beside: URL?
   /// Folders: told about the files once they're beside the source.
   var onMade: (([URL], String) -> Void)?
+  /// Leaves the editor (Folders' sheet); nil where it's a place of its own.
+  var onClose: (() -> Void)?
+  /// The canvas zoom (1 fits), shared by the keys, the phone and the monitor.
+  var zoom: CGFloat = 1
+  /// `#` is on: the boxes picked so far, in their new order.
+  var renumbering: [String]?
+  /// The output strip under the canvas (`v`). Remembered between launches.
+  var showStrip = UserDefaults.standard.object(forKey: "tools.multicrop.strip") as? Bool ?? true {
+    didSet { UserDefaults.standard.set(showStrip, forKey: "tools.multicrop.strip") }
+  }
+  /// Each box as it will be saved, at preview size, by box id.
+  private(set) var thumbnails: [String: CGImage] = [:]
+  private var thumbnailTask: Task<Void, Never>?
 
   private(set) var history = EditHistory<Edit>()
   private var workspace: MediaWorkspace?
@@ -37,14 +54,25 @@ final class MultiCropSession {
   /// The previous image's boxes, in proportion, for Use last crop. Kept until the app quits.
   static var lastCrop: (boxes: [CropBoxModel], trim: Int)?
 
+  /// The boxes that will be made.
+  var included: [CropBoxModel] { edit.boxes.filter { !edit.off.contains($0.id) } }
+  func isOff(_ id: String) -> Bool { edit.off.contains(id) }
+  /// The picked order over the boxes being made; boxes added since go on the end.
+  var effectiveOrder: [String] {
+    guard !edit.order.isEmpty else { return [] }
+    let ids = included.map(\.id)
+    let kept = edit.order.filter { ids.contains($0) }
+    return kept + ids.filter { !kept.contains($0) }
+  }
+
   var plan: MultiCropPlan? {
-    guard let source, !edit.boxes.isEmpty else { return nil }
-    return try? MultiCropBridge.plan(source: source, boxes: edit.boxes, trim: edit.trim)
+    guard let source, !included.isEmpty else { return nil }
+    return try? MultiCropBridge.plan(source: source, boxes: included, trim: edit.trim, order: effectiveOrder)
   }
   var validation: String? {
-    guard let source, !edit.boxes.isEmpty else { return nil }
+    guard let source, !included.isEmpty else { return nil }
     do {
-      _ = try MultiCropBridge.plan(source: source, boxes: edit.boxes, trim: edit.trim)
+      _ = try MultiCropBridge.plan(source: source, boxes: included, trim: edit.trim, order: effectiveOrder)
       return nil
     } catch { return error.localizedDescription }
   }
@@ -63,6 +91,7 @@ final class MultiCropSession {
     if old != edit {
       results = []
       untouchedFind = false
+      refreshThumbnails()
     }
   }
   func beginDrag() { history.begin(edit) }
@@ -70,9 +99,66 @@ final class MultiCropSession {
     history.end(edit)
     untouchedFind = false
     results = []
+    refreshThumbnails()
   }
-  func undo() { if let e = history.undo(edit) { edit = e; keepFocus() } }
-  func redo() { if let e = history.redo(edit) { edit = e; keepFocus() } }
+  func undo() { if let e = history.undo(edit) { edit = e; keepFocus(); refreshThumbnails() } }
+  func redo() { if let e = history.redo(edit) { edit = e; keepFocus(); refreshThumbnails() } }
+
+  // MARK: - Leaving out and renumbering
+
+  /// Leave a box out of what's made, or put it back (one step of Undo).
+  func toggleOff(_ id: String? = nil) {
+    guard let id = id ?? focused, box(id) != nil else { return }
+    change { e in
+      if e.off.remove(id) == nil { e.off.insert(id) }
+    }
+  }
+  /// `#`: the boxes are then picked in their new order.
+  func startRenumber() {
+    guard included.count > 1 else { return }
+    renumbering = []
+    focused = nil
+  }
+  /// One box picked while renumbering; the last one ends it.
+  func pick(_ id: String) {
+    guard var picked = renumbering, included.contains(where: { $0.id == id }), !picked.contains(id) else { return }
+    picked.append(id)
+    renumbering = picked
+    if picked.count == included.count { endRenumber() }
+  }
+  /// Ends renumbering: what was picked comes first, the rest keep their order.
+  func endRenumber() {
+    guard let picked = renumbering else { return }
+    renumbering = nil
+    guard !picked.isEmpty else { return }
+    let current = orderedIDs.filter { !edit.off.contains($0) }
+    let order = picked + current.filter { !picked.contains($0) }
+    if order != current { change { $0.order = order } }
+  }
+
+  // MARK: - The output strip
+
+  /// Re-cuts the strip's thumbnails a moment after the last change.
+  func refreshThumbnails() {
+    thumbnailTask?.cancel()
+    guard let source, !edit.boxes.isEmpty else {
+      thumbnails = [:]
+      return
+    }
+    let boxes = edit.boxes
+    let trim = edit.trim
+    thumbnailTask = Task {
+      try? await Task.sleep(for: .milliseconds(120))
+      guard !Task.isCancelled else { return }
+      guard let workspace = try? self.workspace ?? MediaWorkspace() else { return }
+      self.workspace = workspace
+      let made = await Task.detached(priority: .utility) {
+        MultiCropBridge.thumbnails(source: source, boxes: boxes, trim: trim, workspace: workspace)
+      }.value
+      guard !Task.isCancelled else { return }
+      self.thumbnails = made
+    }
+  }
   private func keepFocus() { if let f = focused, !edit.boxes.contains(where: { $0.id == f }) { focused = nil } }
 
   func newID() -> String {
@@ -110,15 +196,24 @@ final class MultiCropSession {
   func remove() {
     guard let id = focused else { return }
     let order = orderedIDs
-    change { $0.boxes.removeAll { $0.id == id } }
+    change { e in
+      e.boxes.removeAll { $0.id == id }
+      e.off.remove(id)
+      e.order.removeAll { $0 == id }
+    }
     if let i = order.firstIndex(of: id) {
       let rest = order.filter { $0 != id }
       focused = rest.isEmpty ? nil : rest[min(i, rest.count - 1)]
     }
   }
+  /// Box ids in output order; boxes left out come after, in the order they were made.
   var orderedIDs: [String] {
     let n = numbers
-    return edit.boxes.map(\.id).sorted { (n[$0] ?? 0, $0) < (n[$1] ?? 0, $1) }
+    let ids = edit.boxes.map(\.id)
+    return ids.sorted { a, b in
+      let (na, nb) = (n[a] ?? Int.max, n[b] ?? Int.max)
+      return na != nb ? na < nb : ids.firstIndex(of: a)! < ids.firstIndex(of: b)!
+    }
   }
   func focusStep(_ delta: Int) {
     let ids = orderedIDs
@@ -174,9 +269,58 @@ final class MultiCropSession {
     change { e in
       e.boxes = last.boxes.map { $0.scaled(sx: Double(source.width), sy: Double(source.height)) }
       e.trim = last.trim
+      e.off = []
+      e.order = []
     }
     nextID = last.boxes.count + 1
     focused = nil
+  }
+
+  // MARK: - Keys
+
+  /// One editor command, from the keyboard on the phone, the Mac or the monitor.
+  /// False when it does nothing here (Esc with nothing to close).
+  @discardableResult
+  func perform(_ command: MultiCropCommand) -> Bool {
+    if renumbering != nil {
+      switch command {
+      case .escape, .renumber, .make:
+        endRenumber()
+        return true
+      case .next, .previous, .zoom, .toggleStrip: break
+      default: return true
+      }
+    }
+    switch command {
+    case .find: find()
+    case .add: add()
+    case .duplicate: duplicate()
+    case .next: focusStep(1)
+    case .previous: focusStep(-1)
+    case .move(let dx, let dy): nudge(dx: dx, dy: dy)
+    case .resize(let dw, let dh): resize(dw: dw, dh: dh)
+    case .rotate(let d): rotate(d)
+    case .turn(let d): turn(d)
+    case .toggleCorners: toggleCorners()
+    case .remove: remove()
+    case .useLast: useLast()
+    case .make: make()
+    case .undo: undo()
+    case .redo: redo()
+    case .zoom(let z): zoom = ZoomCanvas<EmptyView>.step(zoom, z)
+    case .renumber: startRenumber()
+    case .toggleStrip: showStrip.toggle()
+    case .toggleOff: toggleOff()
+    case .escape:
+      if focused != nil {
+        focused = nil
+      } else if let onClose {
+        onClose()
+      } else {
+        return false
+      }
+    }
+    return true
   }
 
   // MARK: - Opening and finding
@@ -199,6 +343,8 @@ final class MultiCropSession {
         try Task.checkCancellation()
         source = image
         edit = Edit()
+        thumbnails = [:]
+        renumbering = nil
         history.clear()
         results = []
         focused = nil
@@ -242,6 +388,8 @@ final class MultiCropSession {
         let old = edit
         if replace {
           edit.boxes = found
+          edit.off = []
+          edit.order = []
           nextID = found.count + 1
         } else {
           for var b in found where !edit.boxes.contains(where: { overlaps($0.bounds, b.bounds) }) {
@@ -253,6 +401,7 @@ final class MultiCropSession {
         history.record(old, now: edit)
         untouchedFind = true
         results = []
+        refreshThumbnails()
         notice = found.isEmpty ? "No photos found. Drag to draw a box, or press F to try again." : nil
       } catch { self.error = error.localizedDescription }
     }
@@ -268,7 +417,10 @@ final class MultiCropSession {
 
   func make() {
     guard !busy, let source, let workspace, plan != nil else { return }
+    endRenumber()
     let snapshot = edit
+    let made = included
+    let order = effectiveOrder
     let format = format
     let beside = beside
     let existing = beside.map(ToolImaging.names(in:)) ?? []
@@ -276,7 +428,7 @@ final class MultiCropSession {
     self.job = job
     busy = true
     progress = 0
-    phase = "Making \(snapshot.boxes.count) photo\(snapshot.boxes.count == 1 ? "" : "s")…"
+    phase = "Making \(made.count) photo\(made.count == 1 ? "" : "s")…"
     error = nil
     results = []
     task = Task {
@@ -287,7 +439,7 @@ final class MultiCropSession {
       do {
         let worker = Task.detached(priority: .userInitiated) { () throws -> [URL] in
           let made = try MultiCropBridge.export(
-            source: source, boxes: snapshot.boxes, trim: snapshot.trim, format: format, existing: existing,
+            source: source, boxes: made, trim: snapshot.trim, order: order, format: format, existing: existing,
             workspace: workspace, job: job
           ) { value in Task { @MainActor [weak self] in self?.progress = value } }
           guard let beside else { return made }
@@ -304,7 +456,7 @@ final class MultiCropSession {
           job.cancel()
           worker.cancel()
         }
-        Self.lastCrop = (snapshot.boxes.map { $0.normalised(width: source.width, height: source.height) }, snapshot.trim)
+        Self.lastCrop = (made.map { $0.normalised(width: source.width, height: source.height) }, snapshot.trim)
         results = urls
         let text = "Made \(urls.count) photo\(urls.count == 1 ? "" : "s") from \(source.stem)"
         notice = text

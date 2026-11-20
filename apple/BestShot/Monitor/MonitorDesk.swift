@@ -392,6 +392,12 @@ final class MonitorDesk {
             s.surface = .paused
             return s
         }
+        // An editor open on the phone is drawn on the monitor, sheet or not.
+        if let tool = ToolHolder.shared.open {
+            s.surface = .tool
+            s.tool = tool.kind
+            return s
+        }
         if phoneSheetUp {
             s.surface = .phoneSheet
             return s
@@ -466,6 +472,7 @@ final class MonitorDesk {
         guard isConnected else { return false }
         // Nothing moves on a monitor that isn't showing it.
         if isLocked { return true }
+        if !isPaused, ToolHolder.shared.open != nil { return handleTool(press) }
         let situation = situation
         guard let action = MonitorKeymap.action(for: press, in: situation) else {
             // A paused monitor shows nothing, and an open panel keeps its keys.
@@ -480,9 +487,29 @@ final class MonitorDesk {
         return true
     }
 
+    /// Glue or Multi Crop is up: its keys first, then the monitor's own (⌘K,
+    /// pause, text size). Everything else stops here, so nothing moves behind
+    /// the editor; Esc with nothing left to close goes on to the phone.
+    private func handleTool(_ press: MonitorPress) -> Bool {
+        if ToolHolder.shared.handle(press) { return true }
+        if let action = MonitorKeymap.action(for: press, in: situation) {
+            perform(action)
+            return true
+        }
+        return !press.matches(.escape)
+    }
+
     /// Held down, this key would keep going.
     func repeats(_ press: MonitorPress) -> Bool {
-        MonitorKeymap.action(for: press, in: situation)?.repeats ?? false
+        // In an editor, arrows nudge and brackets straighten while held.
+        if ToolHolder.shared.open != nil {
+            switch press.key {
+            case .up, .down, .left, .right: return true
+            case .char(let c): return "[]{}-=".contains(c)
+            default: return false
+            }
+        }
+        return MonitorKeymap.action(for: press, in: situation)?.repeats ?? false
     }
 
     /// For `EscapeStack`: true if Esc was the monitor's. At home it isn't, and the

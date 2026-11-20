@@ -126,7 +126,7 @@ final class PhotoLibraryService: @unchecked Sendable {
 
     /// Load a display image for an asset at the given pixel size.
     /// Uses `.highQualityFormat` so the handler fires exactly once.
-    func requestImage(for asset: PHAsset, targetSize: CGSize, contentMode: PHImageContentMode = .aspectFit) async -> PlatformImage? {
+    func requestImage(for asset: PHAsset, targetSize: CGSize, contentMode: PHImageContentMode = .aspectFit) async -> LoadedImage? {
         await withCheckedContinuation { cont in
             let options = PHImageRequestOptions()
             options.deliveryMode = .highQualityFormat
@@ -138,7 +138,7 @@ final class PhotoLibraryService: @unchecked Sendable {
                 contentMode: contentMode,
                 options: options
             ) { image, _ in
-                cont.resume(returning: image)
+                cont.resume(returning: image.map(LoadedImage.init(platform:)))
             }
         }
     }

@@ -112,6 +112,19 @@ enum MonitorChords {
         add("+", [.command, .alternate, .shift])
         add("\t", [])
         add("\t", .shift)
+        // Glue and Multi Crop's chords, for when an editor is up (ToolHolder).
+        add("z", [.command, .shift])
+        add("d", .command)
+        add("[", .command)
+        add("]", .command)
+        add("=", .command)
+        add("+", [.command, .shift])
+        add("-", .command)
+        add("0", .command)
+        add("\r", .command)
+        for arrow in [UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow, UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow] {
+            add(arrow, .command)
+        }
         return list
     }
 
@@ -122,6 +135,11 @@ enum MonitorChords {
         case ".": return MonitorPress(.escape)
         case "\t": return MonitorPress(.tab, mods)
         case backspace: return MonitorPress(.backspace, mods)
+        case "\r": return MonitorPress(.enter, mods)
+        case UIKeyCommand.inputLeftArrow: return MonitorPress(.left, mods)
+        case UIKeyCommand.inputRightArrow: return MonitorPress(.right, mods)
+        case UIKeyCommand.inputUpArrow: return MonitorPress(.up, mods)
+        case UIKeyCommand.inputDownArrow: return MonitorPress(.down, mods)
         default:
             guard let character = input.first else { return nil }
             return MonitorPress(.char(character), mods)

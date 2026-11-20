@@ -641,7 +641,7 @@ final class MonitorDeskTests: XCTestCase {
     }
 
     func testStartingFromHome() async {
-        desk.stepBackFromEscape()
+        _ = desk.stepBackFromEscape()
         library.triageIDs = []
         library.nextSession = ["x", "y"]
         XCTAssertEqual(desk.litRow?.action, .startTriage)

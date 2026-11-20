@@ -28,7 +28,7 @@ struct PhotoAssetImage: View {
             // A new size of the same photo: the old one stays up until it's here.
             if loaded != asset.localIdentifier { image = nil }
             loaded = asset.localIdentifier
-            if let sharper = await PhotoLibraryService.shared.requestImage(for: asset, targetSize: targetSize) {
+            if let sharper = await PhotoLibraryService.shared.requestImage(for: asset, targetSize: targetSize)?.platform {
                 image = sharper
             }
         }

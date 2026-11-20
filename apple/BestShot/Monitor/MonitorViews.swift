@@ -42,7 +42,8 @@ struct MonitorRoot: View {
 
     /// Dark while locked, paused or judging; otherwise the chosen look, or the system's.
     private var scheme: ColorScheme {
-        if desk.isLocked || desk.isPaused || desk.isJudging { return .dark }
+        let dark: Bool = desk.isLocked || desk.isPaused
+        if dark || desk.isJudging { return .dark }
         let chosen: ColorScheme? = appearance.scheme
         return chosen ?? system
     }
@@ -194,6 +195,15 @@ private struct MonitorScreen: View {
     let size: CGSize
 
     var body: some View {
+        if let tool = ToolHolder.shared.open {
+            MonitorToolScreen(tool: tool, palette: palette, metrics: metrics)
+        } else {
+            pane
+        }
+    }
+
+    @ViewBuilder
+    private var pane: some View {
         switch desk.pane {
         case .loupe:
             MonitorLoupe(desk: desk, metrics: metrics)
@@ -660,6 +670,98 @@ private struct MonitorOverlayView: View {
                 .frame(maxHeight: metrics.text * 30)
                 .onChange(of: desk.helpRow) { _, row in proxy.scrollTo(row, anchor: .center) }
             }
+        }
+    }
+}
+
+/// Glue or Multi Crop, open on the phone, drawn big on the monitor: the same
+/// picture the editor draws, fitted to the screen, with no gestures. The keys
+/// reach the editor through the desk (`ToolHolder`).
+private struct MonitorToolScreen: View {
+    let tool: ToolHolder.Open
+    let palette: Theme.Palette
+    let metrics: MonitorMetrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: metrics.padding * 0.4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.system(size: metrics.title, weight: .semibold)).foregroundStyle(palette.ink)
+                Spacer()
+                Text(detail).font(.system(size: metrics.caption)).foregroundStyle(palette.muted).monospacedDigit()
+            }
+            GeometryReader { (geo: GeometryProxy) in
+                picture(in: geo.size)
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+            }
+            if case .multiCrop(let s) = tool, s.showStrip, !s.edit.boxes.isEmpty {
+                MultiCropStrip(session: s, height: metrics.text * 4, interactive: false)
+            }
+            if let line {
+                Text(line).font(.system(size: metrics.caption)).foregroundStyle(palette.muted).lineLimit(2)
+            }
+        }
+        .padding(metrics.padding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func picture(in area: CGSize) -> some View {
+        switch tool {
+        case .glue(let s):
+            if let plan = s.shownPlan {
+                let scale = fit(CGSize(width: plan.width, height: plan.height), in: area) * s.zoom
+                GlueCanvasPicture(session: s, plan: plan, scale: scale)
+            } else {
+                Text("Add at least two photos on the phone.").font(.system(size: metrics.text)).foregroundStyle(palette.muted)
+            }
+        case .multiCrop(let s):
+            if let source = s.source {
+                let scale = fit(CGSize(width: source.width, height: source.height), in: area) * s.zoom
+                ZStack(alignment: .topLeading) {
+                    Image(decorative: source.preview, scale: 1).resizable().interpolation(.high)
+                    MultiCropBoxesLayer(session: s, scale: scale, chip: max(24, metrics.text * 1.4))
+                }
+                .frame(width: CGFloat(source.width) * scale, height: CGFloat(source.height) * scale)
+            } else {
+                Text("Choose an image on the phone.").font(.system(size: metrics.text)).foregroundStyle(palette.muted)
+            }
+        }
+    }
+
+    private func fit(_ size: CGSize, in area: CGSize) -> CGFloat {
+        guard size.width > 0, size.height > 0 else { return 1 }
+        return min(area.width / size.width, area.height / size.height)
+    }
+
+    private var title: String {
+        switch tool {
+        case .glue(let s): return s.before ? "Glue · before" : "Glue"
+        case .multiCrop(let s): return s.renumbering != nil ? "Multi Crop · renumbering" : "Multi Crop"
+        }
+    }
+
+    private var detail: String {
+        switch tool {
+        case .glue(let s):
+            guard let plan = s.plan else { return "\(s.images.count) photos" }
+            return "\(s.images.count) photos · \(plan.width.formatted()) × \(plan.height.formatted()) · \(s.format.title)"
+        case .multiCrop(let s):
+            guard let source = s.source else { return "" }
+            let n = s.included.count
+            return "\(source.name) · \(n) photo\(n == 1 ? "" : "s") · \(s.format.title)"
+        }
+    }
+
+    private var line: String? {
+        switch tool {
+        case .glue(let s):
+            if s.busy { return s.phase }
+            return s.error ?? s.validation ?? s.notice
+        case .multiCrop(let s):
+            if s.busy { return s.phase }
+            if s.renumbering != nil { return "Press 1–9 for the boxes in their new order. Esc ends." }
+            return s.error ?? s.validation ?? s.notice
         }
     }
 }

@@ -64,8 +64,7 @@ final class MediaToolsTests: XCTestCase {
     XCTAssertEqual(output.width, 6)
     XCTAssertEqual(output.height, 6)
     let upright = try rgba(source.preview)
-    var expected: [UInt8] = []
-    for y in [0, 1, 4, 5, 6, 7] { expected += upright[y * 6 * 4..<(y + 1) * 6 * 4] }
+    let expected: [UInt8] = pixelBlock(upright, width: 6, xs: 0..<6, ys: [0, 1, 4, 5, 6, 7])
     XCTAssertEqual(try rgba(url), expected)
   }
   func testCancelledImageExportDoesNotPublishOrAlterOriginal() throws {

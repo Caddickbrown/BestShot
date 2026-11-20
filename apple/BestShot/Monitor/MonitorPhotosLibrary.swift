@@ -424,13 +424,13 @@ private struct MonitorAssetImage: View {
         .task(id: "\(asset.localIdentifier)@\(longEdge)") {
             let library = PhotoLibraryService.shared
             if longEdge > 1000 {
-                let quick = await library.requestImage(for: asset, targetSize: CGSize(width: 500, height: 500))
+                let quick = await library.requestImage(for: asset, targetSize: CGSize(width: 500, height: 500))?.platform
                 if Task.isCancelled { return }
                 image = quick ?? image
                 try? await Task.sleep(for: .milliseconds(80))
                 if Task.isCancelled { return }
             }
-            let full = await library.requestImage(for: asset, targetSize: CGSize(width: longEdge, height: longEdge))
+            let full = await library.requestImage(for: asset, targetSize: CGSize(width: longEdge, height: longEdge))?.platform
             if !Task.isCancelled { image = full ?? image }
         }
     }

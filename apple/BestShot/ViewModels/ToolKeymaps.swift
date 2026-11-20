@@ -37,6 +37,12 @@ enum MultiCropCommand: Equatable {
   case turn(Int)
   case toggleCorners, remove, useLast, make, escape, undo, redo
   case zoom(CanvasZoomCommand)
+  /// `#`: then pick the boxes in their new order.
+  case renumber
+  /// `v`: show or hide the output strip.
+  case toggleStrip
+  /// Space: leave the focused box out of what's made, or put it back.
+  case toggleOff
 }
 
 enum MultiCropKeymap {
@@ -65,9 +71,12 @@ enum MultiCropKeymap {
     case .escape: return .escape
     case .delete, .deleteForward: return .remove
     case .tab: return shift ? .previous : .next
+    case .space: return .toggleOff
     default: break
     }
     switch text {
+    case "#": return .renumber
+    case "v": return .toggleStrip
     case "f": return .find
     case "n": return .add
     case "[", "{": return .rotate(shift ? -1 : -0.1)
@@ -90,6 +99,10 @@ enum GlueCommand: Equatable {
   case moveEarlier, moveLater
   case join(Int)
   case fade(Int)
+  /// ⌥[ / ⌥]: the focused join's own fade.
+  case joinFade(Int)
+  /// `\`: the before view. Nil switches it; held keys say on and off.
+  case before(Bool?)
   case turn(Int)
   case remove, lineUp, glue, escape, undo, redo
   case zoom(CanvasZoomCommand)
@@ -122,7 +135,18 @@ enum GlueKeymap {
     case .tab: return shift ? .previous : .next
     default: break
     }
+    if modifiers.contains(.option) {
+      switch text {
+      // ⌥[ and ⌥] type quotes on most layouts; the key is what counts.
+      case "[", "{", "“", "”": return .joinFade(-10)
+      case "]", "}", "‘", "’": return .joinFade(10)
+      default: break
+      }
+      if key == KeyEquivalent("[") { return .joinFade(-10) }
+      if key == KeyEquivalent("]") { return .joinFade(10) }
+    }
     switch text {
+    case "\\": return .before(nil)
     case "o": return .flipLayout
     case "a": return .cycleArrangement
     case "m": return .cycleSize

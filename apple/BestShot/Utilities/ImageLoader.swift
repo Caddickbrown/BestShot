@@ -1,13 +1,19 @@
 import SwiftUI
 
+/// A decoded image handed across actors. Images here are made once and never
+/// changed after, so passing one along is safe (and keeps Swift 6 mode quiet).
+struct LoadedImage: @unchecked Sendable {
+    let platform: PlatformImage
+}
+
 /// Loads decoded images off the main actor with a small in-memory cache, keyed
 /// by file URL. Used for both thumbnails and full-size viewer images.
 actor ImageCache {
     static let shared = ImageCache()
     private let cache = NSCache<NSURL, PlatformImage>()
 
-    func image(at url: URL, downsampleTo maxPixel: CGFloat? = nil) -> PlatformImage? {
-        if let cached = cache.object(forKey: url as NSURL) { return cached }
+    func image(at url: URL, downsampleTo maxPixel: CGFloat? = nil) -> LoadedImage? {
+        if let cached = cache.object(forKey: url as NSURL) { return LoadedImage(platform: cached) }
         guard let data = try? Data(contentsOf: url) else { return nil }
         let image: PlatformImage?
         if let maxPixel, let ds = ImageLoader.downsample(data: data, maxPixel: maxPixel) {
@@ -15,8 +21,9 @@ actor ImageCache {
         } else {
             image = PlatformImage.fromData(data)
         }
-        if let image { cache.setObject(image, forKey: url as NSURL) }
-        return image
+        guard let image else { return nil }
+        cache.setObject(image, forKey: url as NSURL)
+        return LoadedImage(platform: image)
     }
 }
 
@@ -63,7 +70,7 @@ struct AsyncFileImage: View {
         .task(id: url) {
             image = nil
             guard let url else { return }
-            image = await ImageCache.shared.image(at: url, downsampleTo: downsampleTo)
+            image = await ImageCache.shared.image(at: url, downsampleTo: downsampleTo)?.platform
         }
     }
 }

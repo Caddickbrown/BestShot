@@ -103,6 +103,14 @@ pub struct Seam {
     /// This join's own gap (+) or overlap (−), overriding `join_px` (Line up sets these).
     #[serde(default)]
     pub join_px: Option<i32>,
+    /// This join's own fade width, overriding `fade_px`.
+    #[serde(default)]
+    pub fade_px: Option<u32>,
+}
+impl Default for Seam {
+    fn default() -> Self {
+        Self { position: 0.5, join_px: None, fade_px: None }
+    }
 }
 fn half() -> f64 {
     0.5
@@ -348,9 +356,10 @@ impl Glue {
         Ok(GluePlan { orientation, width: width as u32, height: height as u32, items: placements, joins, upscaled, max_overlap_px: max_overlap })
     }
 
-    fn join_at(&self, k: usize) -> (i32, f64) {
-        let seam = self.seams.get(k).copied().unwrap_or(Seam { position: 0.5, join_px: None });
-        (seam.join_px.unwrap_or(self.join_px), seam.position)
+    /// Join `k`'s gap or overlap, seam position and fade width.
+    fn join_at(&self, k: usize) -> (i32, f64, u32) {
+        let seam = self.seams.get(k).copied().unwrap_or_default();
+        (seam.join_px.unwrap_or(self.join_px), seam.position, seam.fade_px.unwrap_or(self.fade_px))
     }
 
     /// One row of photos (indices), laid out horizontally from x = 0 with
@@ -378,7 +387,7 @@ impl Glue {
         for (n, (&index, &(w, h))) in indices.iter().zip(&sized).enumerate() {
             let mut ramps = Ramps::default();
             if n > 0 {
-                let (join, position) = self.join_at(first_join + n - 1);
+                let (join, position, fade) = self.join_at(first_join + n - 1);
                 let narrower = w.min(sized[n - 1].0);
                 let allowed = (narrower / 2.0).floor() as i64;
                 max_overlap = max_overlap.min(allowed);
@@ -388,7 +397,7 @@ impl Glue {
                 let overlap = (prev_end - x).max(0.0);
                 let seam = x + overlap * position;
                 let ramp = if overlap > 0.0 {
-                    let f = f64::from(self.fade_px).min(overlap);
+                    let f = f64::from(fade).min(overlap);
                     // Keep the fade inside the overlap.
                     let a = (seam - f / 2.0).max(x);
                     let b = (a + f).min(prev_end);
@@ -467,8 +476,8 @@ impl Glue {
                     // Rebuild the seam and its ramp at the scaled size.
                     let prev = scaled.last().map(|p: &Item| p.x + p.w).unwrap_or(0.0);
                     let overlap = (prev - x).max(0.0);
-                    let f = f64::from(self.fade_px).min(overlap);
-                    let position = self.join_at(first_join_of_row + n - 1).1;
+                    let (_, position, fade) = self.join_at(first_join_of_row + n - 1);
+                    let f = f64::from(fade).min(overlap);
                     let seam = x + overlap * position;
                     let a = (seam - f / 2.0).max(x);
                     let b = (a + f).min(prev);
@@ -923,9 +932,9 @@ mod tests {
         g.fade_px = 0;
         let ramps = g.plan().unwrap().items[1].ramps;
         assert_eq!((weight(&ramps, 79, 0), weight(&ramps, 80, 0)), (0.0, 1.0), "a straight cut at the seam");
-        g.seams = vec![Seam { position: 0.0, join_px: None }];
+        g.seams = vec![Seam { position: 0.0, join_px: None, fade_px: None }];
         assert_eq!(g.plan().unwrap().items[1].ramps.left.unwrap().a, 60.0);
-        g.seams = vec![Seam { position: 1.0, join_px: Some(-10) }];
+        g.seams = vec![Seam { position: 1.0, join_px: Some(-10), fade_px: None }];
         let p = g.plan().unwrap();
         assert_eq!(p.width, 190, "a join's own value wins");
         assert_eq!(p.items[1].ramps.left.unwrap().a, 100.0);
@@ -938,6 +947,34 @@ mod tests {
         assert_eq!((p.width, p.height), (100, 80));
         assert!(p.items[1].ramps.top.is_some() && p.items[1].ramps.left.is_none());
         assert_eq!(p.joins[0].axis, "y");
+    }
+
+    #[test]
+    fn each_join_can_have_its_own_fade() {
+        let mut g = glue(vec![src(100, 50), src(100, 50), src(100, 50)]);
+        g.orientation = Orientation::Horizontal;
+        g.join_px = -40;
+        g.fade_px = 20;
+        // The second join is a straight cut, the first keeps the shared fade.
+        g.seams = vec![Seam::default(), Seam { fade_px: Some(0), ..Seam::default() }];
+        let p = g.plan().unwrap();
+        let (r1, r2) = (p.items[1].ramps.left.unwrap(), p.items[2].ramps.left.unwrap());
+        assert_eq!((r1.a, r1.b), (70.0, 90.0));
+        assert_eq!(r2.b - r2.a, 0.0, "its own fade of 0 is a straight edge");
+        assert_eq!(p.joins[1].ramp, Some(r2));
+        // Wider than its overlap: kept inside it.
+        g.seams[1].fade_px = Some(400);
+        let r2 = g.plan().unwrap().items[2].ramps.left.unwrap();
+        assert_eq!((r2.a, r2.b), (120.0, 160.0));
+        // A grid's joins within a row take their own fade too.
+        g.arrangement = Arrangement::Grid;
+        g.columns = 3;
+        let p = g.plan().unwrap();
+        assert_eq!(p.items[2].ramps.left.map(|r| r.b - r.a), Some(40.0));
+        assert_eq!(p.items[1].ramps.left.map(|r| r.b - r.a), Some(20.0));
+        // Old configurations without the field still read.
+        let s: Seam = serde_json::from_str(r#"{"position":0.3}"#).unwrap();
+        assert_eq!(s.fade_px, None);
     }
 
     #[test]

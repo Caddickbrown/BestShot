@@ -1,6 +1,7 @@
 # BestShot — Glue and Multi Crop
 
 **Status:** Agreed with Dan on 19 November (see [Decisions, 19 Nov](#decisions-19-nov), which wins wherever the text below still differs). Being built: Multi Crop first, then Glue.<br>
+**Built:** v1 at 1d8ec45 (19 Nov); the leftovers on 20 Nov: Multi Crop's output strip (tap a photo to leave it out, Space on the focused box), snapping, `#` renumber (1–9 on the monitor), corner loupe; Glue's seam drag, before view (`\`, held; a switch on the monitor), a fade per join (⌥[ ⌥], "This join"); and Monitor Mode for both (the monitor draws the open editor, the keyboard drives it). Not built: dragging a number chip onto another to swap them.<br>
 **Date:** 19 November 2026<br>
 **Feature IDs:** BS-MT-003 (Glue), BS-MT-004 (Multi Crop)<br>
 **Builds on:** [media-tools-spec.md](media-tools-spec.md) and what shipped in [media-tools-implementation.md](media-tools-implementation.md) (Anti-Crop's RGBA row pipeline, `MediaWorkspace`, `ToolParts.swift`, `bestshot-media`).<br>

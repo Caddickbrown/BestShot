@@ -1,5 +1,8 @@
 import PhotosUI
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 import UniformTypeIdentifiers
 
 /// Multi Crop: several new photos out of one image. Find places boxes; drag
@@ -20,9 +23,13 @@ struct MultiCropView: View {
     @State private var choosingPhoto = false
     @State private var choosingFile = false
     @State private var choosingProject = false
-    @State private var zoom: CGFloat = 1
     @State private var panning = false
     @State private var drag: DragMode = .none
+    /// The box as it was when a move began, so snapping never drifts.
+    @State private var dragOriginal: CropBoxModel?
+    /// Bumped when a drag snaps onto something, for a light haptic on touch.
+    @State private var snapTick = 0
+    @State private var snapped = false
     @FocusState private var keys: Bool
 
     enum DragMode: Equatable {
@@ -89,7 +96,7 @@ struct MultiCropView: View {
 
     private func withLifecycle<V: View>(_ base: V) -> some View {
         base
-            .onChange(of: session.source?.id) { zoom = 1 }
+            .onChange(of: session.source?.id) { session.zoom = 1 }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background && session.busy {
                     session.cancel()
@@ -99,11 +106,16 @@ struct MultiCropView: View {
             .task {
                 session.beside = beside
                 session.onMade = onMade
+                session.onClose = onClose
                 if let initial, session.source == nil {
                     session.open(initial, extraKeywords: keywords, stageCopy: beside == nil)
                 }
             }
-            .onDisappear { session.cancel() }
+            .onAppear { ToolHolder.shared.show(.multiCrop(session)) }
+            .onDisappear {
+                session.cancel()
+                ToolHolder.shared.hide(session)
+            }
     }
 
     private var status: String? {
@@ -132,13 +144,20 @@ struct MultiCropView: View {
 
     private func editor(_ source: ToolImage) -> some View {
         VStack(spacing: 0) {
-            ZoomCanvas(size: CGSize(width: source.width, height: source.height), zoom: $zoom, panning: panning) { scale in
+            ZoomCanvas(size: CGSize(width: source.width, height: source.height), zoom: $session.zoom, panning: panning) { scale in
                 canvas(source, scale: scale)
             }
             .layoutPriority(1)
+            .sensoryFeedback(.alignment, trigger: snapTick)
+            if session.showStrip && !session.edit.boxes.isEmpty {
+                MultiCropStrip(session: session)
+                    .overlay(alignment: .top) { HairlineRule() }
+            }
             toolRow
             VStack(alignment: .leading, spacing: 2) {
-                if let validation = session.validation {
+                if session.renumbering != nil {
+                    FormNote("Press the boxes in their new order. Esc ends; any not pressed keep their order after.")
+                } else if let validation = session.validation {
                     ToolError(text: validation)
                 } else if session.edit.boxes.isEmpty {
                     FormNote("Drag to draw a box, or press F to find photos.")
@@ -162,7 +181,7 @@ struct MultiCropView: View {
     }
 
     private func namesLine(_ source: ToolImage) -> String {
-        let n = session.edit.boxes.count
+        let n = session.included.count
         let where_ = beside == nil ? "" : "beside the source · "
         return n == 1 ? "\(where_)\(source.stem)-1.\(session.format.ext)" : "\(where_)\(source.stem)-1 … -\(n).\(session.format.ext)"
     }
@@ -170,6 +189,17 @@ struct MultiCropView: View {
     private var toolRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
+                boxButtons
+                viewButtons
+            }
+            .padding(.horizontal, Theme.Space.screen - 12)
+        }
+        .overlay(alignment: .top) { HairlineRule() }
+    }
+
+    // The bar in two groups, so each type-checks on its own.
+    @ViewBuilder
+    private var boxButtons: some View {
                 ToolIcon(label: "Find photos", symbol: "sparkle.magnifyingglass", key: "F") { session.find() }
                 ToolIcon(label: "New box", symbol: "plus.square.dashed", key: "N") { session.add() }
                 ToolIcon(label: "Duplicate box", symbol: "plus.square.on.square", key: "⌘D") { session.duplicate() }
@@ -183,24 +213,33 @@ struct MultiCropView: View {
                     .disabled(session.focused == nil)
                 ToolIcon(label: "Use last crop", symbol: "clock.arrow.circlepath", key: "L") { session.useLast() }
                     .disabled(!session.canUseLast)
+                ToolIcon(label: session.focused.map { session.isOff($0) } == true ? "Make this one" : "Leave this one out",
+                         symbol: "eye.slash", key: "Space", active: session.focused.map { session.isOff($0) } ?? false) { session.toggleOff() }
+                    .disabled(session.focused == nil)
+                ToolIcon(label: "Renumber", symbol: "list.number", key: "#", active: session.renumbering != nil) {
+                    if session.renumbering == nil { session.startRenumber() } else { session.endRenumber() }
+                }
+                .disabled(session.included.count < 2)
+                ToolIcon(label: session.showStrip ? "Hide what will be saved" : "Show what will be saved", symbol: "rectangle.split.3x1",
+                         key: "V", active: session.showStrip) { session.showStrip.toggle() }
                 Stepper(value: Binding(get: { session.edit.trim }, set: { v in session.change { $0.trim = max(0, min(30, v)) } }), in: 0...30) {
                     Text("Trim \(session.edit.trim) px").font(.small).monospacedDigit()
                 }
                 .fixedSize()
                 .padding(.horizontal, 8)
                 .help("Shave the inside edge of every box")
+    }
+
+    @ViewBuilder
+    private var viewButtons: some View {
                 Divider().frame(height: 24).padding(.horizontal, 4)
-                ToolIcon(label: "Zoom out", symbol: "minus.magnifyingglass", key: "⌘−") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomOut) }
-                ToolIcon(label: "Zoom to fit", symbol: "arrow.down.right.and.arrow.up.left", key: "⌘0") { zoom = 1 }
-                ToolIcon(label: "Zoom in", symbol: "plus.magnifyingglass", key: "⌘+") { zoom = ZoomCanvas<EmptyView>.step(zoom, .zoomIn) }
+                ToolIcon(label: "Zoom out", symbol: "minus.magnifyingglass", key: "⌘−") { session.zoom = ZoomCanvas<EmptyView>.step(session.zoom, .zoomOut) }
+                ToolIcon(label: "Zoom to fit", symbol: "arrow.down.right.and.arrow.up.left", key: "⌘0") { session.zoom = 1 }
+                ToolIcon(label: "Zoom in", symbol: "plus.magnifyingglass", key: "⌘+") { session.zoom = ZoomCanvas<EmptyView>.step(session.zoom, .zoomIn) }
                 #if os(iOS)
                 ToolIcon(label: panning ? "Draw boxes" : "Pan", symbol: panning ? "pencil.and.outline" : "hand.raised", active: panning) { panning.toggle() }
                 #endif
                 ToolOptionsMenu(format: $session.format)
-            }
-            .padding(.horizontal, Theme.Space.screen - 12)
-        }
-        .overlay(alignment: .top) { HairlineRule() }
     }
 
     private var bottomBar: some View {
@@ -224,7 +263,7 @@ struct MultiCropView: View {
                         ToolIcon(label: "Close", symbol: "xmark", key: "Esc", action: onClose)
                     }
                     Spacer()
-                    let n = session.edit.boxes.count
+                    let n = session.included.count
                     Button { session.make() } label: { Text(n == 0 ? "Make" : "Make \(n)") }
                         .buttonStyle(.pill)
                         .disabled(session.plan == nil)
@@ -240,84 +279,41 @@ struct MultiCropView: View {
         guard let command = MultiCropKeymap.command(key: press.key, characters: press.characters, modifiers: press.modifiers) else {
             return .ignored
         }
-        switch command {
-        case .find: session.find()
-        case .add: session.add()
-        case .duplicate: session.duplicate()
-        case .next: session.focusStep(1)
-        case .previous: session.focusStep(-1)
-        case .move(let dx, let dy): session.nudge(dx: dx, dy: dy)
-        case .resize(let dw, let dh): session.resize(dw: dw, dh: dh)
-        case .rotate(let d): session.rotate(d)
-        case .turn(let d): session.turn(d)
-        case .toggleCorners: session.toggleCorners()
-        case .remove: session.remove()
-        case .useLast: session.useLast()
-        case .make: session.make()
-        case .undo: session.undo()
-        case .redo: session.redo()
-        case .zoom(let z): zoom = ZoomCanvas<EmptyView>.step(zoom, z)
-        case .escape:
-            if session.focused != nil { session.focused = nil } else if let onClose { onClose() }
-        }
-        return .handled
+        return session.perform(command) ? .handled : .ignored
     }
 
     // MARK: - Canvas
 
     private func canvas(_ source: ToolImage, scale: CGFloat) -> some View {
-        let numbers = session.numbers
-        return ZStack(alignment: .topLeading) {
+        ZStack(alignment: .topLeading) {
             Image(decorative: source.preview, scale: 1)
                 .resizable()
                 .interpolation(.high)
-            Canvas { context, _ in
-                for box in session.edit.boxes {
-                    let focused = box.id == session.focused
-                    let q = box.quad.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
-                    var path = Path()
-                    path.addLines(q)
-                    path.closeSubpath()
-                    context.fill(path, with: .color(Theme.table.accent.opacity(focused ? 0.12 : 0.06)))
-                    context.stroke(path, with: .color(Theme.table.accent), lineWidth: focused ? 2.5 : 1.5)
-                    // Which way is up for the output: a tick on its top edge.
-                    let topEdge = outputTop(box, q)
-                    var tick = Path()
-                    tick.move(to: topEdge.0)
-                    tick.addLine(to: topEdge.1)
-                    context.stroke(tick, with: .color(Theme.table.accent), lineWidth: 5)
-                    let n = numbers[box.id].map(String.init) ?? "·"
-                    let chip = Text(n).font(.mono(13, medium: true)).foregroundColor(Theme.table.accentInk)
-                    let at = CGPoint(x: q[0].x + 14, y: q[0].y + 14)
-                    context.fill(Path(ellipseIn: CGRect(x: at.x - 12, y: at.y - 12, width: 24, height: 24)), with: .color(Theme.table.accent))
-                    context.draw(chip, at: at)
-                    if focused {
-                        for p in q { context.fill(Path(ellipseIn: CGRect(x: p.x - 7, y: p.y - 7, width: 14, height: 14)), with: .color(Theme.table.accent)) }
-                        if box.rect {
-                            let r = rotateHandle(box, scale: scale)
-                            context.stroke(Path { $0.move(to: midTop(q)); $0.addLine(to: r) }, with: .color(Theme.table.accent), lineWidth: 1)
-                            context.fill(Path(ellipseIn: CGRect(x: r.x - 8, y: r.y - 8, width: 16, height: 16)), with: .color(Theme.table.accent))
-                        }
-                    }
-                }
-                if case .draw(let start) = drag, let current = drawCurrent {
-                    let r = CGRect(x: min(start.x, current.x) * scale, y: min(start.y, current.y) * scale,
-                                   width: abs(current.x - start.x) * scale, height: abs(current.y - start.y) * scale)
-                    context.stroke(Path(r), with: .color(Theme.table.accent), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                }
+            MultiCropBoxesLayer(session: session, scale: scale, drawing: drawingRect)
+            if case .corner(let id, let i) = drag, let box = session.box(id) {
+                CropLoupe(image: source.preview, imageSize: CGSize(width: source.width, height: source.height),
+                          box: box, corner: i, scale: scale)
             }
-            .allowsHitTesting(false)
         }
         .contentShape(Rectangle())
         .gesture(dragGesture(source, scale: scale))
         .simultaneousGesture(SpatialTapGesture().onEnded { tap in
             let p = CGPoint(x: tap.location.x / scale, y: tap.location.y / scale)
-            session.focused = hit(p)?.id
+            if session.renumbering != nil {
+                if let id = hit(p)?.id { session.pick(id) }
+            } else {
+                session.focused = hit(p)?.id
+            }
             keys = true
         })
         .accessibilityElement(children: .contain)
         .accessibilityLabel("The image, with \(session.edit.boxes.count) boxes")
         .accessibilityChildren { boxAccessibility(scale: scale) }
+    }
+
+    private var drawingRect: CGRect? {
+        guard case .draw(let start) = drag, let current = drawCurrent else { return nil }
+        return CGRect(x: min(start.x, current.x), y: min(start.y, current.y), width: abs(current.x - start.x), height: abs(current.y - start.y))
     }
 
     @State private var drawCurrent: CGPoint?
@@ -349,25 +345,6 @@ struct MultiCropView: View {
                 session.focused = box.id
                 session.nudge(dx: direction == .increment ? 10 : -10, dy: 0)
             }
-    }
-
-    private func midTop(_ q: [CGPoint]) -> CGPoint { CGPoint(x: (q[0].x + q[1].x) / 2, y: (q[0].y + q[1].y) / 2) }
-
-    /// The handle above the top edge, in canvas points.
-    private func rotateHandle(_ box: CropBoxModel, scale: CGFloat) -> CGPoint {
-        let q = box.quad.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
-        let m = midTop(q)
-        let a = box.angle * .pi / 180
-        return CGPoint(x: m.x + 30 * sin(a), y: m.y - 30 * cos(a))
-    }
-
-    /// The edge that will be the top of the output, after its turn.
-    private func outputTop(_ box: CropBoxModel, _ q: [CGPoint]) -> (CGPoint, CGPoint) {
-        let i = [0: 0, 90: 3, 180: 2, 270: 1][box.turn] ?? 0
-        let (a, b) = (q[i], q[(i + 1) % 4])
-        let inset: CGFloat = 0.3
-        return (CGPoint(x: a.x + (b.x - a.x) * inset, y: a.y + (b.y - a.y) * inset),
-                CGPoint(x: a.x + (b.x - a.x) * (1 - inset), y: a.y + (b.y - a.y) * (1 - inset)))
     }
 
     private func inside(_ p: CGPoint, _ q: [CGPoint]) -> Bool {
@@ -403,8 +380,12 @@ struct MultiCropView: View {
             .onChanged { value in
                 let p = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
                 let start = CGPoint(x: value.startLocation.x / scale, y: value.startLocation.y / scale)
-                if drag == .none { drag = begin(at: start, scale: scale) }
-                apply(p, source: source)
+                guard session.renumbering == nil else { return }
+                if drag == .none {
+                    drag = begin(at: start, scale: scale)
+                    dragOriginal = { if case .move(let id, _) = drag { return session.box(id) } else { return nil } }()
+                }
+                apply(p, source: source, scale: scale)
             }
             .onEnded { _ in
                 if case .draw(let start) = drag, let end = drawCurrent {
@@ -420,6 +401,8 @@ struct MultiCropView: View {
                 }
                 drag = .none
                 drawCurrent = nil
+                dragOriginal = nil
+                snapped = false
                 keys = true
             }
     }
@@ -432,7 +415,7 @@ struct MultiCropView: View {
                 return .corner(f.id, i)
             }
             if f.rect {
-                let r = rotateHandle(f, scale: scale)
+                let r = MultiCropBoxesLayer.rotateHandle(f, scale: scale)
                 if hypot(r.x / scale - p.x, r.y / scale - p.y) <= reach {
                     session.beginDrag()
                     return .rotate(f.id)
@@ -447,21 +430,61 @@ struct MultiCropView: View {
         return .draw(p)
     }
 
-    private func apply(_ raw: CGPoint, source: ToolImage) {
-        let p = CGPoint(x: min(max(raw.x, 0), CGFloat(source.width)), y: min(max(raw.y, 0), CGFloat(source.height)))
+    /// Snapping is on unless ⌥ is held (Mac); on touch it always is (spec 2.2).
+    private var snapping: Bool {
+        #if os(macOS)
+        return !NSEvent.modifierFlags.contains(.option)
+        #else
+        return true
+        #endif
+    }
+
+    /// Marks a snap taking hold, once per hold, for the haptic.
+    private func noteSnap(_ now: Bool) {
+        if now && !snapped { snapTick += 1 }
+        snapped = now
+    }
+
+    private func apply(_ raw: CGPoint, source: ToolImage, scale: CGFloat) {
+        var p = CGPoint(x: min(max(raw.x, 0), CGFloat(source.width)), y: min(max(raw.y, 0), CGFloat(source.height)))
+        let reach = 6 / scale
+        let lines: CropSnap.Lines? = {
+            guard snapping else { return nil }
+            switch drag {
+            case .move(let id, _), .corner(let id, _): return CropSnap.lines(boxes: session.edit.boxes, except: id, width: source.width, height: source.height)
+            case .draw: return CropSnap.lines(boxes: session.edit.boxes, except: nil, width: source.width, height: source.height)
+            default: return nil
+            }
+        }()
         switch drag {
         case .none: break
-        case .draw: drawCurrent = p
-        case .move(let id, let last):
-            session.update(id) { b in
-                b.move(by: CGVector(dx: raw.x - last.x, dy: raw.y - last.y))
-                // Keep the centre on the image.
-                let c = b.centre
-                let fix = CGVector(dx: min(max(c.x, 0), CGFloat(source.width)) - c.x, dy: min(max(c.y, 0), CGFloat(source.height)) - c.y)
-                if fix.dx != 0 || fix.dy != 0 { b.move(by: fix) }
+        case .draw:
+            if let lines {
+                let s = CGPoint(x: CropSnap.value(p.x, to: lines.xs, reach: reach), y: CropSnap.value(p.y, to: lines.ys, reach: reach))
+                noteSnap(s != p)
+                p = s
             }
-            drag = .move(id, raw)
+            drawCurrent = p
+        case .move(let id, let start):
+            guard let original = dragOriginal else { break }
+            var b = original
+            b.move(by: CGVector(dx: raw.x - start.x, dy: raw.y - start.y))
+            // Keep the centre on the image.
+            let c = b.centre
+            let fix = CGVector(dx: min(max(c.x, 0), CGFloat(source.width)) - c.x, dy: min(max(c.y, 0), CGFloat(source.height)) - c.y)
+            if fix.dx != 0 || fix.dy != 0 { b.move(by: fix) }
+            if let lines {
+                let shift = CropSnap.shift(b.bounds, to: lines, reach: reach)
+                noteSnap(shift != .zero)
+                if shift != .zero { b.move(by: shift) }
+            }
+            session.update(id) { $0 = b }
         case .corner(let id, let i):
+            if let lines {
+                let s = CGPoint(x: CropSnap.value(p.x, to: lines.xs, reach: reach), y: CropSnap.value(p.y, to: lines.ys, reach: reach))
+                noteSnap(s != p)
+                p = s
+            }
             session.update(id) { b in
                 if b.rect {
                     let q = b.quad
@@ -472,7 +495,13 @@ struct MultiCropView: View {
                     let ly = -dx * sin(a) + dy * cos(a)
                     let sx: CGFloat = (i == 1 || i == 2) ? 1 : -1
                     let sy: CGFloat = (i >= 2) ? 1 : -1
-                    let w = max(16, lx * sx), h = max(16, ly * sy)
+                    var w = max(16, lx * sx), h = max(16, ly * sy)
+                    // Straight boxes take the other boxes' sizes too, so a contact sheet's match.
+                    if let lines, b.angle == 0 {
+                        let (sw, sh) = (CropSnap.value(w, to: lines.widths, reach: reach), CropSnap.value(h, to: lines.heights, reach: reach))
+                        if sw != w || sh != h { noteSnap(true) }
+                        (w, h) = (sw, sh)
+                    }
                     let (hx, hy) = (sx * w / 2, sy * h / 2)
                     b.w = w.rounded()
                     b.h = h.rounded()

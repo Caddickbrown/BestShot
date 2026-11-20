@@ -1,16 +1,15 @@
 name: Apple app
 
 on:
+  # Staged (ci-quiet-19nov, Dan 20 Nov): a v* tag, a pull request or a manual
+  # run, not every push. Build and test locally before pushing.
   push:
-    branches: [main]
-    paths:
-      - "apple/**"
-      - "core/**"
-      - ".github/workflows/apple.yml"
+    tags: ["v*"]
   pull_request:
     paths:
       - "apple/**"
       - "core/**"
+      - ".github/workflows/apple.yml"
   workflow_dispatch:
 
 concurrency:
